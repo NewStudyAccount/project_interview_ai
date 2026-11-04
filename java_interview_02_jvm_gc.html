@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 02 · JVM 内存模型与垃圾回收</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#1d4ed8; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0f766e,#1d4ed8 55%,#7c3aed);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0f766e; font-weight:700; margin-bottom:10px;
+  }
+  h1{
+    font-size:30px; line-height:1.28; margin:0 0 12px; letter-spacing:-.4px; font-weight:800;
+  }
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 6px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:740px}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#ecfdf5; border-color:#a7f3d0; color:#065f46}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{
+    font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px;
+    border-radius:6px; color:#fff;
+  }
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0f766e; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#312e81;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0f766e; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#065f46; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.8px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .s{color:#0f766e}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{
+    background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750;
+    border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252;
+  }
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#312e81}
+
+  .warn{
+    background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px;
+    font-size:14px; margin:16px 0;
+  }
+  .warn b{color:#b45309}
+  .trap{
+    background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px;
+    font-size:14px; margin:16px 0;
+  }
+  .trap b{color:#be123c}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q .qh{display:flex; gap:10px; align-items:baseline; margin-bottom:10px}
+  .q .num{
+    flex:none; width:26px; height:26px; border-radius:8px; background:#0f766e; color:#fff;
+    font-size:13px; font-weight:800; display:grid; place-items:center; transform:translateY(3px);
+  }
+  .q .qt{font-weight:750; font-size:15.5px; line-height:1.5}
+  .q .tagline{font-size:12px; color:var(--muted); margin-left:auto; white-space:nowrap}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0f766e; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q ul{margin:4px 0; padding-left:20px}
+  .q li{font-size:14px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{
+    padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0;
+    font-size:14px; border-left:3px solid #a7f3d0;
+  }
+  .check li b{color:#065f46}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">每 2 小时 · Java 面试深挖 · 第 02 期</div>
+  <h1>JVM 内存模型<span class="arrow">→</span>垃圾回收</h1>
+  <p class="sub">面试官问「讲讲 GC」，绝大多数人背八个收集器名字，然后就没了。真正拉开差距的是这条主线：<strong>对象从 <code class="inl">new</code> 出来落在哪个区 → 怎么判断它死了 → 死了怎么清 → 清的时候怎么不卡住业务线程</strong>。这四问，正好是 L0 到 L4。</p>
+  <div class="meta">
+    <div><strong>6</strong>层递进</div>
+    <div><strong>8</strong>张原理图</div>
+    <div><strong>12</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span class="on">L0 分区</span><span>L1 对象</span><span>L2 存活</span>
+  <span>L3 回收</span><span>L4 收集器</span><span>L5 问答</span><span>L6 模拟面试</span>
+</div>
+
+<!-- ============ L0 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>难度 ★☆☆ · 但一半人会把栈和堆说反</em></div>
+  <h2>分区层：五块内存，三块私有，两块共享</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    《JVM 规范》划了 <strong>5 个运行时数据区</strong>：程序计数器、虚拟机栈、本地方法栈（这三块<strong>线程私有</strong>），堆、方法区（这两块<strong>线程共享</strong>）。JDK 8 之后方法区的实现叫<strong>元空间 Metaspace</strong>，它<strong>不在堆里，而在本地内存</strong>——这是最容易被追问的一句。
+  </div>
+
+  <p>先立一个总纲：JVM 规范只规定"有哪些区、每个区干什么"，<strong>不规定怎么实现</strong>。所以"方法区"是规范概念，"永久代"是 JDK7 的 HotSpot 实现，"元空间"是 JDK8+ 的 HotSpot 实现。面试答"方法区就是永久代"，等于把接口当成了唯一实现类。</p>
+
+  <table>
+    <thead>
+      <tr><th style="width:22%">区域</th><th style="width:14%">线程</th><th style="width:38%">存什么</th><th>溢出时抛什么</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>程序计数器</strong> PC</td><td>私有</td><td>当前线程执行到哪条字节码的行号</td><td><strong>不会溢出</strong>（规范里唯一没定义 OOM 的区）</td></tr>
+      <tr><td><strong>虚拟机栈</strong></td><td>私有</td><td>每个方法的<strong>栈帧</strong>：局部变量表、操作数栈、动态链接、返回地址</td><td>深度超限 <code>StackOverflowError</code>；扩展失败 <code>OutOfMemoryError</code></td></tr>
+      <tr><td><strong>本地方法栈</strong></td><td>私有</td><td>Native 方法（C/C++）的栈帧</td><td>同上（HotSpot 把它和虚拟机栈合并实现了）</td></tr>
+      <tr><td><strong>堆</strong></td><td><strong>共享</strong></td><td><strong>几乎所有对象实例</strong>和数组；GC 主战场</td><td><code>OutOfMemoryError: Java heap space</code></td></tr>
+      <tr><td><strong>方法区</strong></td><td><strong>共享</strong></td><td>类元信息、运行时常量池、静态变量、JIT 编译后的代码</td><td>JDK8+：<code>OOM: Metaspace</code></td></tr>
+      <tr><td>直接内存</td><td>—</td><td>NIO 的 <code>DirectByteBuffer</code>，走 <code>Unsafe.allocateMemory</code></td><td><code>OOM: Direct buffer memory</code></td></tr>
+    </tbody>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 900 430" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <!-- 标题分栏 -->
+      <text x="130" y="26" text-anchor="middle" font-size="12.5" fill="#64748b" font-weight="600">线程私有（每个线程一份）</text>
+      <text x="520" y="26" text-anchor="middle" font-size="12.5" fill="#64748b" font-weight="600">线程共享</text>
+      <text x="790" y="26" text-anchor="middle" font-size="12.5" fill="#64748b" font-weight="600">本地内存</text>
+
+      <!-- 私有 三块 -->
+      <rect x="40" y="42" width="180" height="62" rx="8" fill="#fff" stroke="#c7d2fe"/>
+      <text x="130" y="66" text-anchor="middle" font-size="13" fill="#1e293b" font-weight="600">程序计数器</text>
+      <text x="130" y="86" text-anchor="middle" font-size="11" fill="#64748b">字节码行号 · 唯一不 OOM</text>
+
+      <rect x="40" y="116" width="180" height="106" rx="8" fill="#eef2ff" stroke="#a5b4fc"/>
+      <text x="130" y="140" text-anchor="middle" font-size="13" fill="#1e293b" font-weight="600">虚拟机栈</text>
+      <text x="130" y="160" text-anchor="middle" font-size="11" fill="#475569">栈帧 → 局部变量表</text>
+      <text x="130" y="178" text-anchor="middle" font-size="11" fill="#475569">　　　 操作数栈</text>
+      <text x="130" y="196" text-anchor="middle" font-size="11" fill="#475569">　　　 动态链接 / 返回地址</text>
+      <text x="130" y="214" text-anchor="middle" font-size="11" fill="#be123c">栈深度超限 → SOE</text>
+
+      <rect x="40" y="234" width="180" height="62" rx="8" fill="#fff" stroke="#c7d2fe"/>
+      <text x="130" y="258" text-anchor="middle" font-size="13" fill="#1e293b" font-weight="600">本地方法栈</text>
+      <text x="130" y="278" text-anchor="middle" font-size="11" fill="#64748b">Native 方法栈帧</text>
+
+      <!-- 栈帧细节 -->
+      <rect x="238" y="116" width="128" height="180" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+      <text x="302" y="134" text-anchor="middle" font-size="10.5" fill="#64748b">线程 A 的栈（向下增长）</text>
+      <rect x="250" y="144" width="104" height="30" rx="4" fill="#e0e7ff" stroke="#a5b4fc"/>
+      <text x="302" y="163" text-anchor="middle" font-size="10.5" fill="#3730a3">main() 栈帧</text>
+      <rect x="250" y="178" width="104" height="30" rx="4" fill="#e0e7ff" stroke="#93c5fd"/>
+      <text x="302" y="197" text-anchor="middle" font-size="10.5" fill="#1e40af">a() 栈帧</text>
+      <rect x="250" y="212" width="104" height="30" rx="4" fill="#dbeafe" stroke="#60a5fa"/>
+      <text x="302" y="231" text-anchor="middle" font-size="10.5" fill="#1e40af">b() 栈帧 ← 栈顶</text>
+      <path d="M302 248 L302 286" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#a0)"/>
+      <text x="302" y="302" text-anchor="middle" font-size="10" fill="#94a3b8">继续递归 → SOE</text>
+
+      <!-- 共享区：堆 -->
+      <rect x="392" y="42" width="256" height="300" rx="10" fill="#fff" stroke="#e2e8f0"/>
+      <text x="520" y="62" text-anchor="middle" font-size="13" fill="#1e293b" font-weight="600">堆 Heap（GC 主战场）</text>
+
+      <!-- 新生代 -->
+      <rect x="406" y="74" width="228" height="118" rx="8" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="520" y="92" text-anchor="middle" font-size="11.5" fill="#6d28d9" font-weight="600">新生代 Young（默认 1/3 堆）</text>
+
+      <rect x="416" y="102" width="106" height="78" rx="5" fill="#ede9fe" stroke="#c4b5fd"/>
+      <text x="469" y="126" text-anchor="middle" font-size="11" fill="#5b21b6" font-weight="600">Eden</text>
+      <text x="469" y="146" text-anchor="middle" font-size="10" fill="#7c3aed">8</text>
+      <text x="469" y="166" text-anchor="middle" font-size="9.5" fill="#8b5cf6">新对象首选</text>
+
+      <rect x="530" y="102" width="47" height="78" rx="5" fill="#fce7f3" stroke="#fbcfe8"/>
+      <text x="553" y="126" text-anchor="middle" font-size="10.5" fill="#9d174d">S0</text>
+      <text x="553" y="146" text-anchor="middle" font-size="10" fill="#be185d">1</text>
+
+      <rect x="583" y="102" width="47" height="78" rx="5" fill="#fce7f3" stroke="#fbcfe8"/>
+      <text x="606" y="126" text-anchor="middle" font-size="10.5" fill="#9d174d">S1</text>
+      <text x="606" y="146" text-anchor="middle" font-size="10" fill="#be185d">1</text>
+
+      <!-- 老年代 -->
+      <rect x="406" y="202" width="228" height="80" rx="8" fill="#fef2f2" stroke="#fecaca"/>
+      <text x="520" y="228" text-anchor="middle" font-size="11.5" fill="#b91c1c" font-weight="600">老年代 Old / Tenured</text>
+      <text x="520" y="250" text-anchor="middle" font-size="10" fill="#dc2626">长寿命对象 · 大对象 · 晋升上来的</text>
+      <text x="520" y="270" text-anchor="middle" font-size="10" fill="#dc2626">默认 2/3 堆</text>
+
+      <!-- 方法区 -->
+      <rect x="392" y="352" width="256" height="62" rx="8" fill="#ecfdf5" stroke="#a7f3d0"/>
+      <text x="520" y="374" text-anchor="middle" font-size="12.5" fill="#065f46" font-weight="600">方法区 → 元空间 Metaspace（JDK8+）</text>
+      <text x="520" y="394" text-anchor="middle" font-size="10" fill="#047857">类元信息 / 运行时常量池 / 静态变量（本地内存）</text>
+
+      <path d="M520 344 L520 350" stroke="#94a3b8" stroke-width="1.2"/>
+      <text x="536" y="348" font-size="9.5" fill="#be123c">不在堆内！</text>
+
+      <!-- 本地内存 -->
+      <rect x="700" y="42" width="178" height="120" rx="10" fill="#fffbeb" stroke="#fde68a"/>
+      <text x="789" y="64" text-anchor="middle" font-size="12" fill="#92400e" font-weight="600">本地内存</text>
+      <text x="789" y="86" text-anchor="middle" font-size="10.5" fill="#a16207">元空间 Metaspace</text>
+      <text x="789" y="104" text-anchor="middle" font-size="10.5" fill="#a16207">直接内存 DirectBuffer</text>
+      <text x="789" y="122" text-anchor="middle" font-size="10.5" fill="#a16207">JNI / 线程栈</text>
+      <text x="789" y="146" text-anchor="middle" font-size="10" fill="#b45309">受物理内存 + 容器限制</text>
+
+      <path d="M652 383 C 690 383, 700 120, 700 112" stroke="#fbbf24" stroke-width="1.4" fill="none" stroke-dasharray="5 3" marker-end="url(#a0)"/>
+      <text x="676" y="300" font-size="9.5" fill="#b45309" transform="rotate(-90 676 300)">JDK8 之后搬到这</text>
+
+      <!-- 私有 vs 共享 分隔 -->
+      <path d="M376 34 L376 428" stroke="#e2e8f0" stroke-width="1.2" stroke-dasharray="5 4"/>
+      <path d="M676 34 L676 428" stroke="#e2e8f0" stroke-width="1.2" stroke-dasharray="5 4"/>
+
+      <defs>
+        <marker id="a0" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+    </svg>
+    <figcaption><b>图 1</b>　运行时数据区全景：左边三块随线程生死，右边两块全线程共享，最右的元空间已经跑到堆外面去了</figcaption>
+  </figure>
+
+  <div class="trap">
+    <b>面试陷阱：</b>「String s = "abc" 在哪个区？」——<strong>JDK 7 起字符串常量池已经从方法区搬到堆里了</strong>。所以"abc"这个字面量本身在堆的字符串常量池；而 <code class="inl">new String("abc")</code> 还会额外在 Eden 里造一个对象。答"在方法区"是 JDK6 的老口径，会暴露你只背了旧博客。
+  </div>
+
+  <h3>两个经典溢出，写完就能分清</h3>
+<pre class="java">// ① 栈溢出：递归没有终止条件，栈帧压爆 -Xss（默认约 512KB~1MB）
+static void deep(int n) { deep(n + 1); }
+// java.lang.StackOverflowError
+
+
+// ② 堆溢出：对象一直活着，回收不掉 -Xmx
+static final List&lt;byte[]&gt; LEAK = new ArrayList&lt;&gt;();
+while (true) LEAK.add(new byte[1024 * 1024]);
+// java.lang.OutOfMemoryError: Java heap space
+
+
+// ③ 元空间溢出：动态生成太多类 -XX:MaxMetaspaceSize
+// CGLIB / 反射 / 热部署反复加载同一个类
+// java.lang.OutOfMemoryError: Metaspace</pre>
+
+  <p>这三条的区别值得记住：<strong>StackOverflowError 说明"调用太深"，OOM: heap 说明"活对象太多"，OOM: Metaspace 说明"类太多"</strong>。线上看到第三种，先怀疑动态代理在循环里 <code class="inl">new Enhancer()</code>，而不是去调堆大小——调了也没用。</p>
+</section>
+
+<!-- ============ L1 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>难度 ★★☆ · 内存布局是面试加分重灾区</em></div>
+  <h2>对象层：一个 new 出来的对象，在内存里长什么样</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    创建分五步：<strong>类加载检查 → 分配内存 → 内存清零 → 设置对象头 → 执行 <code class="inl">&lt;init&gt;</code></strong>。布局分三块：<strong>对象头 + 实例数据 + 对齐填充</strong>。对象头里最关键的是 Mark Word，它在不同锁状态下复用同一块空间——这一句话就能把「对象头」和「synchronized 锁升级」串起来。
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <text x="20" y="22" font-size="12" fill="#64748b">对象创建的五个步骤（遇到 new 指令之后发生的事）</text>
+
+      <!-- 5 步 -->
+      <g>
+        <rect x="16" y="42" width="152" height="80" rx="8" fill="#eef2ff" stroke="#a5b4fc"/>
+        <text x="92" y="64" text-anchor="middle" font-size="11.5" fill="#1e40af" font-weight="700">① 类加载检查</text>
+        <text x="92" y="84" text-anchor="middle" font-size="10" fill="#475569">常量池找类符号引用</text>
+        <text x="92" y="100" text-anchor="middle" font-size="10" fill="#475569">未加载则先触发加载</text>
+        <text x="92" y="116" text-anchor="middle" font-size="10" fill="#be123c">↓ 没初始化会先初始化</text>
+      </g>
+      <path d="M170 82 L192 82" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#a1)"/>
+
+      <g>
+        <rect x="196" y="42" width="152" height="80" rx="8" fill="#eef2ff" stroke="#a5b4fc"/>
+        <text x="272" y="64" text-anchor="middle" font-size="11.5" fill="#1e40af" font-weight="700">② 分配内存</text>
+        <text x="272" y="84" text-anchor="middle" font-size="10" fill="#475569">指针碰撞（规整）</text>
+        <text x="272" y="100" text-anchor="middle" font-size="10" fill="#475569">空闲列表（不规整）</text>
+        <text x="272" y="116" text-anchor="middle" font-size="10" fill="#0f766e">并发靠 CAS / TLAB</text>
+      </g>
+      <path d="M350 82 L372 82" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#a1)"/>
+
+      <g>
+        <rect x="376" y="42" width="152" height="80" rx="8" fill="#eef2ff" stroke="#a5b4fc"/>
+        <text x="452" y="64" text-anchor="middle" font-size="11.5" fill="#1e40af" font-weight="700">③ 初始化为零</text>
+        <text x="452" y="84" text-anchor="middle" font-size="10" fill="#475569">实例字段全置 0 / null</text>
+        <text x="452" y="100" text-anchor="middle" font-size="10" fill="#475569">保证"不赋值也能用"</text>
+        <text x="452" y="116" text-anchor="middle" font-size="10" fill="#b45309">所以成员变量有默认值</text>
+      </g>
+      <path d="M530 82 L552 82" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#a1)"/>
+
+      <g>
+        <rect x="556" y="42" width="152" height="80" rx="8" fill="#eef2ff" stroke="#a5b4fc"/>
+        <text x="632" y="64" text-anchor="middle" font-size="11.5" fill="#1e40af" font-weight="700">④ 设置对象头</text>
+        <text x="632" y="84" text-anchor="middle" font-size="10" fill="#475569">Mark Word</text>
+        <text x="632" y="100" text-anchor="middle" font-size="10" fill="#475569">类型指针 → 方法区</text>
+        <text x="632" y="116" text-anchor="middle" font-size="10" fill="#475569">数组长度（仅数组）</text>
+      </g>
+      <path d="M710 82 L732 82" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#a1)"/>
+
+      <g>
+        <rect x="736" y="42" width="148" height="80" rx="8" fill="#ecfdf5" stroke="#6ee7b7"/>
+        <text x="810" y="64" text-anchor="middle" font-size="11.5" fill="#065f46" font-weight="700">⑤ 执行 &lt;init&gt;</text>
+        <text x="810" y="84" text-anchor="middle" font-size="10" fill="#475569">构造函数真正跑起来</text>
+        <text x="810" y="100" text-anchor="middle" font-size="10" fill="#475569">此时对象才"可用"</text>
+        <text x="810" y="116" text-anchor="middle" font-size="10" fill="#be123c">之前逃逸 = 半成品</text>
+      </g>
+
+      <!-- 下方：三种分配路径 -->
+      <text x="20" y="156" font-size="11.5" fill="#64748b" font-weight="600">② 分配内存的三种落地路径</text>
+
+      <rect x="16" y="168" width="270" height="66" rx="7" fill="#fff" stroke="#e2e8f0"/>
+      <text x="30" y="188" font-size="11" fill="#0f766e" font-weight="700">TLAB（默认开启）</text>
+      <text x="30" y="206" font-size="10" fill="#475569">每个线程在 Eden 预领一小块，自己用</text>
+      <text x="30" y="222" font-size="10" fill="#475569">分配无锁，用完再领 —— 99% 走这条路</text>
+
+      <rect x="300" y="168" width="270" height="66" rx="7" fill="#fff" stroke="#e2e8f0"/>
+      <text x="314" y="188" font-size="11" fill="#b45309" font-weight="700">CAS 重试</text>
+      <text x="314" y="206" font-size="10" fill="#475569">TLAB 用完 / 对象过大时，抢 Eden 指针</text>
+      <text x="314" y="222" font-size="10" fill="#475569">失败就自旋重试，保证原子性</text>
+
+      <rect x="584" y="168" width="300" height="66" rx="7" fill="#fff" stroke="#e2e8f0"/>
+      <text x="598" y="188" font-size="11" fill="#6d28d9" font-weight="700">栈上分配（逃逸分析的产物）</text>
+      <text x="598" y="206" font-size="10" fill="#475569">对象没逃出方法 → 直接标量替换成局部变量</text>
+      <text x="598" y="222" font-size="10" fill="#475569">根本不进堆，随栈帧一起弹掉，零 GC 成本</text>
+
+      <defs>
+        <marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+    </svg>
+    <figcaption><b>图 2</b>　对象创建五步 + 三种分配路径：TLAB 是常态，栈上分配是优化，只有装不下才去抢共享的 Eden 指针</figcaption>
+  </figure>
+
+  <h3>对象头：Mark Word 是最会"变身"的 8 字节</h3>
+
+  <p>64 位机器上，对象头占 <strong>12 字节</strong>（开启压缩指针时）：8 字节 Mark Word + 4 字节 Klass Pointer。数组对象再加 4 字节存长度。Mark Word 的内容<strong>随锁状态变化而完全重解释</strong>：</p>
+
+  <table>
+    <thead><tr><th style="width:16%">锁状态</th><th style="width:16%">标志位</th><th>Mark Word 存的内容</th></tr></thead>
+    <tbody>
+      <tr><td>无锁</td><td><code>01</code></td><td>hashCode(31) + 分代年龄(4) + 偏向位(1) + 锁标志(2)</td></tr>
+      <tr><td>偏向锁</td><td><code>01</code></td><td>偏向线程 ID(54) + epoch(2) + 分代年龄(4) + 偏向位=1</td></tr>
+      <tr><td>轻量级锁</td><td><code>00</code></td><td>指向线程栈中 Lock Record 的指针(62)</td></tr>
+      <tr><td>重量级锁</td><td><code>10</code></td><td>指向 Monitor 对象的指针(62)</td></tr>
+      <tr><td>GC 标记</td><td><code>11</code></td><td>空（GC 期间复用）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="warn">
+    <b>注意分代年龄只有 4 bit：</b>最大只能表示 15。这就是 <code class="inl">-XX:MaxTenuringThreshold</code> <strong>默认上限是 15</strong> 的物理原因——不是设计者懒得给大点，是 Mark Word 里就抠出 4 个比特。CMS 默认设成 6，那是策略选择，不是硬件限制。
+  </div>
+
+  <h3>数形结合：为什么压缩指针的临界点恰好是 32GB</h3>
+
+  <p>开启压缩指针（<code class="inl">-XX:+UseCompressedOops</code>，JDK6u23 后默认开）时，对象引用从 8 字节压到 4 字节。4 字节能表示 <code class="inl">2^32 = 4G</code> 个"格子"，但 JVM 用了一个障眼法：<strong>引用里存的不是字节地址，而是"第几个 8 字节"</strong>（因为对象起始地址必然 8 字节对齐，低 3 位恒为 0，白扔了）。</p>
+
+<pre class="java">可寻址范围 = 2^32 × 8 字节 = 2^32 × 2^3 = 2^35 字节 = 32 GB
+
+// 所以：堆 &lt; 32GB  → 压缩指针生效，引用 4 字节，省内存、缓存友好
+//      堆 &gt;= 32GB → 压缩指针失效，引用回 8 字节，对象变大、指针膨胀
+// 一个踩过坑的人会告诉你：堆从 31G 调到 33G，性能可能反而下降。</pre>
+
+  <p>这道算术题面试出现频率极高，因为它同时考了<strong>位运算、对齐规则、和实际调优经验</strong>。答对的人会补一句"所以 32G 附近要么压到 31G 以内，要么直接上 64G 以上让 GA 摊薄"。</p>
+
+  <h3>算一个对象到底多大</h3>
+
+  <table>
+    <thead><tr><th style="width:26%">对象</th><th style="width:44%">构成</th><th>大小（压缩指针）</th></tr></thead>
+    <tbody>
+      <tr><td><code>new Object()</code></td><td>Mark Word 8 + Klass 4 = 12 → 补 4 字节对齐</td><td><strong>16 B</strong></td></tr>
+      <tr><td><code>Integer(1)</code></td><td>头 12 + int value 4 = 16（正好对齐）</td><td><strong>16 B</strong></td></tr>
+      <tr><td><code>Long(1L)</code></td><td>头 12 + long 8 = 20 → 补 4</td><td><strong>24 B</strong></td></tr>
+      <tr><td><code>int[10]</code></td><td>头 12 + 长度 4 + 10×4 = 56</td><td><strong>56 B</strong></td></tr>
+      <tr><td><code>String("ab")</code></td><td>头 12 + hash 4 + byte[] 引用 4 + coder 1 → 补 3，再加数组本体</td><td>≈ <strong>48 B</strong>（JDK9+ 紧凑字符串）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="trap">
+    <b>面试陷阱：</b>「一个空对象占多少字节？」答 16 不是瞎背——推导要说得出来：<strong>对象头 12 字节（8 Mark Word + 4 类型指针），HotSpot 要求对象起始地址 8 字节对齐，12 不是 8 的倍数，所以补 4 字节填充 → 16</strong>。能推出来的人，G1 的 Humongous 判断（对象 &gt; Region 一半）也就自然懂了。
+  </div>
+</section>
+
+<!-- ============ L2 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>难度 ★★★ · 从这里开始分人</em></div>
+  <h2>存活判定层：怎么知道一个对象该死了</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    不用引用计数（<strong>循环引用必泄漏</strong>），用<strong>可达性分析</strong>：从 <strong>GC Roots</strong> 出发沿引用链遍历，<strong>走不到的对象</strong>就是垃圾。而并发标记时为了不让业务线程等太久，用的是<strong>三色标记法</strong>，它天然存在"对象消失"问题，需要写屏障来补。
+  </div>
+
+  <h3>先说明白：为什么引用计数不行</h3>
+
+<pre class="java">class Node { Node next; }
+
+Node a = new Node();
+Node b = new Node();
+a.next = b;
+b.next = a;          // 互相引用，形成环
+
+a = null;
+b = null;
+// 此时两个对象都不可达了，但各自的引用计数都还是 1
+// 引用计数法：永远回收不掉 —— 这就是它被 JVM 抛弃的原因</pre>
+
+  <p>Python 就吃了这个亏，所以它得额外搞一套循环检测器。<strong>Java 从第一天起就走可达性分析</strong>，代价是必须"停顿"来做遍历——这也就引出了后面所有收集器设计的核心矛盾：<strong>要正确性就要 STW，要低延迟就要并发，并发就要处理标记漂移</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <text x="20" y="22" font-size="12" fill="#64748b">可达性分析：从 GC Roots 出发的引用链遍历</text>
+
+      <!-- GC Roots 区 -->
+      <rect x="16" y="40" width="196" height="278" rx="10" fill="#ecfdf5" stroke="#a7f3d0"/>
+      <text x="114" y="62" text-anchor="middle" font-size="11.5" fill="#065f46" font-weight="700">GC Roots</text>
+
+      <rect x="32" y="76" width="164" height="30" rx="5" fill="#fff" stroke="#6ee7b7"/>
+      <text x="114" y="96" text-anchor="middle" font-size="10" fill="#065f46">栈帧局部变量表引用</text>
+
+      <rect x="32" y="114" width="164" height="30" rx="5" fill="#fff" stroke="#6ee7b7"/>
+      <text x="114" y="134" text-anchor="middle" font-size="10" fill="#065f46">静态属性 static 引用</text>
+
+      <rect x="32" y="152" width="164" height="30" rx="5" fill="#fff" stroke="#6ee7b7"/>
+      <text x="114" y="172" text-anchor="middle" font-size="10" fill="#065f46">常量池 final 引用</text>
+
+      <rect x="32" y="190" width="164" height="30" rx="5" fill="#fff" stroke="#6ee7b7"/>
+      <text x="114" y="210" text-anchor="middle" font-size="10" fill="#065f46">JNI / 本地方法引用</text>
+
+      <rect x="32" y="228" width="164" height="30" rx="5" fill="#fff" stroke="#6ee7b7"/>
+      <text x="114" y="248" text-anchor="middle" font-size="10" fill="#065f46">活跃线程 Thread 对象</text>
+
+      <rect x="32" y="266" width="164" height="30" rx="5" fill="#fff" stroke="#6ee7b7"/>
+      <text x="114" y="286" text-anchor="middle" font-size="10" fill="#065f46">synchronized 持有对象</text>
+
+      <!-- 图结构 -->
+      <circle cx="330" cy="90" r="26" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.6"/>
+      <text x="330" y="95" text-anchor="middle" font-size="10.5" fill="#1e40af">A</text>
+
+      <circle cx="480" cy="70" r="24" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.6"/>
+      <text x="480" y="75" text-anchor="middle" font-size="10.5" fill="#1e40af">B</text>
+
+      <circle cx="480" cy="180" r="24" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.6"/>
+      <text x="480" y="185" text-anchor="middle" font-size="10.5" fill="#1e40af">C</text>
+
+      <circle cx="620" cy="120" r="24" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.6"/>
+      <text x="620" y="125" text-anchor="middle" font-size="10.5" fill="#1e40af">D</text>
+
+      <!-- 不可达环 -->
+      <circle cx="740" cy="240" r="22" fill="#fee2e2" stroke="#ef4444" stroke-width="1.6" stroke-dasharray="4 3"/>
+      <text x="740" y="245" text-anchor="middle" font-size="10.5" fill="#b91c1c">X</text>
+      <circle cx="850" cy="240" r="22" fill="#fee2e2" stroke="#ef4444" stroke-width="1.6" stroke-dasharray="4 3"/>
+      <text x="850" y="245" text-anchor="middle" font-size="10.5" fill="#b91c1c">Y</text>
+      <path d="M762 240 L826 240" stroke="#ef4444" stroke-width="1.4" marker-end="url(#a2r)"/>
+      <path d="M828 252 C 800 300, 780 300, 762 252" stroke="#ef4444" stroke-width="1.4" fill="none" marker-end="url(#a2r)"/>
+
+      <!-- 边 -->
+      <path d="M230 100 C 270 100, 290 92, 302 90" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#a2b)"/>
+      <path d="M355 84 C 400 78, 430 72, 454 70" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#a2b)"/>
+      <path d="M350 104 C 410 130, 430 165, 454 176" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#a2b)"/>
+      <path d="M504 82 C 550 90, 580 105, 597 114" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#a2b)"/>
+      <path d="M504 178 C 550 168, 580 145, 598 130" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#a2b)"/>
+
+      <text x="256" y="76" font-size="10" fill="#3b82f6">引用</text>
+
+      <!-- 图例 -->
+      <text x="330" y="242" font-size="11" fill="#1e40af" font-weight="600">蓝色：可达 → 存活，本轮不回收</text>
+      <text x="330" y="264" font-size="11" fill="#b91c1c" font-weight="600">红色虚线：不可达环 → 整体回收</text>
+      <text x="330" y="288" font-size="10.5" fill="#64748b">注意 X、Y 互相引用，引用计数各为 1，但没人指向它们</text>
+      <text x="330" y="306" font-size="10.5" fill="#64748b">→ 引用计数失效，可达性分析判定死亡</text>
+
+      <defs>
+        <marker id="a2b" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#3b82f6"/>
+        </marker>
+        <marker id="a2r" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#ef4444"/>
+        </marker>
+      </defs>
+    </svg>
+    <figcaption><b>图 3</b>　可达性分析：A/B/C/D 有根可达而存活，X/Y 构成孤岛环，双双被回收</figcaption>
+  </figure>
+
+  <h3>四种引用：软引用到底什么时候被回收</h3>
+
+  <table>
+    <thead><tr><th style="width:14%">类型</th><th style="width:26%">回收时机</th><th>典型用途</th></tr></thead>
+    <tbody>
+      <tr><td><strong>强引用</strong></td><td>只要可达就<strong>永不回收</strong>，宁可 OOM</td><td><code>Object o = new Object()</code>，99% 的代码</td></tr>
+      <tr><td><strong>软引用</strong> Soft</td><td><strong>内存不足时</strong>才回收（OOM 前最后一轮）</td><td>本地图片缓存、页面缓存</td></tr>
+      <tr><td><strong>弱引用</strong> Weak</td><td><strong>下一次 GC 必回收</strong>，不管内存够不够</td><td><code>ThreadLocalMap</code> 的 key、<code>WeakHashMap</code></td></tr>
+      <tr><td><strong>虚引用</strong> Phantom</td><td>回收前收到通知，<strong>拿不到对象</strong></td><td>配合 <code>ReferenceQueue</code> 做资源清理（DirectByteBuffer 的 Cleaner）</td></tr>
+    </tbody>
+  </table>
+
+<pre class="java">// 弱引用是 ThreadLocal 内存泄漏的钥匙，必须看懂
+static class ThreadLocalMap {
+    static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt; {
+        Object value;                    // ★ value 是强引用
+        Entry(ThreadLocal&lt;?&gt; k, Object v) {
+            super(k);                    // key 用弱引用
+            value = v;
+        }
+    }
+}
+// key 被回收 → Entry 变成 (null -> value)
+// 但 Entry 本身还被 Thread 的 threadLocals 强引用着
+// 于是 value 永远回收不掉 → 泄漏
+// 补救：用完一定 remove()，别指望 GC 帮你擦屁股</pre>
+
+  <p>为什么 key 要用弱引用？因为 <code class="inl">ThreadLocal</code> 实例常被当作 static 字段，生命周期和类一样长；如果不弱引用，线程池里的线程不死，这个 Entry 就永远删不掉。<strong>用弱引用的目的是"让 key 先死，至少能识别出脏 Entry"</strong>，但这只是止血，不是治愈——真正的解法是 <code class="inl">finally { tl.remove(); }</code>。</p>
+
+  <h3>三色标记法：并发标记的基石，也是 bug 的源头</h3>
+
+  <p>STW 期间标记很简单：全部染黑，天塌不下来。但业务线程不能停几秒，所以收集器要<strong>边跑业务边标记</strong>。三色标记把对象分三态：</p>
+
+  <ul>
+    <li><strong>白色</strong>：还没被访问到 —— 如果标记结束还是白的，就是垃圾。</li>
+    <li><strong>灰色</strong>：自己访问过了，但<strong>成员还没扫完</strong> —— 在待处理队列里。</li>
+    <li><strong>黑色</strong>：自己和所有成员都扫完了 —— 安全，不会再看了。</li>
+  </ul>
+
+  <figure>
+    <svg viewBox="0 0 900 310" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <text x="20" y="22" font-size="12" fill="#64748b">三色标记的推进过程，以及"对象消失"的两个必要条件</text>
+
+      <!-- 左：正常推进 -->
+      <text x="150" y="52" text-anchor="middle" font-size="11.5" fill="#065f46" font-weight="700">① 正常推进</text>
+      <circle cx="70" cy="100" r="24" fill="#1e293b" stroke="#0f172a"/>
+      <text x="70" y="105" text-anchor="middle" font-size="10" fill="#fff">黑</text>
+      <circle cx="160" cy="100" r="24" fill="#9ca3af" stroke="#6b7280"/>
+      <text x="160" y="105" text-anchor="middle" font-size="10" fill="#fff">灰</text>
+      <circle cx="250" cy="100" r="24" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="250" y="105" text-anchor="middle" font-size="10" fill="#475569">白</text>
+      <path d="M94 100 L134 100" stroke="#64748b" stroke-width="1.4" marker-end="url(#a3)"/>
+      <path d="M184 100 L224 100" stroke="#64748b" stroke-width="1.4" marker-end="url(#a3)"/>
+      <text x="160" y="152" text-anchor="middle" font-size="10" fill="#475569">扫灰 → 变黑 → 成员入灰</text>
+      <text x="160" y="172" text-anchor="middle" font-size="10" fill="#475569">队列空了，剩下的白就是垃圾</text>
+
+      <!-- 右：漏标 -->
+      <text x="660" y="52" text-anchor="middle" font-size="11.5" fill="#be123c" font-weight="700">② 并发期间漏标（对象消失）</text>
+
+      <circle cx="480" cy="110" r="24" fill="#1e293b" stroke="#0f172a"/>
+      <text x="480" y="115" text-anchor="middle" font-size="10" fill="#fff">黑</text>
+
+      <circle cx="600" cy="110" r="24" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="600" y="115" text-anchor="middle" font-size="10" fill="#475569">白</text>
+
+      <circle cx="540" cy="200" r="24" fill="#9ca3af" stroke="#6b7280"/>
+      <text x="540" y="205" text-anchor="middle" font-size="10" fill="#fff">灰</text>
+
+      <!-- 新增的引用：黑→白 -->
+      <path d="M502 98 C 540 74, 566 78, 578 96" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#a3r)"/>
+      <text x="540" y="64" text-anchor="middle" font-size="10" fill="#dc2626" font-weight="600">业务线程新增 黑→白</text>
+
+      <!-- 被删除的引用：灰→白 -->
+      <path d="M604 130 L566 182" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3"/>
+      <text x="676" y="170" font-size="10" fill="#64748b">原 灰→白 被断开</text>
+      <path d="M664 166 L596 190" stroke="#94a3b8" stroke-width="1" marker-end="url(#a3g)"/>
+
+      <text x="480" y="248" font-size="10.5" fill="#be123c" font-weight="600">两个条件同时成立，白色对象永久漏标：</text>
+      <text x="480" y="268" font-size="10.5" fill="#475569">① 黑色对象新增了指向白色对象的引用</text>
+      <text x="480" y="286" font-size="10.5" fill="#475569">② 该白色对象的灰色引用路径全部被销毁</text>
+
+      <text x="660" y="212" font-size="10" fill="#be123c">结果：它被当成垃圾回收 → 悬空指针</text>
+
+      <!-- 中间分隔 -->
+      <path d="M400 40 L400 300" stroke="#e2e8f0" stroke-width="1.2" stroke-dasharray="5 4"/>
+
+      <defs>
+        <marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#64748b"/>
+        </marker>
+        <marker id="a3r" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#dc2626"/>
+        </marker>
+        <marker id="a3g" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+    </svg>
+    <figcaption><b>图 4</b>　三色标记的正常推进与并发漏标：破坏任一条件，就能消除"对象消失"</figcaption>
+  </figure>
+
+  <div class="trap">
+    <b>这题能筛掉 80% 的人：</b>「CMS 和 G1 分别怎么解决三色标记的漏标问题？」<br>
+    <strong>CMS 用增量更新（Incremental Update）</strong>：写屏障拦住"黑→白"的新增引用，把黑色对象重新染灰，破坏条件 ①。<br>
+    <strong>G1 用原始快照 SATB</strong>：写屏障拦住"灰→白"的<strong>删除</strong>，把即将被删的白对象记下来，按"GC 开始那一刻的快照"继续扫，破坏条件 ②。<br>
+    一个记<strong>新增</strong>，一个记<strong>删除</strong>。记反了就是没看懂，不是口误。
+  </div>
+</section>
+
+<!-- ============ L3 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>难度 ★★★ · 分代假说是一切设计的地基</em></div>
+  <h2>回收算法层：为什么 JVM 一定要分代</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    因为<strong>弱分代假说</strong>——绝大多数对象朝生夕灭。既然新生代大部分对象都是马上要死的，那就用<strong>复制算法</strong>（只搬活的，成本与存活数成正比）；老年代对象大多活着，就用<strong>标记清除/标记整理</strong>。分代不是为了理论优雅，是为了<strong>让回收成本与"存活对象数"挂钩，而不是与"堆大小"挂钩</strong>。
+  </div>
+
+  <h3>三种基础算法，先摆清楚代价</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <!-- 标记-清除 -->
+      <text x="20" y="24" font-size="11.5" fill="#b45309" font-weight="700">标记-清除 Mark-Sweep</text>
+      <g>
+        <rect x="20" y="36" width="42" height="44" fill="#fecaca" stroke="#fca5a5"/>
+        <rect x="62" y="36" width="42" height="44" fill="#ffffff" stroke="#e2e8f0"/>
+        <rect x="104" y="36" width="42" height="44" fill="#fecaca" stroke="#fca5a5"/>
+        <rect x="146" y="36" width="42" height="44" fill="#ffffff" stroke="#e2e8f0"/>
+        <rect x="188" y="36" width="42" height="44" fill="#ffffff" stroke="#e2e8f0"/>
+        <rect x="230" y="36" width="42" height="44" fill="#ffffff" stroke="#e2e8f0"/>
+      </g>
+      <text x="41" y="64" text-anchor="middle" font-size="9" fill="#991b1b">死</text>
+      <text x="125" y="64" text-anchor="middle" font-size="9" fill="#991b1b">死</text>
+      <text x="83" y="64" text-anchor="middle" font-size="9" fill="#94a3b8">活</text>
+      <text x="167" y="64" text-anchor="middle" font-size="9" fill="#94a3b8">活</text>
+      <text x="209" y="64" text-anchor="middle" font-size="9" fill="#94a3b8">活</text>
+      <text x="251" y="64" text-anchor="middle" font-size="9" fill="#94a3b8">活</text>
+
+      <text x="152" y="100" text-anchor="middle" font-size="10" fill="#475569">清除后留下空洞</text>
+      <text x="152" y="118" text-anchor="middle" font-size="10" fill="#be123c">→ 碎片化，大对象放不下</text>
+      <text x="152" y="136" text-anchor="middle" font-size="10" fill="#64748b">速度快，但要用空闲列表</text>
+
+      <!-- 标记-复制 -->
+      <text x="330" y="24" font-size="11.5" fill="#0f766e" font-weight="700">标记-复制 Copying</text>
+      <g>
+        <rect x="330" y="36" width="42" height="44" fill="#fecaca" stroke="#fca5a5"/>
+        <rect x="372" y="36" width="42" height="44" fill="#ffffff" stroke="#e2e8f0"/>
+        <rect x="414" y="36" width="42" height="44" fill="#fecaca" stroke="#fca5a5"/>
+        <rect x="456" y="36" width="42" height="44" fill="#d1fae5" stroke="#6ee7b7"/>
+        <rect x="498" y="36" width="42" height="44" fill="#d1fae5" stroke="#6ee7b7"/>
+      </g>
+      <text x="393" y="64" text-anchor="middle" font-size="9" fill="#94a3b8">活</text>
+      <text x="477" y="64" text-anchor="middle" font-size="9" fill="#065f46">活</text>
+      <text x="519" y="64" text-anchor="middle" font-size="9" fill="#065f46">活</text>
+      <text x="435" y="98" text-anchor="middle" font-size="10" fill="#475569">只搬活的 → 无碎片</text>
+      <text x="435" y="116" text-anchor="middle" font-size="10" fill="#0f766e">代价：浪费一半空间</text>
+      <text x="435" y="134" text-anchor="middle" font-size="10" fill="#64748b">成本 ∝ 存活对象数</text>
+
+      <!-- 标记-整理 -->
+      <text x="640" y="24" font-size="11.5" fill="#6d28d9" font-weight="700">标记-整理 Mark-Compact</text>
+      <g>
+        <rect x="640" y="36" width="42" height="44" fill="#fecaca" stroke="#fca5a5"/>
+        <rect x="682" y="36" width="42" height="44" fill="#ffffff" stroke="#e2e8f0"/>
+        <rect x="724" y="36" width="42" height="44" fill="#ddd6fe" stroke="#c4b5fd"/>
+        <rect x="766" y="36" width="42" height="44" fill="#ddd6fe" stroke="#c4b5fd"/>
+        <rect x="808" y="36" width="42" height="44" fill="#ddd6fe" stroke="#c4b5fd"/>
+      </g>
+      <text x="703" y="64" text-anchor="middle" font-size="9" fill="#94a3b8">活</text>
+      <text x="745" y="64" text-anchor="middle" font-size="9" fill="#5b21b6">活</text>
+      <text x="787" y="64" text-anchor="middle" font-size="9" fill="#5b21b6">活</text>
+      <text x="829" y="64" text-anchor="middle" font-size="9" fill="#5b21b6">活</text>
+
+      <text x="745" y="98" text-anchor="middle" font-size="10" fill="#475569">全部往左挤，消除碎片</text>
+      <text x="745" y="116" text-anchor="middle" font-size="10" fill="#6d28d9">不浪费空间</text>
+      <text x="745" y="134" text-anchor="middle" font-size="10" fill="#64748b">代价：移动对象要改引用</text>
+
+      <!-- 结论条 -->
+      <rect x="20" y="176" width="864" height="104" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="40" y="200" font-size="11.5" fill="#262b36" font-weight="700">JVM 的选择（不是三选一，而是按代分工）</text>
+      <text x="40" y="224" font-size="11" fill="#475569">新生代：对象死亡率 ≈ 98%，用<tspan fill="#0f766e" font-weight="700">复制</tspan>——只搬 2% 的活口，代价极低。Eden:S0:S1 = 8:1:1，浪费仅 10%。</text>
+      <text x="40" y="248" font-size="11" fill="#475569">老年代：对象存活率高，复制会累死自己 → 用<tspan fill="#6d28d9" font-weight="700">标记-整理</tspan>（Serial Old / Parallel Old）或<tspan fill="#b45309" font-weight="700">标记-清除</tspan>（CMS，宁可碎片换低延迟）。</text>
+      <text x="40" y="272" font-size="11" fill="#be123c">G1 / ZGC 跳出这套：Region 化 + 复制，用"选哪些 Region 收"代替"哪个代收"。</text>
+    </svg>
+    <figcaption><b>图 5</b>　三种基础算法的空间代价与 JVM 的分工策略：新生代赌"大部分会死"，老年代赌"大部分还活着"</figcaption>
+  </figure>
+
+  <h3>数形结合：8:1:1 这个比例是怎么算出来的</h3>
+
+  <p>为什么不是 5:5？为什么不是 9:1:1？这道题考的是<strong>空间利用率与回收成本的权衡</strong>。</p>
+
+  <table>
+    <thead><tr><th style="width:22%">Eden:S0:S1</th><th style="width:22%">可用空间</th><th style="width:22%">浪费</th><th>后果</th></tr></thead>
+    <tbody>
+      <tr><td>1:1（两块平分）</td><td>50%</td><td>50%</td><td>空间浪费太大，不可接受</td></tr>
+      <tr><td><strong>8:1:1（默认）</strong></td><td><strong>90%</strong></td><td><strong>10%</strong></td><td>浪费可控，且能容纳极少数存活对象</td></tr>
+      <tr><td>9:1:1（10:1:1）</td><td>≈91.7%</td><td>≈8.3%</td><td>收益边际递减，Survivor 太小易溢出</td></tr>
+    </tbody>
+  </table>
+
+  <p>关键前提是<strong>弱分代假说成立</strong>：一次 Minor GC 后存活对象通常不到 10%。8:1:1 下 Survivor 正好是新生代的 1/10，装得下；万一装不下怎么办？——<strong>空间分配担保</strong>兜底：老年代帮你接住放不下的对象。</p>
+
+  <div class="warn">
+    <b>面试官爱追问的一句：</b>「Survivor 装不下怎么办？」<br>
+    规范流程是：Minor GC 前，JVM 检查<strong>老年代最大可用连续空间 &gt; 新生代所有对象总大小</strong>。成立就放心 GC（最坏情况全晋升）；不成立则看 <code class="inl">-XX:HandlePromotionFailure</code>（JDK6u24 后已废弃，默认就是允许），再做一次"平均晋升大小"的比较。真的失败了，就退化成 <strong>Full GC</strong>。<br>
+    答出"担保失败会 Full GC"这一层，比背参数有说服力得多。
+  </div>
+
+  <h3>对象流动全图：从 Eden 到老年代</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <text x="20" y="22" font-size="12" fill="#64748b">对象的一生：分配 → 幸存 → 晋升 → 老死</text>
+
+      <!-- 新对象 -->
+      <rect x="20" y="48" width="120" height="54" rx="8" fill="#eef2ff" stroke="#a5b4fc"/>
+      <text x="80" y="70" text-anchor="middle" font-size="11.5" fill="#1e40af" font-weight="700">new Object()</text>
+      <text x="80" y="90" text-anchor="middle" font-size="10" fill="#64748b">TLAB / Eden</text>
+
+      <!-- 大对象分支 -->
+      <path d="M80 102 L80 148" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a4)"/>
+      <rect x="14" y="152" width="132" height="52" rx="6" fill="#fef2f2" stroke="#fecaca" stroke-dasharray="4 3"/>
+      <text x="80" y="172" text-anchor="middle" font-size="10" fill="#b91c1c" font-weight="600">大对象直通车</text>
+      <text x="80" y="190" text-anchor="middle" font-size="9.5" fill="#dc2626">&gt; PretenureSizeThreshold</text>
+      <path d="M150 178 C 320 192, 500 176, 626 152" stroke="#ef4444" stroke-width="1.4" fill="none" stroke-dasharray="5 3" marker-end="url(#a4r)"/>
+
+      <!-- Eden -->
+      <rect x="196" y="48" width="150" height="96" rx="8" fill="#ede9fe" stroke="#c4b5fd"/>
+      <text x="271" y="72" text-anchor="middle" font-size="12" fill="#5b21b6" font-weight="700">Eden</text>
+      <text x="271" y="94" text-anchor="middle" font-size="10" fill="#7c3aed">对象出生地</text>
+      <text x="271" y="112" text-anchor="middle" font-size="10" fill="#7c3aed">占新生代 80%</text>
+      <text x="271" y="132" text-anchor="middle" font-size="9.5" fill="#be123c">满了 → Minor GC</text>
+
+      <path d="M140 76 C 168 76, 178 84, 192 88" stroke="#94a3b8" stroke-width="1.4" fill="none" marker-end="url(#a4)"/>
+
+      <!-- S0 S1 -->
+      <rect x="392" y="48" width="86" height="96" rx="8" fill="#fce7f3" stroke="#fbcfe8"/>
+      <text x="435" y="72" text-anchor="middle" font-size="11.5" fill="#9d174d" font-weight="700">S0</text>
+      <text x="435" y="94" text-anchor="middle" font-size="10" fill="#be185d">age += 1</text>
+      <text x="435" y="114" text-anchor="middle" font-size="9.5" fill="#be185d">From / To</text>
+      <text x="435" y="132" text-anchor="middle" font-size="9.5" fill="#be185d">每轮互换</text>
+
+      <rect x="500" y="48" width="86" height="96" rx="8" fill="#fce7f3" stroke="#fbcfe8"/>
+      <text x="543" y="72" text-anchor="middle" font-size="11.5" fill="#9d174d" font-weight="700">S1</text>
+      <text x="543" y="94" text-anchor="middle" font-size="10" fill="#be185d">age += 1</text>
+      <text x="543" y="114" text-anchor="middle" font-size="9.5" fill="#be185d">From / To</text>
+      <text x="543" y="132" text-anchor="middle" font-size="9.5" fill="#be185d">每轮互换</text>
+
+      <path d="M346 96 L386 96" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a4)"/>
+      <path d="M478 96 L496 96" stroke="#a78bfa" stroke-width="1.4" marker-end="url(#a4)"/>
+      <path d="M500 158 C 470 168, 460 150, 470 148" stroke="#a78bfa" stroke-width="1.2" fill="none" marker-end="url(#a4)"/>
+      <text x="490" y="176" font-size="9" fill="#7c3aed">存活对象在两块间来回搬</text>
+
+      <!-- 老年代 -->
+      <rect x="632" y="48" width="248" height="96" rx="8" fill="#fef2f2" stroke="#fecaca"/>
+      <text x="756" y="74" text-anchor="middle" font-size="12" fill="#b91c1c" font-weight="700">老年代 Old</text>
+      <text x="756" y="96" text-anchor="middle" font-size="10" fill="#dc2626">活得够久 / 装不下 / 特大对象</text>
+      <text x="756" y="116" text-anchor="middle" font-size="10" fill="#dc2626">满了 → Full GC</text>
+      <text x="756" y="134" text-anchor="middle" font-size="9.5" fill="#be123c">默认占堆 2/3</text>
+
+      <path d="M586 96 L628 96" stroke="#ef4444" stroke-width="1.6" marker-end="url(#a4r)"/>
+      <text x="600" y="86" text-anchor="middle" font-size="9" fill="#dc2626">晋升</text>
+
+      <!-- 晋升条件框 -->
+      <rect x="392" y="196" width="488" height="150" rx="10" fill="#fff" stroke="#e2e8f0"/>
+      <text x="408" y="220" font-size="11.5" fill="#262b36" font-weight="700">三条晋升路径（按发生频率排序）</text>
+
+      <text x="408" y="246" font-size="10.5" fill="#b45309" font-weight="600">① 年龄达标</text>
+      <text x="470" y="246" font-size="10.5" fill="#475569">-XX:MaxTenuringThreshold，默认 15（4 bit 的上限）</text>
+
+      <text x="408" y="274" font-size="10.5" fill="#b45309" font-weight="600">② 动态年龄</text>
+      <text x="496" y="274" font-size="10.5" fill="#475569">≤n 岁对象总和 &gt; Survivor 一半 → n 岁以上提前晋升</text>
+      <text x="470" y="292" font-size="9.5" fill="#94a3b8">不用等到 15，这是 HotSpot 的"提前止损"，很多人不知道</text>
+
+      <text x="408" y="318" font-size="10.5" fill="#b45309" font-weight="600">③ 担保失败</text>
+      <text x="470" y="318" font-size="10.5" fill="#475569">Survivor 装不下 + 老年代也没空间 → 直接进老年代或触发 Full GC</text>
+
+      <!-- 底部时间轴 -->
+      <text x="20" y="238" font-size="11" fill="#64748b" font-weight="600">时间轴</text>
+      <path d="M20 262 L360 262" stroke="#cbd5e1" stroke-width="2" marker-end="url(#a4)"/>
+      <circle cx="60" cy="262" r="5" fill="#7c3aed"/>
+      <circle cx="140" cy="262" r="5" fill="#7c3aed"/>
+      <circle cx="220" cy="262" r="5" fill="#7c3aed"/>
+      <circle cx="300" cy="262" r="5" fill="#ef4444"/>
+      <text x="60" y="284" text-anchor="middle" font-size="9" fill="#7c3aed">t1: 出生</text>
+      <text x="140" y="284" text-anchor="middle" font-size="9" fill="#7c3aed">t2: age=1</text>
+      <text x="220" y="284" text-anchor="middle" font-size="9" fill="#7c3aed">t3: age=2</text>
+      <text x="300" y="284" text-anchor="middle" font-size="9" fill="#ef4444">t4: 晋升</text>
+
+      <text x="20" y="318" font-size="10" fill="#475569">每一次 Minor GC</text>
+      <text x="20" y="336" font-size="10" fill="#475569">存活对象在两块 Survivor</text>
+      <text x="20" y="354" font-size="10" fill="#475569">之间搬一次，age+1</text>
+      <text x="20" y="378" font-size="10" fill="#be123c" font-weight="600">为什么是复制算法？</text>
+      <text x="20" y="396" font-size="10" fill="#475569">因为每次只搬活着的 2%</text>
+
+      <defs>
+        <marker id="a4" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/>
+        </marker>
+        <marker id="a4r" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#ef4444"/>
+        </marker>
+      </defs>
+    </svg>
+    <figcaption><b>图 6</b>　对象生命周期全图：Eden 出生 → Survivor 两区来回搬并累加年龄 → 满足三条路径之一就晋升老年代</figcaption>
+  </figure>
+
+  <h3>一道算术题：多久发生一次 Minor GC</h3>
+
+<pre class="java">已知：-Xmn 300M，Eden:S0:S1 = 8:1:1  →  Eden = 240M，Survivor 各 30M
+业务分配速率：约 60 MB/s
+单次 Minor GC 耗时：约 12 ms
+
+求：Minor GC 频率、以及每秒的 STW 总时间
+
+Eden 填满所需时间 = 240 MB ÷ 60 MB/s = 4 s
+频率 = 每秒 0.25 次，即每 4 秒一次
+每秒 STW = 0.25 × 12 ms = 3 ms
+
+// 结论：3ms/s ≈ 0.3% 的时间在停顿 —— 完全可以接受
+// 如果分配速率涨到 600 MB/s：
+//   每 0.4s 一次，每秒 STW = 2.5 × 12 = 30ms → 开始有感知
+//   这时调大 -Xmn 或换 G1 设 MaxGCPauseMillis，才是对症的做法</pre>
+
+  <p>面试里能把这段算出来的人不多，但它特别有说服力：<strong>它证明你知道"调参"到底在调什么</strong>。加大 Eden 降低频率但抬高单次耗时（扫的存活对象更多），换收集器改的是单次耗时上界——三个变量互相牵制，这才是真实的 GC 调优。</p>
+
+  <div class="warn">
+    <b>顺带记住卡表：</b>Minor GC 只扫新生代，但老年代可能持有新生代对象的引用（跨代引用）。如果每次都要扫整个老年代找这些引用，分代就白分了。所以 JVM 用<strong>卡表 Card Table</strong>：把老年代切成 512 字节一张的"卡"，只要某张卡里发生了"老→新"的引用写入，写屏障就把这张卡标记为 dirty（脏卡）。Minor GC 时只需扫脏卡对应的对象作为额外 GC Roots。<br>
+    这就是<strong>记忆集 Remembered Set</strong> 的思路，G1 里升级成了 RSet，粒度是 Region。
+  </div>
+</section>
+
+<!-- ============ L4 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>难度 ★★★★ · 面试分水岭，能讲清的不到 10%</em></div>
+  <h2>收集器层：从 Serial 到 ZGC，一部降低停顿的奋斗史</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    所有收集器的演进只围绕一个矛盾：<strong>标记/清理必须正确（要 STW）</strong> vs <strong>业务不能停（不能 STW）</strong>。CMS 用"并发标记 + 并发清除"把停顿切碎但没消除；G1 用"Region 化 + 可预测停顿模型"把停顿变成可控预算；ZGC 用<strong>染色指针 + 读屏障</strong>把"移动对象"也做成并发的，停顿压到毫秒级。
+  </div>
+
+  <table>
+    <thead><tr><th style="width:19%">收集器</th><th style="width:14%">年代</th><th style="width:16%">算法</th><th style="width:16%">STW</th><th>一句话定位</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Serial</strong></td><td>新生代</td><td>复制</td><td>全程 STW</td><td>单线程，客户端模式默认，简单到没有 bug</td></tr>
+      <tr><td><strong>ParNew</strong></td><td>新生代</td><td>复制</td><td>全程 STW</td><td>Serial 的多线程版，唯一能和 CMS 搭配的</td></tr>
+      <tr><td><strong>Parallel Scavenge</strong></td><td>新生代</td><td>复制</td><td>全程 STW</td><td><strong>吞吐量优先</strong>，服务端默认（JDK8）</td></tr>
+      <tr><td><strong>Serial Old</strong></td><td>老年代</td><td>标记-整理</td><td>全程 STW</td><td>CMS 的后备，Concurrent Mode Failure 时上场</td></tr>
+      <tr><td><strong>Parallel Old</strong></td><td>老年代</td><td>标记-整理</td><td>全程 STW</td><td>配合 Parallel Scavenge，吞吐优先</td></tr>
+      <tr><td><strong>CMS</strong></td><td>老年代</td><td><strong>标记-清除</strong></td><td><strong>两次短 STW</strong></td><td>第一款并发收集器，JDK9 废弃、JDK14 移除</td></tr>
+      <tr><td><strong>G1</strong></td><td>整堆</td><td>复制 + Region</td><td>可预测</td><td>JDK9+ 默认，目标 200ms 以内</td></tr>
+      <tr><td><strong>ZGC</strong></td><td>整堆</td><td>染色指针 + 复制</td><td><strong>&lt;1ms</strong></td><td>JDK11 实验、JDK15 转正、JDK21 分代</td></tr>
+    </tbody>
+  </table>
+
+  <h3>CMS：四阶段里两次 STW 在哪</h3>
+
+<pre class="java">// CMS 完整流程（-XX:+UseConcMarkSweepGC）
+// ① 初始标记 Initial Mark      STW  只标 GC Roots 直接关联的对象 —— 极快
+// ② 并发标记 Concurrent Mark   并发  从①的结果出发遍历整个对象图 —— 最耗时，但不 STW
+// ③ 重新标记 Remark            STW  修正②期间因业务线程导致的标记变动 —— 比①慢、
+//                                    比②快，用增量更新算法
+// ④ 并发清除 Concurrent Sweep  并发  清掉白色对象 —— 不移动对象，所以能并发
+
+// 三个致命伤：
+// 1) 对 CPU 敏感：并发阶段要占线程（默认 (CPU+3)/4 个）
+// 2) 浮动垃圾 Floating Garbage：④期间新产生的垃圾只能下轮收，所以要留余地
+//    -XX:CMSInitiatingOccupancyFraction=68（老年代用到 68% 就启动，JDK6 后默认 92）
+// 3) 碎片：标记-清除不整理，大对象来了放不下 →
+//    Concurrent Mode Failure → 退化 Serial Old 单线程 Full GC → 停顿暴涨</pre>
+
+  <div class="trap">
+    <b>「CMS 为什么不用标记-整理？」</b>——因为<strong>整理要移动对象，移动就得改所有指向它的引用，而并发期间业务线程还在读，改了就会读到错地址</strong>。要移动就必须能"拦住读"（读屏障），CMS 没有这套机制，所以只能放弃整理、忍受碎片。这个答案直接通向 ZGC 的设计动机，说完面试官会点头。
+  </div>
+
+  <h3>G1：把堆切成 2048 块，然后"挑最肥的收"</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <text x="20" y="22" font-size="12" fill="#64748b">G1 的 Region 布局：逻辑上分代，物理上不连续</text>
+
+      <!-- Region 网格 8x4 -->
+      <g stroke="#e2e8f0" stroke-width="1">
+        <!-- row1 -->
+        <rect x="24" y="40" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="78" y="40" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="132" y="40" width="54" height="54" fill="#fce7f3" stroke="#fbcfe8"/>
+        <rect x="186" y="40" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="240" y="40" width="54" height="54" fill="#f1f5f9" stroke="#e2e8f0"/>
+        <rect x="294" y="40" width="54" height="54" fill="#fef2f2" stroke="#fecaca"/>
+        <rect x="348" y="40" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="402" y="40" width="54" height="54" fill="#fef2f2" stroke="#fecaca"/>
+        <!-- row2 -->
+        <rect x="24" y="94" width="54" height="54" fill="#fce7f3" stroke="#fbcfe8"/>
+        <rect x="78" y="94" width="54" height="54" fill="#f1f5f9" stroke="#e2e8f0"/>
+        <rect x="132" y="94" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="186" y="94" width="54" height="54" fill="#fef2f2" stroke="#fecaca"/>
+        <rect x="240" y="94" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="294" y="94" width="54" height="54" fill="#f1f5f9" stroke="#e2e8f0"/>
+        <rect x="348" y="94" width="54" height="54" fill="#fce7f3" stroke="#fbcfe8"/>
+        <rect x="402" y="94" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <!-- row3 -->
+        <rect x="24" y="148" width="54" height="54" fill="#fef2f2" stroke="#fecaca"/>
+        <rect x="78" y="148" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="132" y="148" width="54" height="54" fill="#f1f5f9" stroke="#e2e8f0"/>
+        <rect x="186" y="148" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="240" y="148" width="54" height="54" fill="#fce7f3" stroke="#fbcfe8"/>
+        <rect x="294" y="148" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="348" y="148" width="54" height="54" fill="#fef2f2" stroke="#fecaca"/>
+        <rect x="402" y="148" width="54" height="54" fill="#f1f5f9" stroke="#e2e8f0"/>
+        <!-- row4 -->
+        <rect x="24" y="202" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="78" y="202" width="54" height="54" fill="#f1f5f9" stroke="#e2e8f0"/>
+        <rect x="132" y="202" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="186" y="202" width="54" height="54" fill="#fce7f3" stroke="#fbcfe8"/>
+        <rect x="240" y="202" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+        <rect x="294" y="202" width="54" height="54" fill="#fef2f2" stroke="#fecaca"/>
+        <rect x="348" y="202" width="54" height="54" fill="#f1f5f9" stroke="#e2e8f0"/>
+        <rect x="402" y="202" width="54" height="54" fill="#ede9fe" stroke="#c4b5fd"/>
+      </g>
+
+      <!-- 标记：Young / Old / Humongous -->
+      <text x="51" y="72" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+      <text x="105" y="72" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+      <text x="159" y="72" text-anchor="middle" font-size="9" fill="#9d174d">S</text>
+      <circle cx="213" cy="67" r="11" fill="none" stroke="#dc2626" stroke-width="1.6"/>
+      <text x="267" y="72" text-anchor="middle" font-size="8" fill="#94a3b8">空</text>
+      <text x="321" y="72" text-anchor="middle" font-size="9" fill="#b91c1c">O</text>
+      <text x="375" y="72" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+      <text x="429" y="72" text-anchor="middle" font-size="9" fill="#b91c1c">O</text>
+
+      <text x="51" y="126" text-anchor="middle" font-size="9" fill="#9d174d">S</text>
+      <text x="159" y="126" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+      <text x="213" y="126" text-anchor="middle" font-size="9" fill="#b91c1c">O</text>
+      <circle cx="267" cy="121" r="11" fill="none" stroke="#dc2626" stroke-width="1.6"/>
+      <text x="375" y="126" text-anchor="middle" font-size="9" fill="#9d174d">S</text>
+      <text x="429" y="126" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+
+      <text x="51" y="180" text-anchor="middle" font-size="9" fill="#b91c1c">H</text>
+      <text x="105" y="180" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+      <text x="213" y="180" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+      <text x="267" y="180" text-anchor="middle" font-size="9" fill="#9d174d">S</text>
+      <text x="375" y="180" text-anchor="middle" font-size="9" fill="#b91c1c">O</text>
+
+      <text x="51" y="234" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+      <text x="159" y="234" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+      <text x="213" y="234" text-anchor="middle" font-size="9" fill="#9d174d">S</text>
+      <text x="267" y="234" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+      <text x="321" y="234" text-anchor="middle" font-size="9" fill="#b91c1c">O</text>
+      <text x="429" y="234" text-anchor="middle" font-size="9" fill="#6d28d9">E</text>
+
+      <!-- 图例 -->
+      <rect x="490" y="44" width="14" height="14" fill="#ede9fe" stroke="#c4b5fd"/>
+      <text x="512" y="56" font-size="10.5" fill="#475569">Eden Region</text>
+      <rect x="490" y="68" width="14" height="14" fill="#fce7f3" stroke="#fbcfe8"/>
+      <text x="512" y="80" font-size="10.5" fill="#475569">Survivor Region</text>
+      <rect x="490" y="92" width="14" height="14" fill="#fef2f2" stroke="#fecaca"/>
+      <text x="512" y="104" font-size="10.5" fill="#475569">Old Region</text>
+      <rect x="490" y="116" width="14" height="14" fill="#f1f5f9" stroke="#e2e8f0"/>
+      <text x="512" y="128" font-size="10.5" fill="#475569">空闲 Region</text>
+      <circle cx="500" cy="148" r="7" fill="none" stroke="#dc2626" stroke-width="1.6"/>
+      <text x="512" y="152" font-size="10.5" fill="#475569">本轮 CSet 选中</text>
+
+      <text x="490" y="184" font-size="10" fill="#b91c1c" font-weight="600">H = Humongous</text>
+      <text x="490" y="202" font-size="9.5" fill="#64748b">对象 &gt; Region 一半</text>
+      <text x="490" y="218" font-size="9.5" fill="#64748b">占连续多个 Region</text>
+
+      <!-- CSet 框 -->
+      <rect x="490" y="240" width="396" height="100" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="504" y="262" font-size="11" fill="#be123c" font-weight="700">CSet（Collection Set）挑选逻辑</text>
+      <text x="504" y="284" font-size="10" fill="#475569">1. 全部 Young Region 必须进 CSet（Young GC 逃不掉）</text>
+      <text x="504" y="302" font-size="10" fill="#475569">2. 老年代按<tspan font-weight="700">回收收益 ÷ 回收成本</tspan>排序，从高到低挑</text>
+      <text x="504" y="320" font-size="10" fill="#475569">3. 边挑边累加预期耗时，<tspan font-weight="700">撞到 MaxGCPauseMillis 就停手</tspan></text>
+
+      <!-- 说明 -->
+      <text x="24" y="290" font-size="10.5" fill="#475569">物理上不连续，逻辑上用 RSet 记住"谁指向我"</text>
+      <text x="24" y="310" font-size="10.5" fill="#475569">Region 大小 1~32 MB，必须是 2 的幂</text>
+      <text x="24" y="330" font-size="10.5" fill="#475569">总数上限 2048，所以堆越大单 Region 越大</text>
+      <text x="24" y="354" font-size="10" fill="#be123c" font-weight="600">这就是"可预测停顿"的来源：</text>
+      <text x="24" y="372" font-size="10" fill="#475569">停顿时间 = Σ 选中 Region 的回收耗时</text>
+      <text x="24" y="390" font-size="10" fill="#475569">→ 少挑几个就快，是预算问题不是运气问题</text>
+    </svg>
+    <figcaption><b>图 7</b>　G1 的 Region 布局与 CSet 挑选：把"全堆回收"变成"按 ROI 挑 Region 回收"，停顿由此变成可预算的</figcaption>
+  </figure>
+
+  <div class="warn">
+    <b>G1 的 STW 到底有几次？</b>Four 个阶段里，<strong>只有「初始标记」和「最终标记」是 STW</strong>，中间的并发标记、以及「筛选回收」的清理阶段（JDK10 后并行执行）都不是全程停。所以 G1 的停顿是"几个很短的 STW"，不是"一次很长的 STW"。<br>
+    还有一个必须提的点：<strong>G1 的 Young GC 是全停的</strong>（所有 Young Region 都进 CSet）。真正省时间的是 Mixed GC —— 它才把老年代 Region 拉进来按收益挑。
+  </div>
+
+  <h3>ZGC：为什么它能做到 1ms 以内</h3>
+
+  <p>G1 已经能并发标记、并发清理了，但<strong>对象移动（复制/整理）还是得 STW</strong>，因为一移动，所有指向它的引用都得更新，而业务线程随时可能读这些引用。ZGC 的破局点是把"引用"本身变成可以作弊的东西。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 254" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <text x="20" y="22" font-size="12" fill="#64748b">染色指针：把 GC 状态直接写进 64 位引用的空闲高位里</text>
+
+      <!-- 64 位条 -->
+      <g>
+        <rect x="24" y="46" width="120" height="40" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="84" y="72" text-anchor="middle" font-size="10.5" fill="#94a3b8">18 位（未用）</text>
+
+        <rect x="144" y="46" width="56" height="40" fill="#fef3c7" stroke="#fbbf24"/>
+        <text x="172" y="66" text-anchor="middle" font-size="9.5" fill="#92400e">4 位</text>
+        <text x="172" y="80" text-anchor="middle" font-size="8.5" fill="#b45309">标志位</text>
+
+        <rect x="200" y="46" width="440" height="40" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="420" y="72" text-anchor="middle" font-size="11" fill="#1e40af" font-weight="600">42 位对象地址（4 TB 寻址空间）</text>
+      </g>
+
+      <!-- 四个标志位 -->
+      <g>
+        <rect x="150" y="110" width="176" height="26" rx="4" fill="#fff" stroke="#fcd34d"/>
+        <text x="238" y="128" text-anchor="middle" font-size="9.5" fill="#92400e">M0 Marked0（本轮标记）</text>
+        <rect x="150" y="142" width="176" height="26" rx="4" fill="#fff" stroke="#fcd34d"/>
+        <text x="238" y="160" text-anchor="middle" font-size="9.5" fill="#92400e">M1 Marked1（上轮标记）</text>
+        <rect x="150" y="174" width="176" height="26" rx="4" fill="#fff" stroke="#fcd34d"/>
+        <text x="238" y="192" text-anchor="middle" font-size="9.5" fill="#92400e">Remapped（已重映射）</text>
+        <rect x="150" y="206" width="176" height="26" rx="4" fill="#fff" stroke="#fcd34d"/>
+        <text x="238" y="224" text-anchor="middle" font-size="9.5" fill="#92400e">Finalizable（仅终结）</text>
+      </g>
+
+      <!-- 右侧说明 -->
+      <rect x="360" y="100" width="524" height="132" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="376" y="122" font-size="11" fill="#262b36" font-weight="700">判活不用"遍历可达"了，直接看颜色位</text>
+      <text x="376" y="144" font-size="10" fill="#475569">引用指向对象时，地址位 + M0/M1 一起决定"是否已标记"</text>
+      <text x="376" y="164" font-size="10" fill="#475569">→ 标记信息不再存在对象头里，而存在<tspan font-weight="700">指针</tspan>里</text>
+      <text x="376" y="186" font-size="11" fill="#be123c" font-weight="700">关键一步：并发转移（Concurrent Relocate）</text>
+      <text x="376" y="206" font-size="10" fill="#475569">移动对象后，引用不必立刻改；业务线程下次读这个引用时，</text>
+      <text x="376" y="222" font-size="10" fill="#475569">读屏障拦截 → 发现 Remapped 位不对 → 当场改成本次新地址</text>
+
+      <!-- 读屏障流程 -->
+      <text x="24" y="248" font-size="9.5" fill="#94a3b8">代价：每次读引用都插一段检查（读屏障），吞吐会降一点——用吞吐换延迟</text>
+    </svg>
+    <figcaption><b>图 8</b>　ZGC 染色指针：把 GC 状态塞进指针高位，配合读屏障实现"边移动对象边让业务继续跑"</figcaption>
+  </figure>
+
+  <p>一句话总结三代收集器的取舍：<strong>CMS 用碎片换停顿，G1 用吞吐换可预测性，ZGC 用吞吐换极限延迟</strong>。没有免费的午餐，只有你愿意付哪种代价。</p>
+</section>
+
+<!-- ============ L5 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L5</span><em>速查表 · 面试前一小时看这个</em></div>
+  <h2>12 条高频问答：30 秒版本 + 深挖方向</h2>
+
+  <p style="color:var(--muted);font-size:14px;margin-top:0">每条给"能立刻说出口的答案"和"面试官可能追的第二问"。只背前者，一定会在第二问翻车。</p>
+
+  <table>
+    <thead><tr><th style="width:5%">#</th><th style="width:33%">问题</th><th style="width:32%">30 秒答案</th><th>深挖方向</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>JVM 内存分几块？</td><td>5 块：PC、虚拟机栈、本地方法栈（私有）+ 堆、方法区（共享）</td><td>元空间为什么在本地内存</td></tr>
+      <tr><td>2</td><td>JDK8 为什么去掉永久代？</td><td>永久代大小难估、易 OOM；元空间用本地内存，默认不限、由物理内存兜底</td><td>PermGen 调参踩过什么坑</td></tr>
+      <tr><td>3</td><td>对象创建过程？</td><td>类加载检查 → 分配 → 清零 → 设对象头 → <code>&lt;init&gt;</code></td><td>TLAB 怎么工作</td></tr>
+      <tr><td>4</td><td>为什么用可达性分析？</td><td>引用计数处理不了循环引用</td><td>GC Roots 具体包括哪些</td></tr>
+      <tr><td>5</td><td>为什么分代？</td><td>弱分代假说：绝大多数对象朝生夕灭，分区才能对症下药</td><td>跨代引用怎么办 → 卡表</td></tr>
+      <tr><td>6</td><td>Minor GC / Full GC 何时触发？</td><td>Minor：Eden 满；Full：老年代满、元空间满、担保失败、<code>System.gc()</code></td><td>CMS 的 CMF 退化</td></tr>
+      <tr><td>7</td><td>对象什么时候进老年代？</td><td>年龄达阈值（默认 15）、动态年龄判定、大对象直通、担保失败</td><td>为什么 15 是上限 → 4 bit</td></tr>
+      <tr><td>8</td><td>Eden:S0:S1 为什么 8:1:1？</td><td>可用空间 90%，浪费仅 10%，且能装下少量存活对象</td><td>装不下怎么办 → 担保</td></tr>
+      <tr><td>9</td><td>三色标记的漏标怎么解决？</td><td>破坏两个必要条件之一：CMS 增量更新（记新增）、G1 原始快照 SATB（记删除）</td><td>写屏障的开销</td></tr>
+      <tr><td>10</td><td>G1 怎么做到可预测停顿？</td><td>Region 化 + 按回收收益排序挑 CSet + 累计耗时不超 MaxGCPauseMillis</td><td>RSet 的内存开销</td></tr>
+      <tr><td>11</td><td>ZGC 为什么这么快？</td><td>染色指针 + 读屏障，把"移动对象后改引用"做成并发的</td><td>吞吐损失有多少</td></tr>
+      <tr><td>12</td><td>线上 Full GC 频繁怎么查？</td><td><code>jstat -gcutil</code> 看频率 → <code>jmap -dump</code> → MAT 找大对象 → 定位代码</td><td>有没有更轻量的方法 → Arthas</td></tr>
+    </tbody>
+  </table>
+
+  <h3>第 12 条展开：一套能落地的排查动作</h3>
+
+<pre class="java"># 1. 先看趋势，别急着 dump（dump 会 STW 几秒，生产环境慎用）
+jstat -gcutil &lt;pid&gt; 1000 20
+#   S0 S1 E   O    M    YGC  YGCT  FGC  FGCT   GCT
+#   0  100 62 88.4 95.2  142  1.82   31  12.44  14.26
+#                  ↑老年代 88%   ↑Full GC 31 次花了 12 秒 → 明显有问题
+
+# 2. 看是谁在占内存（-histo 只触发一次轻量遍历，比 dump 安全）
+jmap -histo:live &lt;pid&gt; | head -20
+
+# 3. 抓线程栈，看是不是有线程卡住导致对象不释放
+jstack &lt;pid&gt; &gt; stack.log
+
+# 4. 实在要 dump，挑低峰期，且确认容器有足够磁盘
+jmap -dump:live,format=b,file=/tmp/heap.hprof &lt;pid&gt;
+
+# 5. 用 MAT 看 Dominator Tree，找"谁能支配这么多内存"
+#    常见元凶：静态 Map 只增不减、缓存没设上限、ThreadLocal 没 remove、
+#             List 在循环里不断 add、动态代理类无限生成（Metaspace OOM）</pre>
+
+  <div class="warn">
+    <b>面试时的顺序很重要：</b>先讲<strong>观测</strong>（jstat 看频率和耗时），再讲<strong>定位</strong>（histo / dump / MAT），最后讲<strong>修</strong>（改代码 or 调参数）。别一上来就说"调大 -Xmx"——那是把症状盖住，不是治病。能说出"先看 YGC 和 FGC 的比例"的人，是真的处理过线上问题。
+  </div>
+</section>
+
+<!-- ============ L6 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L6</span><em>模拟面试 · 三题递进</em></div>
+  <h2>三道模拟面试题</h2>
+
+  <div class="q">
+    <div class="qh">
+      <div class="num">1</div>
+      <div class="qt">一个 <code class="inl">new User()</code> 从创建到被回收，完整经过哪些环节？请说出每个环节可能出问题的地方。</div>
+      <div class="tagline">考 L1 + L3 · 中等</div>
+    </div>
+
+    <div class="lab">答题骨架（按时间顺序，五段）</div>
+    <ul>
+      <li><strong>① 分配</strong>：类加载检查 → TLAB 里指针碰撞（无锁，99% 走这条）→ 失败则 CAS 抢 Eden → 栈上分配（逃逸分析通过时根本不进堆）。<em>风险点：大对象频繁创建会直接进老年代，加速 Full GC。</em></li>
+      <li><strong>② 初始化</strong>：内存清零 → 设 Mark Word（此时分代年龄 = 0，偏向位 = 1）→ 执行构造方法。<em>风险点：构造方法里把 <code class="inl">this</code> 发布出去（this 逃逸），其他线程可能看到半初始化对象。</em></li>
+      <li><strong>③ 新生代回收</strong>：Eden 满触发 Minor GC → 存活对象复制到 S0，年龄 +1 → 下次 GC 时 S0 和 S1 角色互换，活着的再搬一次、年龄再 +1。<em>风险点：Survivor 太小导致对象过早晋升，把压力转嫁给老年代。</em></li>
+      <li><strong>④ 晋升</strong>：年龄到 15（或被动态年龄判定提前踢出去，或大对象直通，或担保失败）→ 进老年代。<em>风险点：晋升过快 = 老年代膨胀 = Full GC 频繁，这是典型的"新生代给小了"的症状。</em></li>
+      <li><strong>⑤ 回收</strong>：老年代满 → Full GC → 可达性分析判死 → 标记-整理/清除 → 内存归还。<em>风险点：如果被静态集合或 ThreadLocal 意外持有引用，永远到不了这一步 —— 那就是内存泄漏。</em></li>
+    </ul>
+
+    <div class="lab g">加分点</div>
+    <p>主动补一句："如果这个 User 只在方法内使用、没返回也没存到字段，JIT 的逃逸分析会把它<strong>标量替换</strong>成几个局部变量，压根不会在堆上分配——所以微基准测试里 <code class="inl">new</code> 的开销经常测不出来。"这句话直接证明你读过 JIT 相关的资料，不是只背了八股。</p>
+
+    <div class="lab r">可能被追问</div>
+    <ul>
+      <li>TLAB 用完了怎么办？（重新申请一块，或者退化成 CAS 抢 Eden）</li>
+      <li>为什么分配完要先清零？（保证字段有默认值，也避免拿到上一轮对象的脏数据）</li>
+      <li>逃逸分析默认开吗？（<code class="inl">-XX:+DoEscapeAnalysis</code>，JDK6u23 后默认开启）</li>
+    </ul>
+  </div>
+
+  <div class="q">
+    <div class="qh">
+      <div class="num">2</div>
+      <div class="qt">线上服务每隔 3 小时一次 Full GC，每次停 2 秒，接口超时报警。你怎么定位和优化？</div>
+      <div class="tagline">考 L5 + 实战 · 偏难</div>
+    </div>
+
+    <div class="lab">答题骨架（观测 → 假设 → 验证 → 修复）</div>
+    <ul>
+      <li><strong>第一步：先量化，别猜。</strong><code class="inl">jstat -gcutil 1000</code> 看 YGC/FGC 次数与耗时、老年代占用曲线。判断是"<strong>泄漏型</strong>"（每次 FGC 后老年代降不下去，阶梯式上升）还是"<strong>抖动型</strong>"（能降下去，但涨得快）。</li>
+      <li><strong>第二步：区分两类根因。</strong>泄漏型 → 一定是某处持有引用不放（静态集合、ThreadLocal、监听器未注销、连接池未归还）；抖动型 → 要么晋升太快（新生代太小 / Survivor 太小），要么大对象太多（一次查 10 万条记录），要么元空间在膨胀（动态代理）。</li>
+      <li><strong>第三步：验证。</strong><code class="inl">jmap -histo:live</code> 看实例数 Top20，如果某个业务类实例数异常多，基本锁定。必要时挑低峰 <code class="inl">jmap -dump</code> 用 MAT 看 Dominator Tree。</li>
+      <li><strong>第四步：修复分两层。</strong>代码层：干掉泄漏点、加大缓存上限、分页查库。参数层：如果是抖动型且对象确实该活，加大新生代 <code class="inl">-Xmn</code>、或换 G1 设 <code class="inl">-XX:MaxGCPauseMillis=200</code>。</li>
+      <li><strong>第五步：兜底。</strong>加 GC 日志（<code class="inl">-Xlog:gc*</code>）+ 监控告警（FGC 次数/分钟），把"事后救火"变"事前发现"。</li>
+    </ul>
+
+    <div class="lab g">加分点</div>
+    <p>说出关键判断句："<strong>如果每次 Full GC 后老年代占用能回到低位，那就是分配速率问题，调参数有用；如果回不去，调多大都没用，必须改代码。</strong>"这一句就把"会查"和"会背"区分开了。</p>
+
+    <div class="lab r">千万别这么说</div>
+    <ul>
+      <li>"加内存就好了"——泄漏型加内存只是把 3 小时变成 6 小时，照样炸。</li>
+      <li>"直接 <code>jmap -dump</code> 看"——生产环境 dump 会 STW 数秒，先问清楚能不能停。</li>
+      <li>一上来就换 ZGC——先证明问题是 GC 停顿导致的，不是它。</li>
+    </ul>
+  </div>
+
+  <div class="q">
+    <div class="qh">
+      <div class="num">3</div>
+      <div class="qt">G1 号称可预测停顿，ZGC 号称 1ms 以内。它们各自牺牲了什么？什么场景该选哪个？</div>
+      <div class="tagline">考 L4 · 区分度高</div>
+    </div>
+
+    <div class="lab">答题骨架（先讲机制，再讲代价，最后讲选型）</div>
+    <ul>
+      <li><strong>G1 换来的：</strong>Region 化 + CSet 按 ROI 挑 → 停顿变成"预算"，可以通过 <code class="inl">MaxGCPauseMillis</code> 调节。但它付出的代价是：① <strong>RSet 占额外内存</strong>（通常 10%~20% 堆），跨 Region 引用越多 RSet 越胖；② <strong>写屏障开销</strong>（SATB 要记录删除的引用）；③ <strong>Young GC 仍然是全停</strong>，只是在 Mixed GC 上才体现"可预测"；④ 大对象（Humongous）处理不友好，容易触发意外的 Full GC。</li>
+      <li><strong>ZGC 换来的：</strong>染色指针 + 读屏障 → 连"对象移动"都能并发做，STW 只剩几个 0.1ms 级的根扫描。代价是：① <strong>读屏障拖吞吐</strong>，一般损失 5%~15%；② 需要 64 位 + 大堆才划算（小堆上 G1 反而更快）；③ 早期版本不支持压缩指针，内存占用偏高；④ JDK21 之前不分代，年轻代对象也得走完整流程。</li>
+      <li><strong>选型口诀：</strong>堆 ≤ 4G 且延迟要求一般 → G1 足够；堆 4~16G、要求停顿稳定 → G1 调好 <code class="inl">MaxGCPauseMillis</code>；堆 &gt; 16G 或延迟敏感（交易、实时风控）→ ZGC；吞吐优先的批处理 → Parallel GC 反而最合适（别为了"新"选 ZGC）。</li>
+    </ul>
+
+    <div class="lab g">加分点</div>
+    <p>补一句"<strong>GC 调优的前提是先有明确的 SLA</strong>——是要求 P99 延迟 &lt; 50ms，还是要求吞吐 99%？没有目标就没有最优解，只有 trade-off。"这句话会让面试官觉得你做过技术决策，而不是只读过文档。</p>
+
+    <div class="lab r">可能被追问</div>
+    <ul>
+      <li>Shenandoah 和 ZGC 有什么区别？（Shenandoah 用 Brooks 转发指针 + 读屏障，不依赖染色指针，所以不需要 64 位指针改造）</li>
+      <li>G1 什么时候会退化成 Full GC？（Humongous 分配失败、RSet 过大导致 Evacuation Failure、元空间不足）</li>
+      <li>为什么 Parallel GC 在批处理场景反而更好？（没有并发线程抢 CPU，单次停顿长但总 CPU 效率最高）</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ checklist ============ -->
+<section class="card">
+  <h2 style="margin-bottom:14px">本轮自测清单</h2>
+  <p style="color:var(--muted);font-size:14px;margin-top:0">合上页面，能不看稿讲出来才算过。讲不出来的那条，回去看对应层级。</p>
+  <ul class="check">
+    <li><b>L0</b>　画出五块内存区并标出哪些是线程私有，说清元空间为什么不在堆里。</li>
+    <li><b>L1</b>　推导空对象为什么是 16 字节，并解释 32GB 这个压缩指针临界点怎么算出来的。</li>
+    <li><b>L2</b>　说清 ThreadLocal 为什么 key 用弱引用却仍然会泄漏，以及漏标的两个必要条件。</li>
+    <li><b>L3</b>　解释 8:1:1 的由来，以及 Survivor 装不下时的担保流程。</li>
+    <li><b>L4</b>　对比 CMS 增量更新与 G1 的 SATB 分别记什么；说清 ZGC 靠什么把"移动对象"做成并发的。</li>
+  </ul>
+  <div class="warn" style="margin-top:18px">
+    <b>下一轮预告：</b>Java 并发编程 —— 从 <code class="inl">synchronized</code> 的锁升级（无锁 → 偏向 → 轻量级 → 重量级）讲起，串到 AQS 的 CLH 队列、<code class="inl">ReentrantLock</code> 的公平/非公平、<code class="inl">volatile</code> 的内存语义与 happens-before，最后落到线程池七个参数与拒绝策略的真实选型。<strong>这条线和本轮的 Mark Word 直接接得上</strong>，记得回看 L1 那张锁状态表。
+  </div>
+</section>
+
+<footer>
+  Java 面试深挖 · 第 02 期　|　主题：JVM 内存模型与垃圾回收<br>
+  内容覆盖 HotSpot JDK8 ~ JDK21 口径，收集器差异已分版本标注
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var KW = /\b(public|private|protected|static|final|class|interface|extends|implements|void|int|long|boolean|char|double|float|byte|short|if|else|for|while|do|return|new|this|super|null|true|false|try|catch|throw|throws|instanceof|break|continue|default|switch|case|synchronized|volatile|transient|abstract|package|import)\b/g;
+
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  var pres = document.querySelectorAll('pre.java');
+  for (var i = 0; i < pres.length; i++) {
+    var pre = pres[i];
+    var src = pre.textContent;
+    var parts = src.split(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*")/g);
+    var out = '';
+    for (var k = 0; k < parts.length; k++) {
+      var seg = parts[k];
+      if (k % 2 === 1) {
+        var cls = (seg.indexOf('//') === 0 || seg.indexOf('/*') === 0) ? 'c' : 's';
+        out += '<span class="' + cls + '">' + esc(seg) + '</span>';
+      } else {
+        out += esc(seg)
+          .replace(KW, '<span class="k">$1</span>')
+          .replace(/\b(\d+)\b/g, '<span class="n">$1</span>');
+      }
+    }
+    pre.innerHTML = out;
+  }
+})();
+</script>
+</body>
+</html>

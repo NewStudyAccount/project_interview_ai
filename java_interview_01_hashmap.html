@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 01 · HashMap → ConcurrentHashMap</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#1d4ed8; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  /* ---------- header ---------- */
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#4f46e5,#7c3aed 55%,#b45309);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#4f46e5; font-weight:700; margin-bottom:10px;
+  }
+  h1{
+    font-size:30px; line-height:1.28; margin:0 0 12px; letter-spacing:-.4px; font-weight:800;
+  }
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 6px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:740px}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  /* ---------- path ---------- */
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eef2ff; border-color:#c7d2fe; color:#3730a3}
+
+  /* ---------- section ---------- */
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{
+    font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px;
+    border-radius:6px; color:#fff;
+  }
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#4f46e5; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#312e81;
+  }
+  strong{font-weight:750}
+
+  /* ---------- one-liner ---------- */
+  .oneline{
+    background:var(--soft); border-left:4px solid #4f46e5; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#3730a3; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  /* ---------- code ---------- */
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.8px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .s{color:#0f766e}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .n{color:#b45309}
+
+  /* ---------- figure ---------- */
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  /* ---------- table ---------- */
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{
+    background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750;
+    border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252;
+  }
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#312e81}
+
+  /* ---------- warn / tip ---------- */
+  .warn{
+    background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px;
+    font-size:14px; margin:16px 0;
+  }
+  .warn b{color:#b45309}
+  .trap{
+    background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px;
+    font-size:14px; margin:16px 0;
+  }
+  .trap b{color:#be123c}
+
+  /* ---------- question ---------- */
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q .qh{display:flex; gap:10px; align-items:baseline; margin-bottom:10px}
+  .q .num{
+    flex:none; width:26px; height:26px; border-radius:8px; background:#4f46e5; color:#fff;
+    font-size:13px; font-weight:800; display:grid; place-items:center; transform:translateY(3px);
+  }
+  .q .qt{font-weight:750; font-size:15.5px; line-height:1.5}
+  .q .tagline{font-size:12px; color:var(--muted); margin-left:auto; white-space:nowrap}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#4f46e5; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q ul{margin:4px 0; padding-left:20px}
+  .q li{font-size:14px}
+
+  /* ---------- checklist ---------- */
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{
+    padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0;
+    font-size:14px; border-left:3px solid #c7d2fe;
+  }
+  .check li b{color:#3730a3}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">每 2 小时 · Java 面试深挖 · 第 01 期</div>
+  <h1>HashMap<span class="arrow">→</span>ConcurrentHashMap</h1>
+  <p class="sub">一条链把面试最爱问的东西全串起来了：<code class="inl">equals/hashCode</code> 契约、位运算寻址、链表到红黑树的阈值、扩容 rehash 的数学、以及 JDK8 用 CAS + synchronized 做并发。看懂这一条链，一半的集合题都能自己推出来。</p>
+  <div class="meta">
+    <div><strong>6</strong>层递进</div>
+    <div><strong>7</strong>张原理图</div>
+    <div><strong>10</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span class="on">L0 契约</span><span>L1 寻址</span><span>L2 冲突</span>
+  <span>L3 扩容</span><span>L4 并发</span><span>L5 问答</span><span>L6 模拟面试</span>
+</div>
+
+<!-- ============ L0 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>难度 ★☆☆ · 90% 的人以为自己会</em></div>
+  <h2>契约层：equals 和 hashCode 是一对，拆开就出事</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    契约是：<strong>equals 相等的两个对象，hashCode 必须相等</strong>；反过来 hashCode 相等，equals 不一定相等。HashMap 先用 hashCode 找桶，再用 equals 在桶里认人——少写一个，就等于给了它一张假门牌号。
+  </div>
+
+  <p>先别急着背源码。HashMap 的所有设计都建立在一个前提上：<strong>对象能自己算出"我该住哪个桶"</strong>。这个能力由 <code class="inl">hashCode()</code> 提供，而"确认是不是同一个人"由 <code class="inl">equals()</code> 提供。两件事分工明确，缺一不可。</p>
+
+<pre class="java">class Key {
+    private final String id;
+    Key(String id) { this.id = id; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof Key)) return false;
+        return id.equals(((Key) o).id);        // 业务上认为：id 相同就是同一个 key
+    }
+    // 故意不重写 hashCode()
+}
+
+Map&lt;Key, String&gt; map = new HashMap&lt;&gt;();
+map.put(new Key("A"), "v1");
+System.out.println(map.size());                   // 1
+System.out.println(map.get(new Key("A")));        // null —— 明明 equals 相等！
+
+map.put(new Key("A"), "v2");                      // 再放一次
+System.out.println(map.size());                   // 2 —— 出现了两个"相同"的 key</pre>
+
+  <p>为什么？<code class="inl">Object.hashCode()</code> 默认和对象身份（内存地址相关的 identity hash）绑定，两个 <code class="inl">new Key("A")</code> 是两个不同对象，hashCode 不同，于是算出来的桶下标不同，被塞进了完全不同的两个桶。查找时它只去 B 那个桶里翻，A 那个桶连看都不看。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <!-- 左侧：两个逻辑相等的对象 -->
+      <rect x="20" y="60" width="150" height="56" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+      <text x="95" y="84" text-anchor="middle" font-size="13" fill="#1e293b">Key("A")</text>
+      <text x="95" y="103" text-anchor="middle" font-size="11" fill="#64748b">hashCode = 0x1a2b</text>
+
+      <rect x="20" y="170" width="150" height="56" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+      <text x="95" y="194" text-anchor="middle" font-size="13" fill="#1e293b">Key("A") 副本</text>
+      <text x="95" y="213" text-anchor="middle" font-size="11" fill="#64748b">hashCode = 0x7f9c</text>
+
+      <text x="95" y="44" text-anchor="middle" font-size="12" fill="#4f46e5">equals 返回 true</text>
+      <path d="M95 122 L95 168" stroke="#4f46e5" stroke-width="1.6" stroke-dasharray="4 3"/>
+      <text x="103" y="150" font-size="11" fill="#4f46e5">逻辑上同一人</text>
+
+      <!-- 箭头 -->
+      <path d="M180 88 C 240 88, 250 78, 300 78" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#ar1)"/>
+      <path d="M180 198 C 240 198, 250 208, 300 208" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#ar1)"/>
+      <defs>
+        <marker id="ar1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+
+      <!-- 数组 -->
+      <text x="400" y="40" text-anchor="middle" font-size="12" fill="#64748b">table（16 个桶）</text>
+      <g>
+        <rect x="330" y="52" width="120" height="24" fill="#ffffff" stroke="#e2e8f0"/>
+        <rect x="330" y="78" width="120" height="24" fill="#fef3c7" stroke="#fcd34d"/>
+        <rect x="330" y="104" width="120" height="24" fill="#ffffff" stroke="#e2e8f0"/>
+        <rect x="330" y="130" width="120" height="24" fill="#ffffff" stroke="#e2e8f0"/>
+        <rect x="330" y="156" width="120" height="24" fill="#ecfdf5" stroke="#6ee7b7"/>
+        <rect x="330" y="182" width="120" height="24" fill="#ffffff" stroke="#e2e8f0"/>
+        <rect x="330" y="208" width="120" height="24" fill="#ffffff" stroke="#e2e8f0"/>
+        <rect x="330" y="234" width="120" height="24" fill="#ffffff" stroke="#e2e8f0"/>
+      </g>
+      <text x="322" y="69" text-anchor="end" font-size="11" fill="#94a3b8">1</text>
+      <text x="322" y="95" text-anchor="end" font-size="11" fill="#b45309">2</text>
+      <text x="322" y="147" text-anchor="end" font-size="11" fill="#94a3b8">4</text>
+      <text x="322" y="173" text-anchor="end" font-size="11" fill="#047857">5</text>
+      <text x="322" y="251" text-anchor="end" font-size="11" fill="#94a3b8">7</text>
+
+      <!-- 桶里内容 -->
+      <rect x="466" y="74" width="86" height="32" rx="5" fill="#fff" stroke="#fbbf24"/>
+      <text x="509" y="94" text-anchor="middle" font-size="11" fill="#92400e">K("A")→v1</text>
+
+      <rect x="466" y="152" width="86" height="32" rx="5" fill="#fff" stroke="#34d399"/>
+      <text x="509" y="172" text-anchor="middle" font-size="11" fill="#065f46">K("A")→v2</text>
+
+      <text x="600" y="88" font-size="12" fill="#b45309">get(new Key("A")) 只找这</text>
+      <text x="600" y="108" font-size="12" fill="#b45309">→ 找到的是 v1</text>
+      <text x="600" y="166" font-size="12" fill="#047857">put 时落到这</text>
+
+      <text x="600" y="230" font-size="12" fill="#be123c">结果：size=2，get 拿不到你刚放的值。</text>
+      <text x="600" y="250" font-size="12" fill="#be123c">内存里躺着两份"同一个 key"。</text>
+
+      <rect x="330" y="272" width="340" height="3" fill="none"/>
+      <text x="330" y="290" font-size="11.5" fill="#64748b">桶下标 = (n-1) &amp; hash(key)　—— hash 不同，桶就不同</text>
+    </svg>
+    <figcaption><b>图 1</b>　不重写 hashCode 的后果：同一个逻辑 key 被分到两个桶，查找与去重同时失效</figcaption>
+  </figure>
+
+  <div class="trap">
+    <b>面试陷阱：</b>问"为什么重写 equals 一定要重写 hashCode"，别背"因为 Java 规范这么要求"。要落到场景：<strong>基于哈希的集合（HashMap / HashSet / ConcurrentHashMap）用 hashCode 决定落桶，equals 决定桶内认人</strong>。只改一半，等于改了门牌规则却没改门牌号。
+  </div>
+
+  <h3>顺带记住：String 为什么是天选 key</h3>
+  <ul>
+    <li><strong>不可变</strong>：hashCode 算一次就不会变，放进去之后不会被"搬家"。</li>
+    <li><strong>缓存哈希</strong>：<code class="inl">String.hashCode()</code> 结果存在私有字段 <code class="inl">hash</code> 里，第二次直接返回，热路径省 CPU。</li>
+    <li><strong>算法固定</strong>：<code class="inl">s[0]*31^(n-1) + ... + s[n-1]</code>，选 31 是因为它是奇质数，且 <code class="inl">31*i == (i&lt;&lt;5) - i</code> 可被 JIT 优化成移位减法。</li>
+  </ul>
+</section>
+
+<!-- ============ L1 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>难度 ★★☆ · 位运算是分水岭</em></div>
+  <h2>寻址层：为什么容量非得是 2 的幂</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    因为 <strong>当 n 是 2 的幂时，<code class="inl">hash % n</code> 完全等价于 <code class="inl">hash &amp; (n-1)</code></strong>，而位与比取模快得多；更关键的是扩容时只需多看一位（<code class="inl">hash &amp; oldCap</code>）就能决定新位置，不用重算哈希。这是"2 的幂"这个约束真正的价值。
+  </div>
+
+  <p>很多答案只说到"位运算快"。这只对了一半——JIT 早就把 <code class="inl">% 2^k</code> 优化掉了。真正不可替代的理由在<strong>扩容</strong>（见 L3）：只有 2 的幂才能让 rehash 变成"看一位、二选一"。</p>
+
+  <h3>先看扰动函数：为什么要 h ^ (h >>> 16)</h3>
+<pre class="java">static final int hash(Object key) {
+    int h;
+    return (key == null) ? 0 : (h = key.hashCode()) ^ (h &gt;&gt;&gt; 16);
+}
+
+// 定位：n 恒为 2 的幂，所以 (n-1) &amp; hash 等价于 hash % n
+int index = (n - 1) &amp; hash;      // n = 16 时就是 hash &amp; 15</pre>
+
+  <p>表长 16 时，<code class="inl">n-1 = 15 = 0b1111</code>，只用到 hash 的<strong>低 4 位</strong>。高位信息全被扔掉。如果一批 key 的 hashCode 低位规律性强（比如自增 ID、<code class="inl">a*16+b</code> 这种），低位高度重复，就会全挤在一个桶里。右移 16 位后异或，等于把高 16 位"折"下来混进低位，让低位的随机性变好，成本只是一次移位加一次异或。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 210" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <text x="20" y="30" font-size="12" fill="#64748b">一次 put 的完整寻址管线（JDK8）</text>
+
+      <g>
+        <rect x="20" y="52" width="150" height="80" rx="9" fill="#fff" stroke="#c7d2fe" stroke-width="1.4"/>
+        <text x="95" y="82" text-anchor="middle" font-size="14" fill="#1e293b" font-weight="600">key</text>
+        <text x="95" y="104" text-anchor="middle" font-size="11" fill="#64748b">"Java" / 任意对象</text>
+        <text x="95" y="120" text-anchor="middle" font-size="10.5" fill="#94a3b8">① 输入</text>
+      </g>
+
+      <g>
+        <rect x="200" y="52" width="150" height="80" rx="9" fill="#fff" stroke="#c7d2fe" stroke-width="1.4"/>
+        <text x="275" y="82" text-anchor="middle" font-size="13.5" fill="#1e293b">hashCode()</text>
+        <text x="275" y="104" text-anchor="middle" font-size="11" fill="#64748b">int，32 位</text>
+        <text x="275" y="120" text-anchor="middle" font-size="10.5" fill="#94a3b8">② 取原始哈希</text>
+      </g>
+
+      <g>
+        <rect x="380" y="52" width="150" height="80" rx="9" fill="#eef2ff" stroke="#818cf8" stroke-width="1.6"/>
+        <text x="455" y="82" text-anchor="middle" font-size="13.5" fill="#312e81" font-weight="600">h ^ (h &gt;&gt;&gt; 16)</text>
+        <text x="455" y="104" text-anchor="middle" font-size="11" fill="#4338ca">高低 16 位混合</text>
+        <text x="455" y="120" text-anchor="middle" font-size="10.5" fill="#6366f1">③ 扰动</text>
+      </g>
+
+      <g>
+        <rect x="560" y="52" width="150" height="80" rx="9" fill="#fff" stroke="#c7d2fe" stroke-width="1.4"/>
+        <text x="635" y="82" text-anchor="middle" font-size="13.5" fill="#1e293b">(n-1) &amp; hash</text>
+        <text x="635" y="104" text-anchor="middle" font-size="11" fill="#64748b">n=16 → &amp; 0b1111</text>
+        <text x="635" y="120" text-anchor="middle" font-size="10.5" fill="#94a3b8">④ 位与取模</text>
+      </g>
+
+      <g>
+        <rect x="740" y="52" width="140" height="80" rx="9" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1.6"/>
+        <text x="810" y="82" text-anchor="middle" font-size="14" fill="#065f46" font-weight="700">index = 5</text>
+        <text x="810" y="104" text-anchor="middle" font-size="11" fill="#047857">落入第 5 号桶</text>
+        <text x="810" y="120" text-anchor="middle" font-size="10.5" fill="#34d399">⑤ 结果</text>
+      </g>
+
+      <g stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#ar2)">
+        <path d="M170 92 L198 92"/>
+        <path d="M350 92 L378 92"/>
+        <path d="M530 92 L558 92"/>
+        <path d="M710 92 L738 92"/>
+      </g>
+      <defs>
+        <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+
+      <text x="20" y="168" font-size="11.5" fill="#64748b">扰动函数的意义：表小时 index 只看低位，高位不参与 → 冲突率上升。</text>
+      <text x="20" y="190" font-size="11.5" fill="#64748b">右移 16 位异或，让高 16 位的信息"折"进低位，成本 ≈ 1 个时钟周期。</text>
+    </svg>
+    <figcaption><b>图 2</b>　从 key 到桶下标的四步管线：取哈希 → 扰动 → 位与 → 落桶</figcaption>
+  </figure>
+
+  <h3>数形结合：为什么"位与"和"取模"必须等价</h3>
+  <p>设 <code class="inl">n = 8</code>（二进制 <code class="inl">1000</code>），则 <code class="inl">n-1 = 7 = 0b111</code>。取任意 hash 与它按位与，本质是<strong>把高位全部清零、只保留下 3 位</strong>，而这 3 位的取值范围正好是 0..7——和 <code class="inl">hash % 8</code> 的结果完全重合。</p>
+
+  <table>
+    <thead><tr><th>hash</th><th>二进制</th><th>hash &amp; 7</th><th>hash % 8</th></tr></thead>
+    <tbody>
+      <tr><td>13</td><td>0b1101</td><td>5</td><td>5</td></tr>
+      <tr><td>21</td><td>0b10101</td><td>5</td><td>5</td></tr>
+      <tr><td>36</td><td>0b100100</td><td>4</td><td>4</td></tr>
+      <tr><td>47</td><td>0b101111</td><td>7</td><td>7</td></tr>
+    </tbody>
+  </table>
+
+  <p>但注意：<strong>n 不是 2 的幂时，这个等式立刻崩塌</strong>。比如 n=7，<code class="inl">n-1=6=0b110</code>，最低位永远是 0，索引 1/3/5 永远取不到——一半的桶直接报废。这就是为什么 <code class="inl">new HashMap(10)</code> 会被 <code class="inl">tableSizeFor</code> 悄悄改成 16。</p>
+
+  <div class="warn">
+    <b>加分细节：</b><code class="inl">tableSizeFor(int cap)</code> 会把任意容量向上取整到最近的 2 的幂（1 &lt;&lt; n），并且封装在 <strong>第一次 put 时</strong>才真正分配数组（懒初始化）。所以 <code class="inl">new HashMap&lt;&gt;(1000)</code> 并不会立刻要 1024 个槽的内存。
+  </div>
+</section>
+
+<!-- ============ L2 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>难度 ★★★ · 三个阈值最容易被追问</em></div>
+  <h2>冲突层：链表什么时候变成红黑树</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    三个常量：<code class="inl">TREEIFY_THRESHOLD=8</code>、<code class="inl">UNTREEIFY_THRESHOLD=6</code>、<code class="inl">MIN_TREEIFY_CAPACITY=64</code>。链表插到<strong>第 9 个节点</strong>时触发树化尝试，但表长不足 64 时优先扩容而不是树化；节点删到 ≤6 退回链表。
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 900 410" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <rect x="270" y="14" width="360" height="46" rx="8" fill="#fff" stroke="#c7d2fe" stroke-width="1.4"/>
+      <text x="450" y="43" text-anchor="middle" font-size="13" fill="#1e293b">put：遍历到链尾，插入新节点</text>
+
+      <path d="M450 60 L450 92" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar3)"/>
+      <defs>
+        <marker id="ar3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+
+      <polygon points="450,92 590,130 450,168 310,130" fill="#f5f3ff" stroke="#a78bfa" stroke-width="1.6"/>
+      <text x="450" y="126" text-anchor="middle" font-size="12.5" fill="#5b21b6" font-weight="600">binCount &gt;= 7 ?</text>
+      <text x="450" y="145" text-anchor="middle" font-size="10.5" fill="#7c3aed">（原链已有 8 个，这是第 9 个）</text>
+
+      <path d="M590 130 L640 130" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar3)"/>
+      <text x="600" y="122" font-size="11" fill="#64748b">否</text>
+      <rect x="644" y="108" width="164" height="44" rx="7" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="726" y="130" text-anchor="middle" font-size="12" fill="#475569">保持链表</text>
+      <text x="726" y="145" text-anchor="middle" font-size="10.5" fill="#94a3b8">O(n) 查询</text>
+
+      <path d="M450 168 L450 210" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar3)"/>
+      <text x="460" y="192" font-size="11" fill="#64748b">是</text>
+
+      <polygon points="450,210 590,248 450,286 310,248" fill="#fff7ed" stroke="#fdba74" stroke-width="1.6"/>
+      <text x="450" y="244" text-anchor="middle" font-size="12.5" fill="#9a3412" font-weight="600">table.length &gt;= 64 ?</text>
+      <text x="450" y="263" text-anchor="middle" font-size="10.5" fill="#c2410c">MIN_TREEIFY_CAPACITY</text>
+
+      <path d="M310 248 L250 248" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar3)"/>
+      <text x="272" y="240" font-size="11" fill="#64748b">否</text>
+      <rect x="60" y="226" width="186" height="46" rx="7" fill="#fef2f2" stroke="#fca5a5"/>
+      <text x="153" y="246" text-anchor="middle" font-size="12" fill="#991b1b">先 resize() 扩容</text>
+      <text x="153" y="262" text-anchor="middle" font-size="10.5" fill="#b91c1c">树化被推迟，小表扩容更划算</text>
+
+      <path d="M450 286 L450 322" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar3)"/>
+      <text x="460" y="308" font-size="11" fill="#64748b">是</text>
+      <rect x="330" y="326" width="240" height="46" rx="7" fill="#ecfdf5" stroke="#6ee7b7"/>
+      <text x="450" y="346" text-anchor="middle" font-size="12" fill="#065f46" font-weight="600">treeifyBin → 转红黑树</text>
+      <text x="450" y="362" text-anchor="middle" font-size="10.5" fill="#047857">查询从 O(n) 降到 O(log n)</text>
+
+      <text x="620" y="300" font-size="11.5" fill="#be123c">↓ 反向：remove 后树节点 ≤ 6</text>
+      <text x="620" y="318" font-size="11.5" fill="#be123c">untreeify() 退回链表</text>
+
+      <text x="60" y="396" font-size="11.5" fill="#64748b">8 与 6 之间留了 7 作为缓冲带，避免在临界值反复树化/退化造成的性能抖动。</text>
+    </svg>
+    <figcaption><b>图 3</b>　树化的两级判断：先看链长，再看表长——这是一个"扩容优先"的策略</figcaption>
+  </figure>
+
+<pre class="java">final void treeifyBin(Node&lt;K,V&gt;[] tab, int hash) {
+    int n, index; Node&lt;K,V&gt; e;
+    if (tab == null || (n = tab.length) &lt; MIN_TREEIFY_CAPACITY)   // 64
+        resize();                                                // 表太小，先扩容
+    else if ((e = tab[index = (n - 1) &amp; hash]) != null) {
+        // 把整条链的 Node 逐个替换成 TreeNode，最后调用 hd.treeify(tab)
+    }
+}</pre>
+
+  <h3>为什么是 8？看这张泊松分布</h3>
+  <p>JDK8 源码注释里给了一组数据：在理想的哈希分布下（负载因子 0.75），一个桶里节点数服从参数 λ≈0.5 的泊松分布。翻译成人话：<strong>链长到 8 的概率是千万分之六</strong>，正常情况下你根本碰不到，只有哈希函数被写坏了才可能。</p>
+
+  <figure>
+    <svg viewBox="0 0 880 330" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <text x="30" y="26" font-size="12" fill="#64748b">桶内节点数 k 的概率 P(k)（对数纵轴，λ≈0.5）</text>
+
+      <!-- 轴 -->
+      <line x1="88" y1="58" x2="88" y2="262" stroke="#cbd5e1" stroke-width="1.2"/>
+      <line x1="88" y1="262" x2="840" y2="262" stroke="#cbd5e1" stroke-width="1.2"/>
+
+      <text x="80" y="62" text-anchor="end" font-size="10" fill="#94a3b8">10⁰</text>
+      <text x="80" y="112" text-anchor="end" font-size="10" fill="#94a3b8">10⁻²</text>
+      <text x="80" y="162" text-anchor="end" font-size="10" fill="#94a3b8">10⁻⁴</text>
+      <text x="80" y="212" text-anchor="end" font-size="10" fill="#94a3b8">10⁻⁶</text>
+      <text x="80" y="264" text-anchor="end" font-size="10" fill="#94a3b8">10⁻⁸</text>
+
+      <line x1="88" y1="110" x2="840" y2="110" stroke="#eef2f7" stroke-width="1"/>
+      <line x1="88" y1="160" x2="840" y2="160" stroke="#eef2f7" stroke-width="1"/>
+      <line x1="88" y1="210" x2="840" y2="210" stroke="#eef2f7" stroke-width="1"/>
+
+      <!-- bars: x=100+i*82, w=46 -->
+      <rect x="100" y="65" width="46" height="197" fill="#c7d2fe"/>
+      <rect x="182" y="73" width="46" height="189" fill="#c7d2fe"/>
+      <rect x="264" y="88" width="46" height="174" fill="#c7d2fe"/>
+      <rect x="346" y="108" width="46" height="154" fill="#c7d2fe"/>
+      <rect x="428" y="130" width="46" height="132" fill="#c7d2fe"/>
+      <rect x="510" y="155" width="46" height="107" fill="#c7d2fe"/>
+      <rect x="592" y="182" width="46" height="80" fill="#c7d2fe"/>
+      <rect x="674" y="211" width="46" height="51" fill="#fdba74"/>
+      <rect x="756" y="241" width="46" height="21" fill="#fca5a5"/>
+
+      <text x="123" y="58" text-anchor="middle" font-size="10" fill="#4338ca">0.607</text>
+      <text x="205" y="66" text-anchor="middle" font-size="10" fill="#4338ca">0.303</text>
+      <text x="287" y="81" text-anchor="middle" font-size="10" fill="#4338ca">0.076</text>
+      <text x="369" y="101" text-anchor="middle" font-size="10" fill="#4338ca">0.0126</text>
+      <text x="451" y="123" text-anchor="middle" font-size="10" fill="#64748b">1.6e-3</text>
+      <text x="533" y="148" text-anchor="middle" font-size="10" fill="#64748b">1.6e-4</text>
+      <text x="615" y="175" text-anchor="middle" font-size="10" fill="#64748b">1.3e-5</text>
+      <text x="697" y="204" text-anchor="middle" font-size="10" fill="#b45309" font-weight="600">9.4e-7</text>
+      <text x="779" y="234" text-anchor="middle" font-size="10" fill="#be123c" font-weight="600">6e-8</text>
+
+      <text x="123" y="280" text-anchor="middle" font-size="11" fill="#64748b">0</text>
+      <text x="205" y="280" text-anchor="middle" font-size="11" fill="#64748b">1</text>
+      <text x="287" y="280" text-anchor="middle" font-size="11" fill="#64748b">2</text>
+      <text x="369" y="280" text-anchor="middle" font-size="11" fill="#64748b">3</text>
+      <text x="451" y="280" text-anchor="middle" font-size="11" fill="#64748b">4</text>
+      <text x="533" y="280" text-anchor="middle" font-size="11" fill="#64748b">5</text>
+      <text x="615" y="280" text-anchor="middle" font-size="11" fill="#64748b">6</text>
+      <text x="697" y="280" text-anchor="middle" font-size="11" fill="#b45309" font-weight="700">7</text>
+      <text x="779" y="280" text-anchor="middle" font-size="11" fill="#be123c" font-weight="700">8</text>
+
+      <text x="700" y="300" text-anchor="middle" font-size="10.5" fill="#b45309">树化阈值</text>
+      <path d="M697 288 L697 268" stroke="#b45309" stroke-width="1" stroke-dasharray="3 2"/>
+
+      <text x="30" y="318" font-size="11" fill="#64748b">结论：8 不是拍脑袋，是"宁可多存 8 个节点也不轻易建树"的统计决策。TreeNode 内存约为 Node 的两倍。</text>
+    </svg>
+    <figcaption><b>图 4</b>　链长概率随 k 指数下降，k=8 已是 6×10⁻⁸ 量级——这就是阈值定在 8 的统计学依据</figcaption>
+  </figure>
+
+  <div class="warn">
+    <b>为什么不用 AVL 树？</b>红黑树是"近似平衡"：插入最多 2 次旋转、删除最多 3 次，而 AVL 要求严格平衡，删除时可能一路旋转到根。HashMap 的读操作远多于写，但写操作也不能太贵，红黑树是综合成本更低的折中。
+  </div>
+</section>
+
+<!-- ============ L3 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>难度 ★★★ · 能讲清这段就是 senior</em></div>
+  <h2>扩容层：rehash 为什么可以不重算哈希</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    因为 n 是 2 的幂，扩容只是把"掩码"从 <code class="inl">n-1</code> 变成 <code class="inl">2n-1</code>，多用了<strong>一位</strong>。这一位就是 <code class="inl">hash &amp; oldCap</code>：为 0 留在原下标，为 1 移到 <code class="inl">原下标 + oldCap</code>。于是扩容退化成"把一条链劈成两条"，O(n) 且无需重新计算 hash。
+  </div>
+
+  <h3>负载因子 0.75：省空间与少冲突的平衡点</h3>
+  <p>扩容阈值 <code class="inl">threshold = capacity × loadFactor</code>。<code class="inl">1.0</code> 意味着数组塞满才扩容，桶冲突率飙升；<code class="inl">0.5</code> 意味着永远浪费一半空间。<code class="inl">0.75</code> 是在泊松分布下冲突概率还能接受、空间利用率又不太难看的交点——源码注释那句「0.75 provides good tradeoff between time and space costs」就是这个意思。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <text x="24" y="28" font-size="12.5" fill="#64748b">扩容前：table.length = 16，某桶 index = 2，挂着 4 个 hash 冲突的节点</text>
+
+      <!-- 旧表 -->
+      <rect x="24" y="46" width="118" height="26" fill="#fef3c7" stroke="#fcd34d"/>
+      <text x="83" y="64" text-anchor="middle" font-size="11" fill="#92400e">oldTab[2]</text>
+
+      <g>
+        <rect x="168" y="44" width="94" height="34" rx="5" fill="#fff" stroke="#cbd5e1"/>
+        <text x="215" y="58" text-anchor="middle" font-size="11.5" fill="#1e293b">hash=2</text>
+        <text x="215" y="72" text-anchor="middle" font-size="10" fill="#94a3b8">0b00010</text>
+
+        <rect x="286" y="44" width="94" height="34" rx="5" fill="#fff" stroke="#cbd5e1"/>
+        <text x="333" y="58" text-anchor="middle" font-size="11.5" fill="#1e293b">hash=18</text>
+        <text x="333" y="72" text-anchor="middle" font-size="10" fill="#94a3b8">0b10010</text>
+
+        <rect x="404" y="44" width="94" height="34" rx="5" fill="#fff" stroke="#cbd5e1"/>
+        <text x="451" y="58" text-anchor="middle" font-size="11.5" fill="#1e293b">hash=34</text>
+        <text x="451" y="72" text-anchor="middle" font-size="10" fill="#94a3b8">0b100010</text>
+
+        <rect x="522" y="44" width="94" height="34" rx="5" fill="#fff" stroke="#cbd5e1"/>
+        <text x="569" y="58" text-anchor="middle" font-size="11.5" fill="#1e293b">hash=50</text>
+        <text x="569" y="72" text-anchor="middle" font-size="10" fill="#94a3b8">0b110010</text>
+      </g>
+      <g stroke="#94a3b8" stroke-width="1.5" fill="none" marker-end="url(#ar4)">
+        <path d="M262 61 L284 61"/>
+        <path d="M380 61 L402 61"/>
+        <path d="M498 61 L520 61"/>
+      </g>
+      <defs>
+        <marker id="ar4" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+      <text x="624" y="66" font-size="11" fill="#94a3b8">→ null</text>
+      <text x="24" y="98" font-size="11" fill="#64748b">四个 hash 的低 4 位都是 0010 →  &amp; 15 全部等于 2</text>
+
+      <!-- 判断 -->
+      <line x1="24" y1="116" x2="876" y2="116" stroke="#e2e8f0" stroke-dasharray="5 4"/>
+      <rect x="300" y="128" width="300" height="40" rx="20" fill="#eef2ff" stroke="#a5b4fc"/>
+      <text x="450" y="153" text-anchor="middle" font-size="12.5" fill="#3730a3" font-weight="600">判断：hash &amp; oldCap(16) 是否为 0 ？</text>
+
+      <!-- 分支箭头 -->
+      <path d="M360 168 C 300 190, 240 196, 200 214" stroke="#059669" stroke-width="1.8" fill="none" marker-end="url(#ar5)"/>
+      <path d="M540 168 C 600 190, 660 196, 700 214" stroke="#d97706" stroke-width="1.8" fill="none" marker-end="url(#ar6)"/>
+      <defs>
+        <marker id="ar5" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#059669"/></marker>
+        <marker id="ar6" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#d97706"/></marker>
+      </defs>
+      <text x="230" y="192" font-size="11" fill="#059669" font-weight="600">= 0（低位）</text>
+      <text x="580" y="192" font-size="11" fill="#d97706" font-weight="600">= 16（高位）</text>
+
+      <!-- 新表左侧 -->
+      <text x="24" y="230" font-size="12" fill="#047857" font-weight="600">newTab[2]　原位不动</text>
+      <rect x="24" y="242" width="118" height="26" fill="#ecfdf5" stroke="#6ee7b7"/>
+      <text x="83" y="260" text-anchor="middle" font-size="11" fill="#065f46">index = 2</text>
+
+      <rect x="168" y="238" width="90" height="34" rx="5" fill="#ecfdf5" stroke="#34d399"/>
+      <text x="213" y="259" text-anchor="middle" font-size="11.5" fill="#065f46">2</text>
+      <rect x="280" y="238" width="90" height="34" rx="5" fill="#ecfdf5" stroke="#34d399"/>
+      <text x="325" y="259" text-anchor="middle" font-size="11.5" fill="#065f46">34</text>
+      <path d="M258 255 L278 255" stroke="#059669" stroke-width="1.5" marker-end="url(#ar5)"/>
+
+      <!-- 新表右侧 -->
+      <text x="500" y="230" font-size="12" fill="#b45309" font-weight="600">newTab[18]　原位 + 16</text>
+      <rect x="500" y="242" width="126" height="26" fill="#fffbeb" stroke="#fcd34d"/>
+      <text x="563" y="260" text-anchor="middle" font-size="11" fill="#92400e">index = 2 + 16</text>
+
+      <rect x="648" y="238" width="90" height="34" rx="5" fill="#fffbeb" stroke="#fbbf24"/>
+      <text x="693" y="259" text-anchor="middle" font-size="11.5" fill="#92400e">18</text>
+      <rect x="760" y="238" width="90" height="34" rx="5" fill="#fffbeb" stroke="#fbbf24"/>
+      <text x="805" y="259" text-anchor="middle" font-size="11.5" fill="#92400e">50</text>
+      <path d="M738 255 L758 255" stroke="#d97706" stroke-width="1.5" marker-end="url(#ar6)"/>
+
+      <!-- 说明 -->
+      <rect x="24" y="300" width="852" height="98" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
+      <text x="44" y="324" font-size="12" fill="#334155">扩容到 32 后，掩码从 0b1111 变成 0b11111，只多看了第 5 位（值 16）。</text>
+      <text x="44" y="346" font-size="12" fill="#334155">所以每个节点只有两种命运：留在原地 j，或搬到 j + 16 —— 不需要重算 hashCode。</text>
+      <text x="44" y="368" font-size="12" fill="#334155">旧链被劈成 lo 链和 hi 链，两条链内部顺序保持不变（JDK8 用尾插，避免 JDK7 的环）。</text>
+      <text x="44" y="390" font-size="11" fill="#94a3b8">源码变量名：loHead / loTail / hiHead / hiTail</text>
+    </svg>
+    <figcaption><b>图 5</b>　扩容拆分全过程：一条 4 节点的链，按 <code>hash &amp; oldCap</code> 一位定生死，劈成 2 和 18 两条</figcaption>
+  </figure>
+
+<pre class="java">final Node&lt;K,V&gt;[] resize() {
+    // …… 计算 newCap = oldCap &lt;&lt; 1、newThr = oldThr &lt;&lt; 1
+    for (int j = 0; j &lt; oldCap; ++j) {
+        Node&lt;K,V&gt; e = oldTab[j];
+        if (e == null) continue;
+        if (e.next == null)
+            newTab[e.hash &amp; (newCap - 1)] = e;          // 单节点：直接重定位
+        else if (e instanceof TreeNode)
+            ((TreeNode&lt;K,V&gt;)e).split(this, newTab, j, oldCap);
+        else {                                          // 链表：劈成 lo / hi 两条
+            Node&lt;K,V&gt; loHead = null, loTail = null;
+            Node&lt;K,V&gt; hiHead = null, hiTail = null, next;
+            do {
+                next = e.next;
+                if ((e.hash &amp; oldCap) == 0) {           // 只看新增的那一位
+                    if (loTail == null) loHead = e; else loTail.next = e;
+                    loTail = e;
+                } else {
+                    if (hiTail == null) hiHead = e; else hiTail.next = e;
+                    hiTail = e;
+                }
+            } while ((e = next) != null);
+            if (loTail != null) { loTail.next = null; newTab[j] = loHead; }
+            if (hiTail != null) { hiTail.next = null; newTab[j + oldCap] = hiHead; }
+        }
+    }
+}</pre>
+
+  <div class="warn">
+    <b>JDK7 与 JDK8 的关键差异：</b>JDK7 的 <code class="inl">transfer()</code> 用的是<strong>头插法</strong>——新节点永远插在链头。好处是插入快，坏处是并发扩容时可能把链表<strong>接成一个环</strong>，之后 <code class="inl">get()</code> 一旦命中这个桶就会无限循环，CPU 直接打满。JDK8 改成尾插，并把扩容逻辑重写，环的问题消失（但仍然线程不安全）。
+  </div>
+</section>
+
+<!-- ============ L4 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>难度 ★★★★ · 决定你能不能过二面</em></div>
+  <h2>并发层：HashMap 怎么死，ConcurrentHashMap 怎么活</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    JDK8 的 ConcurrentHashMap 把锁粒度降到<strong>单个桶</strong>：空桶用 <code class="inl">CAS</code> 直接插入，非空桶用 <code class="inl">synchronized</code> 锁住桶头节点；扩容时多线程协同搬迁，计数用 <code class="inl">baseCount + CounterCell[]</code> 分散热点。读操作完全无锁。
+  </div>
+
+  <h3>HashMap 的三种"死法"</h3>
+  <table>
+    <thead><tr><th>版本</th><th>并发故障</th><th>成因</th></tr></thead>
+    <tbody>
+      <tr><td>JDK7</td><td><strong>扩容成环 → CPU 100%</strong></td><td>头插 + 无同步 transfer，两线程交错改 next 指针，链表首尾相接成环</td></tr>
+      <tr><td>JDK8</td><td><strong>数据覆盖</strong></td><td>两线程同时判断某桶为空，各自 newNode 后写回，后写的覆盖先写的</td></tr>
+      <tr><td>JDK8</td><td><strong>size 不准 / 树化异常</strong></td><td><code class="inl">++size</code> 非原子；并发 treeify 可能产生结构错乱</td></tr>
+    </tbody>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 860 300" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <text x="24" y="26" font-size="12" fill="#64748b">JDK7 transfer() 头插法在并发下的经典翻车现场</text>
+
+      <rect x="80" y="70" width="90" height="46" rx="7" fill="#fff" stroke="#cbd5e1"/>
+      <text x="125" y="98" text-anchor="middle" font-size="13" fill="#1e293b">A</text>
+      <rect x="330" y="70" width="90" height="46" rx="7" fill="#fff" stroke="#cbd5e1"/>
+      <text x="375" y="98" text-anchor="middle" font-size="13" fill="#1e293b">B</text>
+
+      <path d="M170 93 L328 93" stroke="#475569" stroke-width="1.8" marker-end="url(#ar7)"/>
+      <path d="M330 128 C 280 190, 210 190, 168 128" stroke="#be123c" stroke-width="1.8" fill="none" marker-end="url(#ar8)"/>
+      <defs>
+        <marker id="ar7" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#475569"/></marker>
+        <marker id="ar8" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#be123c"/></marker>
+      </defs>
+      <text x="250" y="86" text-anchor="middle" font-size="11" fill="#475569">A.next = B</text>
+      <text x="250" y="185" text-anchor="middle" font-size="11" fill="#be123c" font-weight="600">B.next = A ← 环！</text>
+
+      <text x="470" y="80" font-size="11.5" fill="#475569">T1 读到 e=A, next=B 后被挂起</text>
+      <text x="470" y="102" font-size="11.5" fill="#475569">T2 完整跑完 transfer，链变成 B→A</text>
+      <text x="470" y="124" font-size="11.5" fill="#be123c">T1 恢复，把头插顺序套用到过期快照上</text>
+      <text x="470" y="146" font-size="11.5" fill="#be123c">→ 环形成，get 死循环</text>
+
+      <rect x="24" y="216" width="812" height="60" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="44" y="240" font-size="11.5" fill="#9f1239">JDK8 改为尾插，并把扩容改成"劈链"，环的问题消失。</text>
+      <text x="44" y="262" font-size="11.5" fill="#9f1239">但 HashMap 依旧是线程不安全的：数据覆盖、size 不准、迭代器 fail-fast 一个不少。</text>
+    </svg>
+    <figcaption><b>图 6</b>　JDK7 并发扩容成环：不是"可能出错"，是"一旦触发就永久卡死"</figcaption>
+  </figure>
+
+  <h3>ConcurrentHashMap JDK8 的锁设计</h3>
+  <table>
+    <thead><tr><th>场景</th><th>手段</th><th>为什么可以</th></tr></thead>
+    <tbody>
+      <tr><td>空桶插入</td><td><code>casTabAt</code>（无锁）</td><td>只有一个线程能 CAS 成功，失败就自旋重试</td></tr>
+      <tr><td>桶内已有节点</td><td><code>synchronized (f)</code> 锁桶头</td><td>不同桶互不影响，粒度 = 1 个桶</td></tr>
+      <tr><td>读操作</td><td>完全无锁</td><td><code>Node.val</code> 和 <code>next</code> 都是 volatile</td></tr>
+      <tr><td>扩容</td><td><code>helpTransfer</code> 协助搬迁</td><td>搬迁是分段的，别的线程可以"帮忙"，用 ForwardingNode 标记已搬完的桶</td></tr>
+      <tr><td>计数</td><td><code>baseCount + CounterCell[]</code></td><td>LongAdder 思路：CAS 热点分散到多个 cell</td></tr>
+    </tbody>
+  </table>
+
+  <h3>sizeCtl：一个 int 里塞了四种状态</h3>
+  <table>
+    <thead><tr><th>sizeCtl 取值</th><th>含义</th></tr></thead>
+    <tbody>
+      <tr><td>&gt; 0</td><td>扩容阈值 = capacity × 0.75</td></tr>
+      <tr><td>0</td><td>默认值，尚未初始化</td></tr>
+      <tr><td>-1</td><td>正在初始化（CAS 抢占标志，抢到的线程去建表）</td></tr>
+      <tr><td>&lt; -1</td><td>正在扩容：高 16 位是扩容戳（唯一标识本轮扩容），低 16 位是参与线程数 + 1</td></tr>
+    </tbody>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 880 620" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <defs>
+        <marker id="ar9" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/></marker>
+        <marker id="ar10" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#6366f1"/></marker>
+      </defs>
+
+      <rect x="240" y="10" width="300" height="44" rx="9" fill="#4f46e5"/>
+      <text x="390" y="38" text-anchor="middle" font-size="13.5" fill="#ffffff" font-weight="600">putVal(key, value)</text>
+
+      <path d="M390 54 L390 80" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+
+      <rect x="240" y="82" width="300" height="44" rx="8" fill="#fff5f6" stroke="#f5ccd4" stroke-width="1.5"/>
+      <text x="390" y="110" text-anchor="middle" font-size="12.5" fill="#9f1239">key 或 value 为 null？</text>
+      <path d="M540 104 L580 104" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+      <text x="552" y="96" font-size="11" fill="#64748b">是</text>
+      <rect x="584" y="88" width="120" height="34" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="644" y="110" text-anchor="middle" font-size="12" fill="#be123c">抛 NPE</text>
+
+      <path d="M390 126 L390 148" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+      <rect x="240" y="150" width="300" height="44" rx="8" fill="#ffffff" stroke="#c7d2fe" stroke-width="1.5"/>
+      <text x="390" y="178" text-anchor="middle" font-size="12.5" fill="#1e293b">table 未初始化？</text>
+      <path d="M540 172 L580 172" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+      <text x="552" y="164" font-size="11" fill="#64748b">是</text>
+      <rect x="584" y="150" width="248" height="44" rx="7" fill="#eef2ff" stroke="#a5b4fc"/>
+      <text x="708" y="170" text-anchor="middle" font-size="11.5" fill="#3730a3">initTable()：CAS 抢 sizeCtl=-1</text>
+      <text x="708" y="186" text-anchor="middle" font-size="10.5" fill="#6366f1">抢不到的线程 yield 等待</text>
+
+      <path d="M390 194 L390 216" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+      <rect x="240" y="218" width="300" height="44" rx="8" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1.5"/>
+      <text x="390" y="246" text-anchor="middle" font-size="12.5" fill="#065f46">桶 (n-1)&amp;hash 为空？</text>
+      <path d="M540 240 L580 240" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+      <text x="552" y="232" font-size="11" fill="#64748b">是</text>
+      <rect x="584" y="218" width="248" height="44" rx="7" fill="#ecfdf5" stroke="#34d399"/>
+      <text x="708" y="238" text-anchor="middle" font-size="11.5" fill="#065f46">casTabAt 无锁插入</text>
+      <text x="708" y="254" text-anchor="middle" font-size="10.5" fill="#047857">失败则 continue 重来</text>
+
+      <path d="M390 262 L390 284" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+      <rect x="240" y="286" width="300" height="44" rx="8" fill="#fffbeb" stroke="#fcd34d" stroke-width="1.5"/>
+      <text x="390" y="314" text-anchor="middle" font-size="12.5" fill="#92400e">f.hash == MOVED(-1)？</text>
+      <path d="M540 308 L580 308" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+      <text x="552" y="300" font-size="11" fill="#64748b">是</text>
+      <rect x="584" y="286" width="248" height="44" rx="7" fill="#fffbeb" stroke="#fbbf24"/>
+      <text x="708" y="306" text-anchor="middle" font-size="11.5" fill="#92400e">helpTransfer 协助扩容</text>
+      <text x="708" y="322" text-anchor="middle" font-size="10.5" fill="#b45309">该桶已搬完，标记为 ForwardingNode</text>
+
+      <path d="M390 330 L390 352" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+      <text x="400" y="346" font-size="11" fill="#64748b">否</text>
+      <rect x="240" y="354" width="300" height="58" rx="8" fill="#ffffff" stroke="#c7d2fe" stroke-width="1.5"/>
+      <text x="390" y="376" text-anchor="middle" font-size="12.5" fill="#1e293b">synchronized (f) { … }</text>
+      <text x="390" y="396" text-anchor="middle" font-size="10.5" fill="#6366f1">锁桶头节点，遍历链表 / 走红黑树插入</text>
+
+      <path d="M390 412 L390 434" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+      <rect x="240" y="436" width="300" height="44" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+      <text x="390" y="464" text-anchor="middle" font-size="12.5" fill="#334155">addCount(1, binCount)</text>
+
+      <path d="M390 480 L390 502" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar9)"/>
+      <rect x="200" y="504" width="380" height="52" rx="8" fill="#fdf2f8" stroke="#f5d0fe" stroke-width="1.5"/>
+      <text x="390" y="524" text-anchor="middle" font-size="12" fill="#86198f">size 超过 sizeCtl → transfer() 扩容</text>
+      <text x="390" y="542" text-anchor="middle" font-size="10.5" fill="#a21caf">多线程分段搬迁，步长 stride ≥ 16</text>
+
+      <text x="24" y="590" font-size="11.5" fill="#64748b">整条链路里，唯一"阻塞"的动作就是把某个桶头当锁。空桶路径完全不阻塞，这是 CHM 吞吐高的根本原因。</text>
+    </svg>
+    <figcaption><b>图 7</b>　ConcurrentHashMap 的 put 主链路：CAS 优先，锁只锁住"已经有人占的桶"</figcaption>
+  </figure>
+
+<pre class="java">final V putVal(K key, V value, boolean onlyIfAbsent) {
+    if (key == null || value == null) throw new NullPointerException();
+    int hash = spread(key.hashCode());
+    int binCount = 0;
+    for (Node&lt;K,V&gt;[] tab = table;;) {
+        Node&lt;K,V&gt; f; int n, i, fh;
+        if (tab == null || (n = tab.length) == 0)
+            tab = initTable();                            // ① 懒初始化，CAS 抢 sizeCtl
+        else if ((f = tabAt(tab, i = (n - 1) &amp; hash)) == null) {
+            if (casTabAt(tab, i, null, new Node&lt;K,V&gt;(hash, key, value, null)))
+                break;                                    // ② 空桶：无锁 CAS，成功即走
+        }
+        else if ((fh = f.hash) == MOVED)
+            tab = helpTransfer(tab, f);                   // ③ 该桶在扩容：顺手帮个忙
+        else {
+            V oldVal = null;
+            synchronized (f) {                            // ④ 只锁桶头，粒度 = 1 个桶
+                if (tabAt(tab, i) == f) {                 // 双重检查：锁住后确认头没被换
+                    if (fh &gt;= 0) {
+                        // 链表遍历插入；binCount 记录长度
+                    } else if (f instanceof TreeBin) {
+                        // 红黑树插入
+                    }
+                }
+            }
+            if (binCount != 0) {
+                if (binCount &gt;= TREEIFY_THRESHOLD) treeifyBin(tab, i);
+                if (oldVal != null) return oldVal;
+                break;
+            }
+        }
+    }
+    addCount(1L, binCount);
+    return null;
+}</pre>
+
+  <h3>计数：为什么 size() 是个"估算值"</h3>
+  <p>高并发下所有线程都去 CAS 同一个 <code class="inl">baseCount</code>，会把一个缓存行打成战场。<code class="inl">LongAdder</code> 的思路是：CAS 失败就换一个 <code class="inl">CounterCell</code> 去加，把热点摊到多个格子；<code class="inl">size()</code> 时把 baseCount 和所有 cell 加起来。代价是——<strong>你读到的永远是某个瞬间的近似值</strong>，这也符合 CHM 的弱一致性语义（迭代器也是弱一致的）。</p>
+
+<pre class="java">// addCount 的核心：先试 baseCount，失败就分散到 cell
+if (counterCells != null || !casBase(b = baseCount, b + x)) {
+    CounterCell[] cs; long v; int m; CounterCell c;
+    boolean uncontended = true;
+    if ((cs = counterCells) == null || (m = cs.length - 1) &lt; 0 ||
+        (c = cs[ThreadLocalRandom.getProbe() &amp; m]) == null ||
+        !(uncontended = casCell(c, v = c.value, v + x))) {
+        fullAddCount(x, uncontended);      // 兜底：扩容 cell 数组 / 自旋重试
+        return;
+    }
+}</pre>
+
+  <div class="warn">
+    <b>JDK7 vs JDK8 的一句话对比：</b>JDK7 是<strong>分段锁</strong>（Segment 继承 ReentrantLock，默认 16 段，理论并发度 16）；JDK8 抛弃 Segment，改成<strong>桶级锁 + CAS</strong>，并发度等于桶的数量，且空桶插入彻底无锁。面试能说出"从分段锁到桶锁，锁粒度细化了一个数量级"，基本就到位了。
+  </div>
+</section>
+
+<!-- ============ L5 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L5</span><em>速查 · 面试前 3 分钟扫一遍</em></div>
+  <h2>高频问答速查表</h2>
+
+  <table>
+    <thead><tr><th style="width:32%">问题</th><th>一句话答案</th></tr></thead>
+    <tbody>
+      <tr><td>HashMap 为什么线程不安全？</td><td>JDK7 扩容头插可成环导致死循环；JDK8 有数据覆盖、size 不准、结构竞争。</td></tr>
+      <tr><td>key 可以是 null 吗？</td><td>HashMap 可以（hash 记 0，落 0 号桶）；ConcurrentHashMap 和 Hashtable 直接 NPE。</td></tr>
+      <tr><td>初始容量为什么是 16？</td><td>太小频繁扩容，太大浪费内存；16 是经验值，且保证是 2 的幂以便位运算寻址。</td></tr>
+      <tr><td>负载因子为什么是 0.75？</td><td>时间与空间的折中：泊松分布下冲突概率可接受，同时数组利用率不至于太差。</td></tr>
+      <tr><td>链表长度到 8 就变树吗？</td><td>不是。插入第 9 个节点才触发 treeifyBin，且要求 table.length ≥ 64，否则先扩容。</td></tr>
+      <tr><td>为什么树化 8、退化 6？</td><td>留 7 作缓冲带，避免在临界值反复树化 / 退化（抖动）。</td></tr>
+      <tr><td>扩容后元素去哪了？</td><td>只有两个去处：原位 j，或 j + oldCap。判断依据就是 <code>hash &amp; oldCap</code>。</td></tr>
+      <tr><td>为什么用红黑树不用 AVL？</td><td>红黑树插入最多 2 次旋转、删除最多 3 次，写操作代价更低；AVL 严格平衡但维护成本高。</td></tr>
+      <tr><td>modCount 有什么用？</td><td>实现 fail-fast：迭代中结构被改就抛 ConcurrentModificationException，用于尽早暴露 bug。</td></tr>
+      <tr><td>ConcurrentHashMap 的 get 要加锁吗？</td><td>不要。Node 的 val 和 next 都是 volatile，读到的要么是旧值要么是新值，不会是半成品。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ L6 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L6</span><em>实战 · 照着答，别背稿</em></div>
+  <h2>3 道模拟面试题</h2>
+
+  <div class="q">
+    <div class="qh"><div class="num">1</div><div class="qt">说说 HashMap put 一个键值对的完整过程。什么情况下链表会转成红黑树？</div><div class="tagline">初级 · 3 分钟</div></div>
+    <div class="lab">考察意图</div>
+    <p>不是考你背源码，是看你有没有"一条完整链路"的思维，以及会不会把阈值条件说错。</p>
+    <div class="lab g">回答骨架</div>
+    <ul>
+      <li><strong>① 初始化</strong>：table 为空 → <code class="inl">resize()</code> 分配（默认 16），threshold = 12。</li>
+      <li><strong>② 算哈希</strong>：<code class="inl">h = key.hashCode(); hash = h ^ (h &gt;&gt;&gt; 16)</code>。</li>
+      <li><strong>③ 定位</strong>：<code class="inl">index = (n-1) &amp; hash</code>。</li>
+      <li><strong>④ 空桶</strong>：直接 <code class="inl">newNode</code> 放入，结束。</li>
+      <li><strong>⑤ 非空</strong>：先比 hash 再比 equals（<code class="inl">==</code> 或 <code class="inl">equals</code>），相同就覆盖 value 并返回旧值。</li>
+      <li><strong>⑥ 树节点</strong>：<code class="inl">instanceof TreeNode</code> → <code class="inl">putTreeVal</code>。</li>
+      <li><strong>⑦ 链表</strong>：遍历到尾部插入；<code class="inl">binCount &gt;= 7</code> 时调用 <code class="inl">treeifyBin</code>。</li>
+      <li><strong>⑧ 收尾</strong>：<code class="inl">++modCount</code>；<code class="inl">++size &gt; threshold</code> 则 <code class="inl">resize()</code>。</li>
+    </ul>
+    <div class="lab">可能的追问</div>
+    <ul>
+      <li>"如果所有 key 的 hashCode 都一样呢？" → 全部落一个桶，退化成链表 O(n)；树化后 O(log n)，但树的比较需要 <code class="inl">Comparable</code> 或 <code class="inl">tieBreakOrder</code> 兜底。</li>
+      <li>"覆盖 value 的时候会不会触发扩容？" → 不会，size 没变。</li>
+    </ul>
+    <div class="lab r">常见扣分点</div>
+    <p>说"链表长度大于 8 就转红黑树"——漏了"插入第 9 个才触发"和"表长必须 ≥ 64"。这两点一说出来，面试官会立刻把你归到"读过源码"那一档。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">2</div><div class="qt">多线程往 HashMap 里 put 会发生什么？ConcurrentHashMap 在 JDK8 是怎么保证线程安全的？size() 准确吗？</div><div class="tagline">中级 · 5 分钟</div></div>
+    <div class="lab">考察意图</div>
+    <p>三个层次：知道 HashMap 坏在哪 → 知道 CHM 好在哪 → 知道 CHM 的代价（弱一致性）。能答到第三层是分水岭。</p>
+    <div class="lab g">回答骨架</div>
+    <ul>
+      <li><strong>HashMap 的故障</strong>：JDK7 头插扩容可能成环，get 死循环打满 CPU；JDK8 尾插解决了环，但仍有并发覆盖、<code class="inl">++size</code> 丢更新、树化竞争。</li>
+      <li><strong>CHM 的结构</strong>：<code class="inl">Node[] table</code>，无 Segment。</li>
+      <li><strong>写路径</strong>：空桶 <code class="inl">casTabAt</code> 无锁插入；非空桶 <code class="inl">synchronized(f)</code> 锁桶头；遇到 <code class="inl">MOVED</code> 就 <code class="inl">helpTransfer</code> 一起搬。锁粒度 = 1 个桶。</li>
+      <li><strong>读路径</strong>：全程无锁，靠 volatile 保证可见性。</li>
+      <li><strong>计数</strong>：<code class="inl">baseCount + CounterCell[]</code>（LongAdder 思想），CAS 热点分散。<code class="inl">size()</code> 是<strong>估算值</strong>、弱一致。</li>
+    </ul>
+    <div class="lab">可能的追问</div>
+    <ul>
+      <li>"为什么不用 ReentrantLock 锁桶？" → 每个桶维护一个锁对象内存开销大；<code class="inl">synchronized</code> 有偏向锁/轻量级锁升级，且 JVM 层面更省。</li>
+      <li>"为什么 CHM 不允许 null？" → 并发下无法区分"key 不存在"和"value 就是 null"，会产生歧义（<code class="inl">containsKey</code> 与 <code class="inl">get</code> 的二义性）。</li>
+    </ul>
+    <div class="lab r">常见扣分点</div>
+    <p>把 JDK7 的 Segment 说成 JDK8 的实现。以及说"CHM 是绝对线程安全的"——它是<strong>单个操作原子</strong>，复合操作（先 get 再 put）依然要自己加锁或用 <code class="inl">computeIfAbsent</code>。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">3</div><div class="qt">我要自定义一个类作为 HashMap 的 key，需要注意什么？顺便说说扩容时为什么不需要重新计算 hash。</div><div class="tagline">高级 · 6 分钟</div></div>
+    <div class="lab">考察意图</div>
+    <p>前半是工程判断（契约、不可变性），后半是数学直觉（2 的幂 + 掩码）。两段能连起来讲，说明你真的理解了设计动机，而不是背结论。</p>
+    <div class="lab g">回答骨架</div>
+    <ul>
+      <li><strong>契约</strong>：同时重写 <code class="inl">equals</code> 和 <code class="inl">hashCode</code>，且用<strong>同一组字段</strong>。equals 说相等，hashCode 必须相等。</li>
+      <li><strong>不可变性</strong>：参与 hash 的字段进 map 后不能再变，否则桶下标变了，这个 entry 就"失踪"了。范本是 <code class="inl">String</code> / <code class="inl">Integer</code>。</li>
+      <li><strong>分布</strong>：hashCode 别返回常量，也别只用一两个字段，否则全挤一个桶退化成 O(n)。</li>
+      <li><strong>rehash 的数学</strong>：n 是 2 的幂 → index 只取决于 hash 的低 log₂n 位；扩容到 2n 只多用了 1 位，即 <code class="inl">hash &amp; oldCap</code>。为 0 留原位，为 1 移到 <code class="inl">j + oldCap</code>。所以无需重算 hashCode。</li>
+      <li><strong>工程建议</strong>：优先用不可变类型或 <code class="inl">record</code>；复合 key 可以直接用 <code class="inl">record</code>（自动生成 equals/hashCode），或 <code class="inl">Map.entry</code>。</li>
+    </ul>
+    <div class="lab">可能的追问</div>
+    <ul>
+      <li>"如果两个不同对象 hashCode 相同但 equals 不同，会怎样？" → 落同一个桶，用 equals 区分，形成链表/树，功能正确但性能下降。</li>
+      <li>"hashCode 用 int 会不会溢出？" → 会，但溢出无所谓，它只用来算下标，符号位参与运算也不影响正确性（<code class="inl">&amp; (n-1)</code> 会屏蔽符号位）。</li>
+    </ul>
+    <div class="lab r">加分点</div>
+    <p>主动提一句："如果 key 是可变对象且已被放进 map，正确做法是移除 → 修改 → 重新 put，而不是原地改。"这句一说，工程经验就立住了。</p>
+  </div>
+</section>
+
+<!-- ============ checklist ============ -->
+<section class="card">
+  <h2 style="margin-bottom:14px">本轮自测清单</h2>
+  <p style="color:var(--muted);font-size:14px;margin-top:0">合上页面，能不看稿讲出来才算过。讲不出来的那条，回去看对应层级。</p>
+  <ul class="check">
+    <li><b>L0</b>　不看笔记说出 equals 与 hashCode 的双向契约，以及破坏它会导致什么现象。</li>
+    <li><b>L1</b>　手推 <code class="inl">(n-1) &amp; hash</code> 与 <code class="inl">hash % n</code> 的等价条件，并解释扰动函数解决什么问题。</li>
+    <li><b>L2</b>　准确说出三个阈值，以及"第 9 个节点才触发树化"这个细节。</li>
+    <li><b>L3</b>　画出一条链在扩容时被劈成 lo/hi 两条的过程，并说明判断依据是哪一位。</li>
+    <li><b>L4</b>　讲清 CHM 的三条路径（CAS 空桶 / synchronized 桶头 / helpTransfer），以及 size 为什么是估算值。</li>
+  </ul>
+  <div class="warn" style="margin-top:18px">
+    <b>下一轮预告：</b>JVM 内存模型与 GC —— 从对象在堆里怎么躺，到 Minor GC / Mixed GC 的触发时机，再串到 <code class="inl">ThreadLocal</code> 内存泄漏和 <code class="inl">OOM</code> 排查。同样是"一层层往下挖"的结构。
+  </div>
+</section>
+
+<footer>
+  Java 面试深挖 · 第 01 期　|　主题：HashMap → ConcurrentHashMap<br>
+  内容覆盖 JDK8 源码口径，JDK7 差异已单独标注
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var KW = /\b(public|private|protected|static|final|class|interface|extends|implements|void|int|long|boolean|char|double|float|byte|short|if|else|for|while|do|return|new|this|super|null|true|false|try|catch|throw|throws|instanceof|break|continue|default|switch|case|synchronized|volatile|transient|abstract|package|import)\b/g;
+
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  var pres = document.querySelectorAll('pre.java');
+  for (var i = 0; i < pres.length; i++) {
+    var pre = pres[i];
+    var src = pre.textContent;
+    var parts = src.split(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*")/g);
+    var out = '';
+    for (var k = 0; k < parts.length; k++) {
+      var seg = parts[k];
+      if (k % 2 === 1) {
+        var cls = (seg.indexOf('//') === 0 || seg.indexOf('/*') === 0) ? 'c' : 's';
+        out += '<span class="' + cls + '">' + esc(seg) + '</span>';
+      } else {
+        out += esc(seg)
+          .replace(KW, '<span class="k">$1</span>')
+          .replace(/\b(\d+)\b/g, '<span class="n">$1</span>');
+      }
+    }
+    pre.innerHTML = out;
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 04 · Spring：refresh / 生命周期 / 三级缓存 / AOP / 事务</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#1d4ed8; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0f766e,#1d4ed8 50%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0f766e; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:30px; line-height:1.3; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 6px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:750px}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#ecfdf5; border-color:#a7f3d0; color:#065f46}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0f766e; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#312e81;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0f766e; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#065f46; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.8px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .s{color:#0f766e}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#312e81}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q .qh{display:flex; gap:10px; align-items:baseline; margin-bottom:10px}
+  .q .num{flex:none; width:26px; height:26px; border-radius:8px; background:#0f766e; color:#fff; font-size:13px; font-weight:800; display:grid; place-items:center; transform:translateY(3px)}
+  .q .qt{font-weight:750; font-size:15.5px; line-height:1.5}
+  .q .tagline{font-size:12px; color:var(--muted); margin-left:auto; white-space:nowrap}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0f766e; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q ul{margin:4px 0; padding-left:20px}
+  .q li{font-size:14px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #a7f3d0}
+  .check li b{color:#065f46}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">每 2 小时 · Java 面试深挖 · 第 04 期</div>
+  <h1>BeanDefinition<span class="arrow">→</span>refresh<span class="arrow">→</span>代理</h1>
+  <p class="sub">Spring 题的分水岭不在「你会不会背九大组件」，而在你能不能回答这四个连续追问：<strong>图纸什么时候变成对象 → 对象什么时候变成替身 → 替身为什么不认自己人 → 事务为什么说没就没</strong>。大多数人能背出「三级缓存解决循环依赖」，然后被一句「既然二级能存对象，为什么要第三级」当场按住。这一期从这四问往下钉到底。</p>
+  <div class="meta">
+    <div><strong>8</strong>层递进</div>
+    <div><strong>9</strong>张原理图</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span class="on">L0 图纸</span><span>L1 refresh</span><span>L2 生命周期</span>
+  <span>L3 三级缓存</span><span>L4 AOP</span><span>L5 事务</span><span>L6 问答</span><span>L7 模拟</span>
+</div>
+
+<!-- ============ L0 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>难度 ★★☆ · 不搞清「图纸 vs 房子」，后面全是玄学</em></div>
+  <h2>契约层：BeanDefinition 是图纸，Bean 是房子</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    Spring 的核心不是「IoC 帮你 new 对象」这种幼儿园说法，而是三件事拆开：<strong>BeanDefinition（图纸）</strong>描述怎么造；<strong>BeanFactory（工厂 + 注册表）</strong>照图纸生产并放进单例池；<strong>ApplicationContext（工厂 + 企业设施）</strong>在工厂外面套了事件、国际化、资源加载、Environment。面试官真正想听的差别只有一个 —— <strong>实例化时机</strong>：BeanFactory 是懒的，<code class="inl">getBean</code> 才创建；ApplicationContext 在 <code class="inl">refresh()</code> 最后一步把所有非 lazy 单例<strong>一次性全造出来</strong>，代价是启动慢，收益是错误提前暴露。
+  </div>
+
+  <p>先纠正一个高频混淆：很多人说「ApplicationContext 继承 BeanFactory，所以功能更多」。功能那半句没错，但实现上 <code class="inl">ApplicationContext</code> <strong>并不继承</strong> <code class="inl">DefaultListableBeanFactory</code>，它是<strong>持有一个</strong> <code class="inl">DefaultListableBeanFactory</code> 实例，把 <code class="inl">getBean</code> 委托下去。继承链是 <code class="inl">BeanFactory ← ListableBeanFactory ← ApplicationContext</code> 这个接口层面的关系，实现层面是组合。这个区别决定了你能不能解释「为什么 <code class="inl">ctx.getBeanFactory()</code> 能拿到那个原始的工厂」。</p>
+
+  <h3>容器里到底有几个 Map</h3>
+
+  <p>把 <code class="inl">DefaultListableBeanFactory</code> 剥掉所有包装，它就是几个 Map。看懂这张图，本期后面五节都不用背了：</p>
+
+<figure>
+<svg viewBox="0 0 900 372" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="s1a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#1d4ed8"/>
+    </marker>
+  </defs>
+
+  <rect x="30" y="64" width="250" height="170" rx="12" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="155" y="88" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">① 图纸仓库</text>
+  <text x="155" y="106" text-anchor="middle" font-size="9.5" fill="#475569">beanDefinitionMap · 共 N 条</text>
+  <rect x="46" y="116" width="218" height="22" rx="4" fill="#fff" stroke="#c7d2fe"/>
+  <text x="155" y="131" text-anchor="middle" font-size="9.5" fill="#1f2937">userService → BeanDefinition</text>
+  <rect x="46" y="142" width="218" height="22" rx="4" fill="#fff" stroke="#c7d2fe"/>
+  <text x="155" y="157" text-anchor="middle" font-size="9.5" fill="#1f2937">orderService → BeanDefinition</text>
+  <rect x="46" y="168" width="218" height="22" rx="4" fill="#fff" stroke="#c7d2fe"/>
+  <text x="155" y="183" text-anchor="middle" font-size="9.5" fill="#1f2937">@Bean 方法 → BeanDefinition</text>
+  <text x="155" y="208" text-anchor="middle" font-size="9" fill="#6b7280">含 scope / lazy / initMethod / dependsOn</text>
+  <text x="155" y="224" text-anchor="middle" font-size="9" fill="#be123c">此刻还没有任何业务对象被 new</text>
+
+  <rect x="330" y="64" width="190" height="170" rx="12" fill="#f0fdfa" stroke="#99f6e4"/>
+  <text x="425" y="88" text-anchor="middle" font-size="12.5" font-weight="700" fill="#065f46">② 工厂</text>
+  <text x="425" y="106" text-anchor="middle" font-size="9.5" fill="#475569">DefaultListableBeanFactory</text>
+  <rect x="342" y="116" width="166" height="30" rx="4" fill="#fff" stroke="#99f6e4"/>
+  <text x="425" y="135" text-anchor="middle" font-size="9.5" fill="#1f2937">getBean / doGetBean</text>
+  <rect x="342" y="152" width="166" height="30" rx="4" fill="#fff" stroke="#99f6e4"/>
+  <text x="425" y="171" text-anchor="middle" font-size="9.5" fill="#1f2937">doCreateBean</text>
+  <rect x="342" y="188" width="166" height="30" rx="4" fill="#fff" stroke="#99f6e4"/>
+  <text x="425" y="207" text-anchor="middle" font-size="9.5" fill="#1f2937">populateBean</text>
+
+  <rect x="570" y="64" width="300" height="86" rx="10" fill="#f0fdf4" stroke="#a7f3d0"/>
+  <text x="584" y="86" font-size="11" font-weight="700" fill="#065f46">一级 · singletonObjects</text>
+  <text x="584" y="104" font-size="9.5" fill="#334155">成品：注入完 + 初始化完 + 已代理</text>
+  <text x="584" y="122" font-size="9.5" fill="#6b7280">只有它能被「真正」返回给调用方</text>
+  <text x="584" y="140" font-size="9" fill="#be123c">稳态下这里才是 Bean 的家</text>
+
+  <rect x="570" y="162" width="300" height="58" rx="10" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="584" y="183" font-size="10.5" font-weight="700" fill="#b45309">二级 · earlySingletonObjects</text>
+  <text x="584" y="201" font-size="9.5" fill="#334155">早期引用：实例化完，属性还是 null（可能已是代理）</text>
+
+  <rect x="570" y="232" width="300" height="58" rx="10" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="584" y="253" font-size="10.5" font-weight="700" fill="#be123c">三级 · singletonFactories</text>
+  <text x="584" y="271" font-size="9.5" fill="#334155">ObjectFactory：取用时才决定「要不要代理」</text>
+
+  <line x1="284" y1="150" x2="326" y2="150" stroke="#1d4ed8" stroke-width="1.5" marker-end="url(#s1a)"/>
+  <text x="305" y="142" text-anchor="middle" font-size="9" fill="#1d4ed8">照图</text>
+  <line x1="524" y1="100" x2="566" y2="100" stroke="#1d4ed8" stroke-width="1.5" marker-end="url(#s1a)"/>
+  <text x="545" y="92" text-anchor="middle" font-size="9" fill="#1d4ed8">产出</text>
+
+  <text x="450" y="322" text-anchor="middle" font-size="10.5" fill="#065f46">singletonsCurrentlyInCreation：只有「正在创建中」的 Bean 才有资格被提前曝光</text>
+  <text x="450" y="342" text-anchor="middle" font-size="10.5" fill="#6b7280">registry 里还挂着 alreadyCreated / registeredSingletons，负责销毁顺序与 containsSingleton</text>
+</svg>
+<figcaption><b>图 1</b>　容器就是五张表。<b>图纸仓库负责「怎么造」，单例池负责「造好的放哪」，三个缓存负责「造到一半能不能被借走」。</b></figcaption>
+</figure>
+
+<pre class="java">// DefaultListableBeanFactory 的核心字段（删掉所有包装后剩下的真相）
+public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFactory {
+
+    /** 图纸仓库：beanName -&gt; 图纸。refresh 第 2、5 步往里塞 */
+    private final Map&lt;String, BeanDefinition&gt; beanDefinitionMap = new ConcurrentHashMap&lt;&gt;(256);
+
+    /** 按类型索引：类型 -&gt; 候选 beanName。@Autowired byType 靠它 */
+    private final Map&lt;Class&lt;?&gt;, String[]&gt; allBeanNamesByType = new ConcurrentHashMap&lt;&gt;(64);
+
+    // ↓ 以下三个在 DefaultSingletonBeanRegistry 里，就是所谓的「三级缓存」
+    private final Map&lt;String, Object&gt; singletonObjects = new ConcurrentHashMap&lt;&gt;(256);       // 一级：成品
+    private final Map&lt;String, Object&gt; earlySingletonObjects = new ConcurrentHashMap&lt;&gt;(16);  // 二级：半成品
+    private final Map&lt;String, ObjectFactory&lt;?&gt;&gt; singletonFactories = new HashMap&lt;&gt;(16);     // 三级：半成品的工厂
+
+    /** 正在创建中。只有在这里面的 bean 才允许被「提前曝光」，这是循环依赖的准入开关 */
+    private final Set&lt;String&gt; singletonsCurrentlyInCreation =
+            Collections.newSetFromMap(new ConcurrentHashMap&lt;&gt;(16));
+}
+</pre>
+
+  <p>注意最后那个 Set。很多人只记三级缓存三个 Map，却漏了这个 Set —— 而 <code class="inl">getSingleton(beanName, allowEarlyReference)</code> 的第一个判断就是 <code class="inl">isSingletonCurrentlyInCreation(beanName)</code>。<strong>不在创建中的 Bean 就算三级缓存里有残留，也不会被返回</strong>，这层保险防止你拿到一个已销毁或还没开始造的对象。</p>
+
+  <h3>数量级：一个中等规模 Boot 应用的启动账本</h3>
+
+  <p>以 200 个 Bean 的业务单体为例（数字为典型量级，具体随机器浮动，但<strong>比例</strong>很稳定）：</p>
+
+<figure>
+<svg viewBox="0 0 900 252" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="30" y="26" font-size="11" font-weight="700" fill="#334155">refresh() 耗时分布 · 总耗时约 2000ms</text>
+
+  <text x="192" y="62" text-anchor="end" font-size="10" fill="#475569">扫描 + 注册图纸</text>
+  <rect x="200" y="48" width="288" height="22" rx="4" fill="#c7d2fe"/>
+  <text x="498" y="63" font-size="9.5" fill="#1e3a8a">600ms · 30%</text>
+
+  <text x="192" y="106" text-anchor="end" font-size="10" fill="#475569">BPP 注册</text>
+  <rect x="200" y="92" width="48" height="22" rx="4" fill="#a7f3d0"/>
+  <text x="258" y="107" font-size="9.5" fill="#065f46">100ms · 5%</text>
+
+  <text x="192" y="150" text-anchor="end" font-size="10" fill="#475569">预实例化单例</text>
+  <rect x="200" y="136" width="480" height="22" rx="4" fill="#fbbf24"/>
+  <text x="690" y="151" font-size="9.5" fill="#92400e">1000ms · 50%</text>
+
+  <text x="192" y="194" text-anchor="end" font-size="10" fill="#475569">事件 / 监听 / 收尾</text>
+  <rect x="200" y="180" width="144" height="22" rx="4" fill="#fda4af"/>
+  <text x="354" y="195" font-size="9.5" fill="#9f1239">300ms · 15%</text>
+
+  <line x1="200" y1="222" x2="700" y2="222" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="450" y="240" text-anchor="middle" font-size="9.5" fill="#6b7280">横轴按耗时等比缩放：满宽 480px 对应 1000ms</text>
+</svg>
+<figcaption><b>图 2</b>　启动慢先定位再动手：扫描慢缩包范围、关自动配置；预实例化慢去查<b>构造函数里有没有 IO</b>。</figcaption>
+</figure>
+
+  <p>这张图的用法：面试官问「启动慢怎么优化」，别答「少写点 Bean」这种废话。正确答法是<strong>先分数量级</strong>——用 <code class="inl">ApplicationStartup</code> 打点，看是扫描慢还是实例化慢。扫描慢就缩 <code class="inl">@ComponentScan</code> 范围、排除不需要的自动配置；实例化慢就去看是不是有 Bean 在构造函数里连数据库、拉配置、建连接池——<strong>这类 IO 会把 50% 那一格直接顶到 90%</strong>。</p>
+
+<pre class="java">@Configuration
+@ComponentScan("com.demo")
+public class App {
+    public static void main(String[] args) {
+        // 手动走一遍 refresh，看清「图纸」和「对象」的分界
+        AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext();
+        ctx.register(App.class);
+
+        // 此刻 beanDefinitionMap 里只有 App 自己（连 @ComponentScan 都没跑），更没有任何业务对象
+        ctx.refresh();
+
+        // 此刻所有非 lazy 单例都造完了
+        System.out.println(ctx.getBeanDefinitionCount());
+        ctx.close();                       // 触发 @PreDestroy / destroy
+    }
+}
+</pre>
+
+  <div class="trap">
+    <b>陷阱：</b><code class="inl">ctx.register(App.class)</code> 之后不 <code class="inl">refresh()</code> 直接 <code class="inl">getBean</code>，会抛 <code class="inl">IllegalStateException: BeanFactory not initialized or already closed</code>。很多人背了「ApplicationContext 预实例化」，却不知道手动 new 出来的 Context 也必须显式 <code class="inl">refresh()</code>——<code class="inl">new ClassPathXmlApplicationContext("x.xml")</code> 能直接用，是因为它的构造函数里替你调了 <code class="inl">refresh()</code>。
+  </div>
+</section>
+
+<!-- ============ L1 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>难度 ★★★ · 十二步里只有四步真干活</em></div>
+  <h2>refresh() 十二步：四个干活，五个插槽，三个配设施</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    <code class="inl">AbstractApplicationContext.refresh()</code> 是 12 个方法调用：<strong>真干活 4 个</strong>（② 读图纸、⑤ 改图纸、⑥ 装插件、⑪ 造对象）；<strong>留插槽 5 个</strong>（①③④⑨⑫，全是 protected 半成品，给 Web 容器和 Boot 覆写）；<strong>配基础设施 3 个</strong>（⑦ 国际化、⑧ 事件广播器、⑩ 注册监听器）。能被追问的只有第 ② 和第 ⑤ 为什么不能合并、第 ⑤ 和第 ⑥ 差在哪。
+  </div>
+
+<figure>
+<svg viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="30" y="26" font-size="11" font-weight="700" fill="#334155">refresh() 十二步 · 蓝＝真干活　灰＝插槽　橙＝基础设施</text>
+
+  <!-- column 1 -->
+  <rect x="30" y="46" width="410" height="52" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="42" y="56" width="32" height="32" rx="7" fill="#6b7280"/>
+  <text x="58" y="77" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">1</text>
+  <text x="86" y="70" font-size="11.5" font-weight="700" fill="#262b36">prepareRefresh()</text>
+  <text x="86" y="87" font-size="9" fill="#64748b">记启动时间 / 校验必需属性 / 初始化 PropertySource</text>
+
+  <rect x="30" y="106" width="410" height="52" rx="9" fill="#eff6ff" stroke="#93c5fd"/>
+  <rect x="42" y="116" width="32" height="32" rx="7" fill="#1d4ed8"/>
+  <text x="58" y="137" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">2</text>
+  <text x="86" y="130" font-size="11.5" font-weight="700" fill="#1e3a8a">obtainFreshBeanFactory()</text>
+  <text x="86" y="147" font-size="9" fill="#475569">建 BeanFactory，解析 XML / 注解 → 填图纸仓库（只填配置类自己）</text>
+
+  <rect x="30" y="166" width="410" height="52" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="42" y="176" width="32" height="32" rx="7" fill="#6b7280"/>
+  <text x="58" y="197" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">3</text>
+  <text x="86" y="190" font-size="11.5" font-weight="700" fill="#262b36">prepareBeanFactory()</text>
+  <text x="86" y="207" font-size="9" fill="#64748b">塞 ClassLoader / SpEL / 3 个内置 Bean / Aware 处理器</text>
+
+  <rect x="30" y="226" width="410" height="52" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="42" y="236" width="32" height="32" rx="7" fill="#6b7280"/>
+  <text x="58" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">4</text>
+  <text x="86" y="250" font-size="11.5" font-weight="700" fill="#262b36">postProcessBeanFactory()</text>
+  <text x="86" y="267" font-size="9" fill="#64748b">[插槽] Web 容器在这里注册 request / session 作用域</text>
+
+  <rect x="30" y="286" width="410" height="52" rx="9" fill="#eff6ff" stroke="#93c5fd"/>
+  <rect x="42" y="296" width="32" height="32" rx="7" fill="#1d4ed8"/>
+  <text x="58" y="317" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">5</text>
+  <text x="86" y="310" font-size="11.5" font-weight="700" fill="#1e3a8a">invokeBeanFactoryPostProcessors()</text>
+  <text x="86" y="327" font-size="9" fill="#475569">跑 BFPP：ConfigurationClassPostProcessor 扫 @ComponentScan</text>
+
+  <rect x="30" y="346" width="410" height="52" rx="9" fill="#eff6ff" stroke="#93c5fd"/>
+  <rect x="42" y="356" width="32" height="32" rx="7" fill="#1d4ed8"/>
+  <text x="58" y="377" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">6</text>
+  <text x="86" y="370" font-size="11.5" font-weight="700" fill="#1e3a8a">registerBeanPostProcessors()</text>
+  <text x="86" y="387" font-size="9" fill="#475569">注册 BPP（PriorityOrdered / Ordered / 无序，分三批）</text>
+
+  <!-- column 2 -->
+  <rect x="460" y="46" width="410" height="52" rx="9" fill="#fff7ed" stroke="#fdba74"/>
+  <rect x="472" y="56" width="32" height="32" rx="7" fill="#b45309"/>
+  <text x="488" y="77" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">7</text>
+  <text x="516" y="70" font-size="11.5" font-weight="700" fill="#7c2d12">initMessageSource()</text>
+  <text x="516" y="87" font-size="9" fill="#64748b">国际化</text>
+
+  <rect x="460" y="106" width="410" height="52" rx="9" fill="#fff7ed" stroke="#fdba74"/>
+  <rect x="472" y="116" width="32" height="32" rx="7" fill="#b45309"/>
+  <text x="488" y="137" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">8</text>
+  <text x="516" y="130" font-size="11.5" font-weight="700" fill="#7c2d12">initApplicationEventMulticaster()</text>
+  <text x="516" y="147" font-size="9" fill="#64748b">事件广播器</text>
+
+  <rect x="460" y="166" width="410" height="52" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="472" y="176" width="32" height="32" rx="7" fill="#6b7280"/>
+  <text x="488" y="197" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">9</text>
+  <text x="516" y="190" font-size="11.5" font-weight="700" fill="#262b36">onRefresh()</text>
+  <text x="516" y="207" font-size="9" fill="#64748b">[插槽] Boot 在这里启动 Tomcat / Jetty</text>
+
+  <rect x="460" y="226" width="410" height="52" rx="9" fill="#fff7ed" stroke="#fdba74"/>
+  <rect x="472" y="236" width="32" height="32" rx="7" fill="#b45309"/>
+  <text x="488" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">10</text>
+  <text x="516" y="250" font-size="11.5" font-weight="700" fill="#7c2d12">registerListeners()</text>
+  <text x="516" y="267" font-size="9" fill="#64748b">把监听器挂到广播器上</text>
+
+  <rect x="460" y="286" width="410" height="52" rx="9" fill="#eff6ff" stroke="#93c5fd"/>
+  <rect x="472" y="296" width="32" height="32" rx="7" fill="#1d4ed8"/>
+  <text x="488" y="317" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">11</text>
+  <text x="516" y="310" font-size="11.5" font-weight="700" fill="#1e3a8a">finishBeanFactoryInitialization()</text>
+  <text x="516" y="327" font-size="9" fill="#475569">冻结配置 + preInstantiateSingletons：造出所有非 lazy 单例</text>
+
+  <rect x="460" y="346" width="410" height="52" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="472" y="356" width="32" height="32" rx="7" fill="#6b7280"/>
+  <text x="488" y="377" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">12</text>
+  <text x="516" y="370" font-size="11.5" font-weight="700" fill="#262b36">finishRefresh()</text>
+  <text x="516" y="387" font-size="9" fill="#64748b">发 ContextRefreshedEvent / 启 Lifecycle / 清缓存</text>
+
+  <path d="M235 398 L235 412 L665 412 L665 398" fill="none" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="450" y="428" text-anchor="middle" font-size="9" fill="#94a3b8">try 块内顺序执行；任一步失败走 destroyBeans() 回滚，finally 里 resetCommonCaches()</text>
+
+  <rect x="30" y="444" width="840" height="56" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="46" y="465" font-size="9.5" fill="#0f172a" font-weight="700">一句话记忆：</text>
+  <text x="130" y="465" font-size="9.5" fill="#475569">先建仓库（②）→ 再让仓库管理员狂塞图纸（⑤）→ 装好插件（⑥）→ 照图纸批量生产（⑪）→ 最后喊一声「开业了」（⑫）</text>
+  <text x="46" y="487" font-size="9.5" fill="#be123c">区分度：⑤ 改的是「图纸」，⑥ 装的是「插件」（作用于实例），⑪ 才是「生产」。三者的时间顺序不可换。</text>
+</svg>
+<figcaption><b>图 3</b>　十二步流水线。<b>第 ⑤ 步是全书最容易被忽略、也最容易被追问的一步</b>——几百个业务 Bean 的图纸都在这里才落地。</figcaption>
+</figure>
+
+  <h3>细节一：② 和 ⑤ 都叫「注册 BeanDefinition」，为什么不合并</h3>
+
+  <p>第 ② 步只解析「配置源」本身——XML 里的 <code class="inl">&lt;bean&gt;</code>、或者 <code class="inl">@Configuration</code> 类自己。真正把 <code class="inl">@ComponentScan</code> 扫出来的几百个业务类变成 BeanDefinition 的，是第 ⑤ 步里的 <code class="inl">ConfigurationClassPostProcessor</code>（它本身是个 <code class="inl">BeanDefinitionRegistryPostProcessor</code>）。</p>
+
+  <p>所以顺序是：<strong>先建图纸仓库 → 再让一个特殊的 Bean 去仓库里批量添图纸 → 最后才照图纸生产</strong>。这也解释了一个常见疑问：为什么 <code class="inl">@Bean</code> 方法里拿不到别的业务 Bean？因为 <code class="inl">@Bean</code> 方法只是**登记图纸**，调用它的工厂方法发生在第 ⑪ 步，那时候环境才齐。</p>
+
+<pre class="java">// refresh() 主干：删掉 try/catch 细节，保留顺序
+@Override
+public void refresh() throws BeansException, IllegalStateException {
+    synchronized (this.startupShutdownMonitor) {
+        prepareRefresh();                                                          // 1
+        ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();    // 2
+        prepareBeanFactory(beanFactory);                                           // 3
+        try {
+            postProcessBeanFactory(beanFactory);                                   // 4
+            invokeBeanFactoryPostProcessors(beanFactory);                          // 5  ★ 改图纸
+            registerBeanPostProcessors(beanFactory);                               // 6  ★ 装插件
+            initMessageSource();                                                   // 7
+            initApplicationEventMulticaster();                                     // 8
+            onRefresh();                                                           // 9
+            registerListeners();                                                   // 10
+            finishBeanFactoryInitialization(beanFactory);                          // 11 ★ 造对象
+            finishRefresh();                                                       // 12
+        } catch (BeansException ex) {
+            destroyBeans();          // 失败必须销毁已创建的，否则连接、线程池全泄漏
+            cancelRefresh(ex);
+            throw ex;
+        } finally {
+            resetCommonCaches();     // 清反射/注解元数据缓存，防止类加载器泄漏（热部署场景致命）
+        }
+    }
+}
+</pre>
+
+  <h3>细节二：BFPP 和 BPP 差一个字，差一个世界</h3>
+
+  <table>
+    <thead><tr><th style="width:19%">对比项</th><th style="width:38%">BeanFactoryPostProcessor</th><th>BeanPostProcessor</th></tr></thead>
+    <tbody>
+      <tr><td><strong>作用对象</strong></td><td><strong>BeanDefinition（图纸）</strong></td><td><strong>Bean 实例（房子）</strong></td></tr>
+      <tr><td><strong>执行时机</strong></td><td>第 ⑤ 步，<strong>任何普通 Bean 创建之前</strong></td><td>第 ⑪ 步内部，每个 Bean 初始化前后</td></tr>
+      <tr><td><strong>能否 getBean</strong></td><td>不能（会提前触发实例化，Spring 启动日志会警告）</td><td>能，但极易递归</td></tr>
+      <tr><td><strong>典型实现</strong></td><td><code>ConfigurationClassPostProcessor</code>、<code>PropertySourcesPlaceholderConfigurer</code></td><td><code>AutowiredAnnotationBeanPostProcessor</code>、<code>AbstractAutoProxyCreator</code></td></tr>
+      <tr><td><strong>数量级</strong></td><td>通常 <strong>3~8</strong> 个</td><td>Boot 3 应用通常 <strong>20~40</strong> 个</td></tr>
+      <tr><td><strong>面试考点</strong></td><td>动态注册 Bean 用 <code>BeanDefinitionRegistryPostProcessor</code></td><td>代理、注入、<code>@PostConstruct</code> 全靠它</td></tr>
+    </tbody>
+  </table>
+
+  <h3>细节三：第 ⑥ 步为什么要分三批注册</h3>
+
+  <p>因为 BPP 之间是有依赖的。<code class="inl">AutowiredAnnotationBeanPostProcessor</code> 必须早于业务 BPP，否则业务 BPP 拿到的对象属性还是 null。分批保证「实现了 <code class="inl">PriorityOrdered</code> 的一定排在最前，只实现 <code class="inl">Ordered</code> 的居中，没实现接口的垫底」，这是 Spring 里唯一可靠的排序契约。</p>
+
+  <div class="warn">
+    <b>高频追问：</b>「<code class="inl">@Order</code> 对 BPP 生效吗？」——<strong>对注册顺序不生效</strong>。BPP 的注册顺序看的是 <code class="inl">PriorityOrdered</code> / <code class="inl">Ordered</code> 接口。把 <code class="inl">@Order</code> 当万能排序器，是这类题最常见的翻车点。只有 <code class="inl">OrderComparator</code> 显式参与的场景（比如 AOP advisor 排序、过滤器链）才吃 <code class="inl">@Order</code>。
+  </div>
+</section>
+
+<!-- ============ L2 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>难度 ★★★ · 九步的价值不在背，在知道每步能插什么</em></div>
+  <h2>Bean 生命周期九步：扩展点位置决定你能改什么</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    单例 Bean 从「图纸」变「能用」经过九步。<strong>面试官问的是「我想在某时刻做点事，用哪个接口」，不是让你背名词</strong>。最关键的一条事实：<strong>AOP 代理在第 ⑧ 步（初始化之后）生成，而属性注在 ③ 步</strong>——这个时间差就是下一节三级缓存存在的全部理由。
+  </div>
+
+<figure>
+<svg viewBox="0 0 900 606" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <!-- 左侧阶段括号 -->
+  <text x="30" y="120" font-size="10" font-weight="700" fill="#94a3b8" transform="rotate(-90 30 120)">实例化</text>
+  <line x1="96" y1="56" x2="96" y2="160" stroke="#cbd5e1" stroke-width="1.2"/>
+  <text x="30" y="290" font-size="10" font-weight="700" fill="#94a3b8" transform="rotate(-90 30 290)">依赖注入</text>
+  <line x1="96" y1="172" x2="96" y2="228" stroke="#cbd5e1" stroke-width="1.2"/>
+  <text x="30" y="430" font-size="10" font-weight="700" fill="#94a3b8" transform="rotate(-90 30 430)">初始化</text>
+  <line x1="96" y1="240" x2="96" y2="520" stroke="#cbd5e1" stroke-width="1.2"/>
+  <text x="30" y="566" font-size="10" font-weight="700" fill="#94a3b8" transform="rotate(-90 30 566)">销毁</text>
+  <line x1="96" y1="532" x2="96" y2="580" stroke="#cbd5e1" stroke-width="1.2"/>
+
+  <rect x="240" y="56" width="370" height="44" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="256" y="76" font-size="11" font-weight="700" fill="#334155">① 实例化前拦截</text>
+  <text x="256" y="92" font-size="8.5" fill="#64748b">InstantiationAwareBPP#postProcessBeforeInstantiation</text>
+  <rect x="640" y="62" width="230" height="32" rx="6" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="755" y="82" text-anchor="middle" font-size="8.8" fill="#be123c">返回非 null 则短路，②~⑧ 全跳过</text>
+
+  <rect x="240" y="112" width="370" height="44" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="256" y="132" font-size="11" font-weight="700" fill="#1e3a8a">② 推断构造器 + 实例化</text>
+  <text x="256" y="148" font-size="8.5" fill="#475569">createBeanInstance · 反射 / Supplier / 工厂方法</text>
+  <rect x="640" y="118" width="230" height="32" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="755" y="138" text-anchor="middle" font-size="8.8" fill="#475569">此刻字段全是 null / 0</text>
+
+  <rect x="240" y="168" width="370" height="44" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="256" y="188" font-size="11" font-weight="700" fill="#1e3a8a">③ 属性填充</text>
+  <text x="256" y="204" font-size="8.5" fill="#475569">populateBean · @Autowired / @Value 在此注入</text>
+  <rect x="640" y="174" width="230" height="32" rx="6" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="755" y="194" text-anchor="middle" font-size="8.8" fill="#b45309">循环依赖在此取早期引用</text>
+
+  <rect x="240" y="224" width="370" height="44" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="256" y="244" font-size="11" font-weight="700" fill="#334155">④ Aware 回调</text>
+  <text x="256" y="260" font-size="8.5" fill="#64748b">BeanNameAware → BeanClassLoaderAware → BeanFactoryAware</text>
+
+  <rect x="240" y="280" width="370" height="44" rx="8" fill="#f5f3ff" stroke="#ddd6fe"/>
+  <text x="256" y="300" font-size="11" font-weight="700" fill="#5b21b6">⑤ 初始化前</text>
+  <text x="256" y="316" font-size="8.5" fill="#6d28d9">BPP#postProcessBeforeInitialization ← @PostConstruct</text>
+  <rect x="640" y="286" width="230" height="32" rx="6" fill="#f5f3ff" stroke="#ddd6fe"/>
+  <text x="755" y="306" text-anchor="middle" font-size="8.8" fill="#5b21b6">← 扩展点：属性已就绪</text>
+
+  <rect x="240" y="336" width="370" height="44" rx="8" fill="#f5f3ff" stroke="#ddd6fe"/>
+  <text x="256" y="356" font-size="11" font-weight="700" fill="#5b21b6">⑥ 初始化</text>
+  <text x="256" y="372" font-size="8.5" fill="#6d28d9">InitializingBean#afterPropertiesSet()</text>
+
+  <rect x="240" y="392" width="370" height="44" rx="8" fill="#f5f3ff" stroke="#ddd6fe"/>
+  <text x="256" y="412" font-size="11" font-weight="700" fill="#5b21b6">⑦ 自定义初始化</text>
+  <text x="256" y="428" font-size="8.5" fill="#6d28d9">init-method / @Bean(initMethod = "...")</text>
+
+  <rect x="240" y="448" width="370" height="44" rx="8" fill="#fff1f2" stroke="#fecdd3"/>
+  <text x="256" y="468" font-size="11" font-weight="700" fill="#9f1239">⑧ 初始化后 ← 代理在此诞生</text>
+  <text x="256" y="484" font-size="8.5" fill="#be123c">BPP#postProcessAfterInitialization · wrapIfNecessary</text>
+  <rect x="640" y="454" width="230" height="32" rx="6" fill="#fff1f2" stroke="#fecdd3"/>
+  <text x="755" y="474" text-anchor="middle" font-size="8.8" fill="#be123c">★ 事务 / 缓存 / 异步代理</text>
+
+  <rect x="240" y="504" width="370" height="44" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="256" y="524" font-size="11" font-weight="700" fill="#334155">⑨ 使用 → 销毁</text>
+  <text x="256" y="540" font-size="8.5" fill="#64748b">@PreDestroy → DisposableBean#destroy → destroy-method</text>
+
+  <line x1="425" y1="100" x2="425" y2="110" stroke="#cbd5e1" stroke-width="1.4"/>
+  <line x1="425" y1="156" x2="425" y2="166" stroke="#cbd5e1" stroke-width="1.4"/>
+  <line x1="425" y1="212" x2="425" y2="222" stroke="#cbd5e1" stroke-width="1.4"/>
+  <line x1="425" y1="268" x2="425" y2="278" stroke="#cbd5e1" stroke-width="1.4"/>
+  <line x1="425" y1="324" x2="425" y2="334" stroke="#cbd5e1" stroke-width="1.4"/>
+  <line x1="425" y1="380" x2="425" y2="390" stroke="#cbd5e1" stroke-width="1.4"/>
+  <line x1="425" y1="436" x2="425" y2="446" stroke="#cbd5e1" stroke-width="1.4"/>
+  <line x1="425" y1="492" x2="425" y2="502" stroke="#cbd5e1" stroke-width="1.4"/>
+</svg>
+<figcaption><b>图 4</b>　九步全流程。<b>记住两个定位：属性注入在 ③，代理生成在 ⑧</b>——中间这五步的距离，就是循环依赖所有麻烦的来源。</figcaption>
+</figure>
+
+  <h3>三处最容易背错的顺序</h3>
+
+  <p><strong>错误一：以为 <code class="inl">@PostConstruct</code> 早于属性注入。</strong>不可能。它的语义就是「依赖都注入完了，你可以开始初始化了」，在 ⑤ 步，属性注入在 ③ 步。</p>
+
+  <p><strong>错误二：以为 <code class="inl">afterPropertiesSet()</code> 早于 <code class="inl">@PostConstruct</code>。</strong>实际顺序是 <code class="inl">@PostConstruct</code> → <code class="inl">afterPropertiesSet()</code> → <code class="inl">init-method</code>。原因是物理性的：<code class="inl">@PostConstruct</code> 由 <code class="inl">CommonAnnotationBeanPostProcessor</code>（一个 BPP）在 <code class="inl">postProcessBeforeInitialization</code> 里反射调用，而 <code class="inl">afterPropertiesSet()</code> 是在 <code class="inl">invokeInitMethods</code> 里调的，发生在<strong>所有 BPP 的前置回调之后</strong>。</p>
+
+<pre class="java">// AbstractAutowireCapableBeanFactory#initializeBean 的真实骨架
+protected Object initializeBean(String beanName, Object bean, @Nullable RootBeanDefinition mbd) {
+    invokeAwareMethods(beanName, bean);                                   // ④
+
+    Object wrappedBean = bean;
+    if (mbd == null || !mbd.isSynthetic()) {
+        // ⑤ 所有 BPP 的前置回调：@PostConstruct 就在这里被触发
+        wrappedBean = applyBeanPostProcessorsBeforeInitialization(wrappedBean, beanName);
+    }
+    try {
+        invokeInitMethods(beanName, wrappedBean, mbd);                    // ⑥ afterPropertiesSet + ⑦ init-method
+    } catch (Throwable ex) {
+        throw new BeanCreationException(mbd != null ? mbd.getResourceDescription() : null,
+                beanName, "Invocation of init method failed", ex);
+    }
+    if (mbd == null || !mbd.isSynthetic()) {
+        // ⑧ 初始化后：AOP 代理在这里诞生
+        wrappedBean = applyBeanPostProcessorsAfterInitialization(wrappedBean, beanName);
+    }
+    return wrappedBean;
+}
+
+// ⑥ 和 ⑦ 的先后：先接口，后自定义
+protected void invokeInitMethods(String beanName, Object bean, @Nullable RootBeanDefinition mbd) throws Throwable {
+    boolean isInitializingBean = (bean instanceof InitializingBean);
+    if (isInitializingBean &amp;&amp; (mbd == null || !mbd.isExternallyManagedInitMethod("afterPropertiesSet"))) {
+        ((InitializingBean) bean).afterPropertiesSet();                   // ⑥
+    }
+    if (mbd != null &amp;&amp; bean.getClass() != NullBean.class) {
+        String initMethodName = mbd.getInitMethodName();
+        if (StringUtils.hasLength(initMethodName)
+                &amp;&amp; !(isInitializingBean &amp;&amp; "afterPropertiesSet".equals(initMethodName))) {
+            invokeCustomInitMethod(beanName, bean, mbd);                  // ⑦
+        }
+    }
+}
+</pre>
+
+  <p><strong>错误三：以为代理在「创建时」生成。</strong>代理在 ⑧ 步。这条事实是理解下一节的唯一钥匙——因为属性注在 ③ 步，早于代理生成，所以如果 B 在 ③ 步要注入 A，那一刻 A 还是个<strong>没有代理的裸对象</strong>。三级缓存存在的全部意义，就是解决这个时间差。</p>
+
+  <h3>数量级：一个 Bean 要经过多少次回调</h3>
+
+  <table>
+    <thead><tr><th style="width:34%">场景</th><th style="width:16%">回调次数</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>最简 Bean（无注解、无 Aware）</td><td><strong>2 次</strong></td><td>前置 + 后置各一轮，但绝大多数 BPP 直接 return</td></tr>
+      <tr><td>带 <code>@Autowired</code> 的单例</td><td><strong>5~8 次</strong></td><td>注入 BPP + <code>@PostConstruct</code> BPP + 代理判断 BPP</td></tr>
+      <tr><td>带 <code>@Transactional</code> 的 Service</td><td><strong>12~20 次</strong></td><td><code>AbstractAutoProxyCreator</code> 还要跑一遍 advisor 匹配</td></tr>
+      <tr><td>200 个 Bean 的应用</td><td><strong>数千次</strong></td><td>「Bean 多了启动慢」的真因不是 new 慢，是<strong>回调次数线性膨胀</strong></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ L3 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>难度 ★★★★ · 第三级缓存到底在救谁</em></div>
+  <h2>循环依赖与三级缓存：第三级不是保险，是延迟决策</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    循环依赖能解决，靠的是<strong>「不等成品，先给半成品」</strong>：A 实例化完（字段还是 null）就把一个 <code class="inl">ObjectFactory</code> 曝光出去，B 注入时通过这个工厂拿到 A 的早期引用，B 先完成，A 再回头注入 B。<strong>为什么必须三级、二级不够？</strong>因为如果 A 需要 AOP 代理（<code class="inl">@Transactional</code>、<code class="inl">@Async</code>、自定义切面），B 注入的必须是<strong>代理</strong>而不是裸对象。第三级存的是一段<strong>延迟回调</strong>，把「要不要代理」这个决策推到真正有人来取的那一刻。
+  </div>
+
+<figure>
+<svg viewBox="0 0 900 566" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="30" y="30" font-size="10.5" font-weight="700" fill="#334155">动作（线程视角）</text>
+  <text x="380" y="30" font-size="10.5" font-weight="700" fill="#334155">三个缓存的状态（一级 / 二级 / 三级）</text>
+
+  <!-- row1 -->
+  <circle cx="48" cy="72" r="12" fill="#b45309"/>
+  <text x="48" y="76" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">1</text>
+  <text x="70" y="70" font-size="11" font-weight="700" fill="#262b36">实例化 A</text>
+  <text x="70" y="87" font-size="9" fill="#64748b">createBeanInstance，字段全 null</text>
+  <rect x="380" y="48" width="155" height="78" rx="7" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="457" y="66" text-anchor="middle" font-size="9" fill="#94a3b8">一级</text>
+  <text x="457" y="88" text-anchor="middle" font-size="11" fill="#cbd5e1">—</text>
+  <rect x="545" y="48" width="150" height="78" rx="7" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="620" y="66" text-anchor="middle" font-size="9" fill="#94a3b8">二级</text>
+  <text x="620" y="88" text-anchor="middle" font-size="11" fill="#cbd5e1">—</text>
+  <rect x="705" y="48" width="165" height="78" rx="7" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="787" y="66" text-anchor="middle" font-size="9" fill="#be123c">三级</text>
+  <text x="787" y="88" text-anchor="middle" font-size="10" fill="#9f1239">a → ObjectFactory</text>
+
+  <!-- row2 -->
+  <circle cx="48" cy="172" r="12" fill="#b45309"/>
+  <text x="48" y="176" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">2</text>
+  <text x="70" y="170" font-size="11" font-weight="700" fill="#262b36">A 填充属性，发现依赖 b</text>
+  <text x="70" y="187" font-size="9" fill="#64748b">populateBean(a) → getBean(b)</text>
+  <rect x="380" y="148" width="155" height="78" rx="7" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="457" y="166" text-anchor="middle" font-size="9" fill="#94a3b8">一级</text>
+  <text x="457" y="188" text-anchor="middle" font-size="11" fill="#cbd5e1">—</text>
+  <rect x="545" y="148" width="150" height="78" rx="7" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="620" y="166" text-anchor="middle" font-size="9" fill="#94a3b8">二级</text>
+  <text x="620" y="188" text-anchor="middle" font-size="11" fill="#cbd5e1">—</text>
+  <rect x="705" y="148" width="165" height="78" rx="7" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="787" y="166" text-anchor="middle" font-size="9" fill="#be123c">三级</text>
+  <text x="787" y="188" text-anchor="middle" font-size="10" fill="#9f1239">a、b 两个工厂</text>
+
+  <!-- row3 -->
+  <circle cx="48" cy="272" r="12" fill="#be123c"/>
+  <text x="48" y="276" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">3</text>
+  <text x="70" y="270" font-size="11" font-weight="700" fill="#9f1239">B 填充属性，发现依赖 a</text>
+  <text x="70" y="287" font-size="9" fill="#64748b">getSingleton(a, true) 命中三级</text>
+  <rect x="380" y="248" width="155" height="78" rx="7" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="457" y="266" text-anchor="middle" font-size="9" fill="#94a3b8">一级</text>
+  <text x="457" y="288" text-anchor="middle" font-size="11" fill="#cbd5e1">—</text>
+  <rect x="545" y="248" width="150" height="78" rx="7" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="620" y="266" text-anchor="middle" font-size="9" fill="#b45309">二级</text>
+  <text x="620" y="288" text-anchor="middle" font-size="10" fill="#9a3412">a（早期引用）</text>
+  <rect x="705" y="248" width="165" height="78" rx="7" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="787" y="266" text-anchor="middle" font-size="9" fill="#be123c">三级</text>
+  <text x="787" y="288" text-anchor="middle" font-size="10" fill="#9f1239">只剩 b（a 已迁出）</text>
+
+  <!-- row4 -->
+  <circle cx="48" cy="372" r="12" fill="#047857"/>
+  <text x="48" y="376" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">4</text>
+  <text x="70" y="370" font-size="11" font-weight="700" fill="#065f46">B 完成创建</text>
+  <text x="70" y="387" font-size="9" fill="#64748b">初始化后放入一级，不再被代理</text>
+  <rect x="380" y="348" width="155" height="78" rx="7" fill="#f0fdf4" stroke="#a7f3d0"/>
+  <text x="457" y="366" text-anchor="middle" font-size="9" fill="#065f46">一级</text>
+  <text x="457" y="388" text-anchor="middle" font-size="11" font-weight="700" fill="#065f46">b</text>
+  <rect x="545" y="348" width="150" height="78" rx="7" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="620" y="366" text-anchor="middle" font-size="9" fill="#b45309">二级</text>
+  <text x="620" y="388" text-anchor="middle" font-size="10" fill="#9a3412">a（仍是早期引用）</text>
+  <rect x="705" y="348" width="165" height="78" rx="7" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="787" y="366" text-anchor="middle" font-size="9" fill="#94a3b8">三级</text>
+  <text x="787" y="388" text-anchor="middle" font-size="11" fill="#cbd5e1">—</text>
+
+  <!-- row5 -->
+  <circle cx="48" cy="472" r="12" fill="#047857"/>
+  <text x="48" y="476" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">5</text>
+  <text x="70" y="470" font-size="11" font-weight="700" fill="#065f46">A 完成创建</text>
+  <text x="70" y="487" font-size="9" fill="#64748b">复用早期引用，不再二次代理</text>
+  <rect x="380" y="448" width="155" height="78" rx="7" fill="#f0fdf4" stroke="#a7f3d0"/>
+  <text x="457" y="466" text-anchor="middle" font-size="9" fill="#065f46">一级</text>
+  <text x="457" y="488" text-anchor="middle" font-size="11" font-weight="700" fill="#065f46">a、b</text>
+  <rect x="545" y="448" width="150" height="78" rx="7" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="620" y="466" text-anchor="middle" font-size="9" fill="#94a3b8">二级</text>
+  <text x="620" y="488" text-anchor="middle" font-size="11" fill="#cbd5e1">—</text>
+  <rect x="705" y="448" width="165" height="78" rx="7" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="787" y="466" text-anchor="middle" font-size="9" fill="#94a3b8">三级</text>
+  <text x="787" y="488" text-anchor="middle" font-size="11" fill="#cbd5e1">—</text>
+
+  <text x="450" y="552" text-anchor="middle" font-size="9.5" fill="#be123c">关键：三级 → 二级是【单向迁移】，用完即删；二级里存的是「形态已确定」的早期引用</text>
+</svg>
+<figcaption><b>图 5</b>　A→B→A 的五步状态流转。<b>第 3 行是唯一的转折点</b>：三级缓存命中后立刻迁到二级，并且从三级删除。</figcaption>
+</figure>
+
+<pre class="java">// DefaultSingletonBeanRegistry#getSingleton —— 三级缓存的全部逻辑就在这 20 行
+protected Object getSingleton(String beanName, boolean allowEarlyReference) {
+    Object singletonObject = this.singletonObjects.get(beanName);          // 一级：成品
+    if (singletonObject == null &amp;&amp; isSingletonCurrentlyInCreation(beanName)) {
+        singletonObject = this.earlySingletonObjects.get(beanName);        // 二级：早期引用
+        if (singletonObject == null &amp;&amp; allowEarlyReference) {
+            synchronized (this.singletonObjects) {
+                singletonObject = this.singletonObjects.get(beanName);     // 双检
+                if (singletonObject == null) {
+                    singletonObject = this.earlySingletonObjects.get(beanName);
+                    if (singletonObject == null) {
+                        ObjectFactory&lt;?&gt; singletonFactory = this.singletonFactories.get(beanName);
+                        if (singletonFactory != null) {
+                            singletonObject = singletonFactory.getObject(); // ★ 此刻才决定是否代理
+                            this.earlySingletonObjects.put(beanName, singletonObject);
+                            this.singletonFactories.remove(beanName);      // 三级 → 二级，单向迁移
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return singletonObject;
+}
+</pre>
+
+  <div class="warn">
+    <b>能加分的细节：</b>「三级条目的生命周期是<strong>一次性的</strong>」——被取用后立刻 <code class="inl">remove</code> 并迁到二级。这个设计的后果是：<strong>同一个 Bean 的 <code class="inl">getEarlyBeanReference</code> 只会被调用一次</strong>，所以不会生成两个代理对象。面试里能主动说出这句，基本可以判断你不是背博客的。
+  </div>
+
+  <h3>为什么二级不够：把时间轴摊开看</h3>
+
+<figure>
+<svg viewBox="0 0 900 432" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="30" y="30" font-size="11" font-weight="700" fill="#be123c">假设只有二级缓存（错误方案）</text>
+  <line x1="70" y1="106" x2="860" y2="106" stroke="#fecdd3" stroke-width="2"/>
+
+  <circle cx="120" cy="106" r="7" fill="#f87171"/>
+  <text x="120" y="88" text-anchor="middle" font-size="9.5" fill="#9f1239">① 实例化 A</text>
+  <text x="120" y="130" text-anchor="middle" font-size="9" fill="#64748b">裸对象，字段 null</text>
+
+  <circle cx="340" cy="106" r="7" fill="#f87171"/>
+  <text x="340" y="88" text-anchor="middle" font-size="9.5" fill="#9f1239">② 曝光裸 A</text>
+  <text x="340" y="130" text-anchor="middle" font-size="9" fill="#64748b">二级 = 裸 A</text>
+
+  <circle cx="560" cy="106" r="7" fill="#f87171"/>
+  <text x="560" y="88" text-anchor="middle" font-size="9.5" fill="#9f1239">③ B 注入裸 A</text>
+  <text x="560" y="130" text-anchor="middle" font-size="9" fill="#64748b">B 持有裸对象</text>
+
+  <circle cx="780" cy="106" r="7" fill="#dc2626"/>
+  <text x="780" y="88" text-anchor="middle" font-size="9.5" fill="#9f1239">④ 初始化后生成代理</text>
+  <text x="780" y="130" text-anchor="middle" font-size="9" fill="#64748b">一级 = 代理 A</text>
+
+  <text x="450" y="166" text-anchor="middle" font-size="10" fill="#be123c">结果：同一个 bean 出现两个实例 —— B 里是裸 A，容器里是代理 A。事务、缓存、== 比较全部失效 ✗</text>
+
+  <line x1="30" y1="196" x2="870" y2="196" stroke="#e2e8f0" stroke-width="1"/>
+
+  <text x="30" y="228" font-size="11" font-weight="700" fill="#047857">现在：三级缓存（正确方案）</text>
+  <line x1="70" y1="304" x2="860" y2="304" stroke="#a7f3d0" stroke-width="2"/>
+
+  <circle cx="120" cy="304" r="7" fill="#34d399"/>
+  <text x="120" y="286" text-anchor="middle" font-size="9.5" fill="#065f46">① 实例化 A</text>
+  <text x="120" y="328" text-anchor="middle" font-size="9" fill="#64748b">注册 ObjectFactory</text>
+
+  <circle cx="340" cy="304" r="7" fill="#34d399"/>
+  <text x="340" y="286" text-anchor="middle" font-size="9.5" fill="#065f46">② B 来取 A</text>
+  <text x="340" y="328" text-anchor="middle" font-size="9" fill="#64748b">触发 getEarlyBeanReference</text>
+
+  <circle cx="560" cy="304" r="7" fill="#34d399"/>
+  <text x="560" y="286" text-anchor="middle" font-size="9.5" fill="#065f46">③ 当场生成代理</text>
+  <text x="560" y="328" text-anchor="middle" font-size="9" fill="#64748b">二级 = 代理 A，真正注入 B</text>
+
+  <circle cx="780" cy="304" r="7" fill="#059669"/>
+  <text x="780" y="286" text-anchor="middle" font-size="9.5" fill="#065f46">④ 初始化后复用</text>
+  <text x="780" y="328" text-anchor="middle" font-size="9" fill="#64748b">earlyProxyReferences 命中</text>
+
+  <text x="450" y="368" text-anchor="middle" font-size="10" fill="#047857">结果：全程只有一份引用，B 拿到的就是最终代理，后续不再二次代理 ✓</text>
+
+  <text x="450" y="406" text-anchor="middle" font-size="9" fill="#94a3b8">本质：二级缓存存的是「对象」，三级缓存存的是「一道可以推迟执行的决策」</text>
+</svg>
+<figcaption><b>图 6</b>　二级 vs 三级的唯一区别：<b>能不能把「要不要代理」这个决策推迟到取用那一刻</b>。</figcaption>
+</figure>
+
+<pre class="java">// 第三级缓存的核心：曝光时走的是这个方法
+protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, Object bean) {
+    Object exposedObject = bean;
+    if (!mbd.isSynthetic() &amp;&amp; hasInstantiationAwareBeanPostProcessors()) {
+        for (SmartInstantiationAwareBeanPostProcessor bp : getBeanPostProcessorCache().smartInstantiationAware) {
+            exposedObject = bp.getEarlyBeanReference(exposedObject, beanName);   // 只有实现该接口的 BPP 才参与
+        }
+    }
+    return exposedObject;
+}
+
+// AbstractAutoProxyCreator：提前代理 + 记一笔，防止二次代理
+@Override
+public Object getEarlyBeanReference(Object bean, String beanName) {
+    Object cacheKey = getCacheKey(bean.getClass(), beanName);
+    this.earlyProxyReferences.put(cacheKey, bean);        // 标记「已提前代理」
+    return wrapIfNecessary(bean, beanName, cacheKey);     // 真的生成代理
+}
+
+// 到了第 ⑧ 步，先查这个标记
+@Override
+public Object postProcessAfterInitialization(@Nullable Object bean, String beanName) {
+    if (bean != null) {
+        Object cacheKey = getCacheKey(bean.getClass(), beanName);
+        if (this.earlyProxyReferences.remove(cacheKey) != bean) {   // ★ 没提前代理过才代理
+            return wrapIfNecessary(bean, beanName, cacheKey);
+        }
+    }
+    return bean;
+}
+</pre>
+
+  <p>那个 <code class="inl">remove(cacheKey) != bean</code> 的判断就是「为什么不会生成两个代理」的答案。少了它，A 会被代理两次，B 持有的代理和一级缓存里的代理不是同一个对象，<code class="inl">==</code> 直接翻车。</p>
+
+  <h3>三级缓存救不了的三种循环</h3>
+
+  <table>
+    <thead><tr><th style="width:26%">场景</th><th style="width:40%">为什么救不了</th><th>报错关键词</th></tr></thead>
+    <tbody>
+      <tr><td><strong>构造器注入循环</strong></td><td>对象还没 new 出来，没有东西可曝光，形成死等</td><td><code>Is there an unresolvable circular reference?</code></td></tr>
+      <tr><td><strong>prototype 作用域循环</strong></td><td>原型 Bean 不进单例池，没有缓存可用</td><td>同上</td></tr>
+      <tr><td><strong><code>@Async</code> / 普通 BPP 产生的代理</strong></td><td>该代理在 ⑧ 步才生成，<code>getEarlyBeanReference</code> 默认返回原对象</td><td><code>in its raw version as part of a circular reference, but has eventually been wrapped</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>第三种最有区分度。原因很干脆：<code class="inl">AsyncAnnotationBeanPostProcessor</code> 继承的是普通 <code class="inl">BeanPostProcessor</code>，<strong>不实现</strong> <code class="inl">SmartInstantiationAwareBeanPostProcessor</code>，所以它没法参与提前代理。B 注入到的是裸 A，最终一级缓存里是代理 A，Spring 检测到「曝光过的对象 ≠ 最终对象，且有人依赖过它」，直接抛异常——它宁愿启动失败，也不让你带着这个 bug 上线。</p>
+
+<pre class="java">// 触发这个报错的真实检查（AbstractAutowireCapableBeanFactory#doCreateBean 尾部）
+if (earlySingletonExposure) {
+    Object earlySingletonReference = getSingleton(beanName, false);
+    if (earlySingletonReference != null) {
+        if (exposedObject == bean) {
+            exposedObject = earlySingletonReference;         // 形态一致，复用
+        } else if (!this.allowRawInjectionDespiteWrapping &amp;&amp; hasDependentBean(beanName)) {
+            String[] dependentBeans = getDependentBeans(beanName);
+            throw new BeanCurrentlyInCreationException(beanName,
+                "Bean with name '" + beanName + "' has been injected into other beans [" +
+                StringUtils.arrayToCommaDelimitedString(dependentBeans) +
+                "] in its raw version as part of a circular reference, but has eventually been " +
+                "wrapped. This means that said other beans do not use the final version of the " +
+                "bean. ...");
+        }
+    }
+}
+</pre>
+
+  <h3>数量级：循环依赖的真实成本</h3>
+
+  <p>内存上几乎为零：<code class="inl">singletonFactories</code> 在稳态下基本是<strong>空的</strong>（创建完就删），每个正在创建中的 Bean 只多一个 lambda + 一个 Map 条目。真正的成本是<strong>设计债</strong>：一个 200 Bean 的项目里出现 5 组循环依赖，通常意味着分层被打穿了（Service 互相调、Controller 注 Service 又注 Controller）。Spring 能救你，救不了你的架构。</p>
+
+  <p>顺带记一句：Boot 2.6 起 <code class="inl">spring.main.allow-circular-references</code> 默认 <code class="inl">false</code>——这是官方在明说：<strong>别再写循环依赖了</strong>。把它改成 true 不是修 bug，是把警报器拆了。</p>
+</section>
+
+<!-- ============ L4 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>难度 ★★★ · 代理是替身，替身不认自己人</em></div>
+  <h2>AOP 代理：JDK 靠接口，CGLIB 靠继承</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    Spring AOP 是<strong>运行时代理</strong>，不是字节码编织（那是 AspectJ）。JDK 动态代理要求目标类<strong>实现接口</strong>，生成的 <code class="inl">$Proxy0</code> 实现同一接口，调用转给 <code class="inl">InvocationHandler</code>，靠<strong>反射</strong>调目标方法；CGLIB 用 ASM 生成目标类的<strong>子类</strong>，覆写非 final 方法，方法体里直接 <code class="inl">super.xxx()</code>，靠 <code class="inl">FastClass</code> <strong>索引</strong>代替反射。Boot 2.x 起默认 CGLIB，理由是业务 Service 常常不写接口。
+  </div>
+
+<figure>
+<svg viewBox="0 0 900 390" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="s7a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <text x="30" y="26" font-size="11" font-weight="700" fill="#1e3a8a">JDK 动态代理：兄弟关系</text>
+  <text x="500" y="26" font-size="11" font-weight="700" fill="#9f1239">CGLIB：父子关系</text>
+
+  <rect x="130" y="44" width="180" height="44" rx="8" fill="#eef2ff" stroke="#c7d2fe" stroke-dasharray="5 3"/>
+  <text x="220" y="63" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e3a8a">interface UserService</text>
+  <text x="220" y="79" text-anchor="middle" font-size="8.5" fill="#64748b">接口，必须有</text>
+
+  <rect x="40" y="168" width="170" height="44" rx="8" fill="#fff" stroke="#c7d2fe"/>
+  <text x="125" y="187" text-anchor="middle" font-size="10" fill="#1f2937">UserServiceImpl</text>
+  <text x="125" y="203" text-anchor="middle" font-size="8.5" fill="#64748b">真实业务逻辑</text>
+
+  <rect x="240" y="168" width="170" height="44" rx="8" fill="#fff" stroke="#c7d2fe"/>
+  <text x="325" y="187" text-anchor="middle" font-size="10" fill="#1f2937">$Proxy0</text>
+  <text x="325" y="203" text-anchor="middle" font-size="8.5" fill="#64748b">运行时生成，实现同一接口</text>
+
+  <line x1="125" y1="166" x2="160" y2="91" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#s7a)"/>
+  <line x1="325" y1="166" x2="282" y2="91" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#s7a)"/>
+  <text x="72" y="136" font-size="8.5" fill="#94a3b8">implements</text>
+  <text x="336" y="136" font-size="8.5" fill="#94a3b8">implements</text>
+
+  <rect x="240" y="244" width="170" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="325" y="262" text-anchor="middle" font-size="9.5" fill="#334155">InvocationHandler</text>
+  <text x="325" y="277" text-anchor="middle" font-size="8.5" fill="#be123c">Method.invoke → 反射</text>
+  <line x1="325" y1="242" x2="325" y2="214" stroke="#94a3b8" stroke-width="1.2"/>
+
+  <text x="40" y="316" font-size="8.8" fill="#475569">限制：目标类必须实现接口；只能拦接口声明的方法</text>
+  <text x="40" y="334" font-size="8.8" fill="#475569">首次创建快，单次调用略慢（反射，有 inflation 优化）</text>
+
+  <line x1="460" y1="20" x2="460" y2="356" stroke="#e2e8f0" stroke-width="1"/>
+
+  <rect x="560" y="44" width="200" height="44" rx="8" fill="#fff" stroke="#fecdd3"/>
+  <text x="660" y="63" text-anchor="middle" font-size="10.5" fill="#1f2937">UserServiceImpl</text>
+  <text x="660" y="79" text-anchor="middle" font-size="8.5" fill="#64748b">父类，不能是 final</text>
+
+  <rect x="520" y="168" width="280" height="44" rx="8" fill="#fff1f2" stroke="#fda4af"/>
+  <text x="660" y="186" text-anchor="middle" font-size="9.5" fill="#9f1239">UserServiceImpl$$EnhancerByCGLIB</text>
+  <text x="660" y="202" text-anchor="middle" font-size="8.5" fill="#64748b">子类，覆写所有非 final 方法</text>
+
+  <line x1="660" y1="166" x2="660" y2="91" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#s7a)"/>
+  <text x="668" y="136" font-size="8.5" fill="#94a3b8">extends</text>
+
+  <rect x="520" y="244" width="280" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="660" y="262" text-anchor="middle" font-size="9.5" fill="#334155">MethodInterceptor.intercept()</text>
+  <text x="660" y="277" text-anchor="middle" font-size="8.5" fill="#be123c">MethodProxy.invokeSuper → 直接调 super</text>
+  <line x1="660" y1="242" x2="660" y2="214" stroke="#94a3b8" stroke-width="1.2"/>
+
+  <text x="500" y="316" font-size="8.8" fill="#475569">限制：不能代理 final 类 / final 方法 / private / static</text>
+  <text x="500" y="334" font-size="8.8" fill="#475569">首次创建慢（生成字节码），单次调用快（FastClass 索引）</text>
+</svg>
+<figcaption><b>图 7</b>　JDK 是「兄弟」，CGLIB 是「父子」。<b>这决定了它们各自代理不了什么</b>：兄弟代不了没接口的，父子代不了 final 的。</figcaption>
+</figure>
+
+  <table>
+    <thead><tr><th style="width:22%">维度</th><th style="width:34%">JDK 动态代理</th><th>CGLIB</th></tr></thead>
+    <tbody>
+      <tr><td><strong>前提</strong></td><td>目标类实现接口</td><td>无（但不能是 <code>final</code> 类）</td></tr>
+      <tr><td><strong>生成方式</strong></td><td><code>Proxy.newProxyInstance</code></td><td>ASM 生成子类字节码</td></tr>
+      <tr><td><strong>调用方式</strong></td><td>反射 <code>Method.invoke</code></td><td>FastClass 索引 + <code>super</code> 调用</td></tr>
+      <tr><td><strong>能否拦非 public 方法</strong></td><td>否（接口方法都是 public）</td><td>能（protected / 包级）</td></tr>
+      <tr><td><strong>首次创建成本</strong></td><td>低</td><td>较高（生成并加载类）</td></tr>
+      <tr><td><strong>单次调用成本</strong></td><td>略高（反射）</td><td>较低</td></tr>
+      <tr><td><strong>Spring 默认</strong></td><td>否</td><td><strong>是（Boot 2.x+）</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h3>数量级：代理到底慢多少</h3>
+
+  <p>这是我最喜欢用来打「AOP 影响性能」这个说法的数据（典型量级，随 JVM 版本浮动，但<strong>数量级差</strong>是稳定的）：</p>
+
+  <table>
+    <thead><tr><th style="width:40%">操作</th><th style="width:26%">耗时量级</th><th>相对倍数</th></tr></thead>
+    <tbody>
+      <tr><td>直接方法调用</td><td>~2 ns</td><td>1×</td></tr>
+      <tr><td>CGLIB 代理调用</td><td>~5~15 ns</td><td>3~7×</td></tr>
+      <tr><td>JDK 代理调用（预热后）</td><td>~10~30 ns</td><td>5~15×</td></tr>
+      <tr><td>一次本地 Redis GET</td><td>~100,000 ns（0.1ms）</td><td><strong>50,000×</strong></td></tr>
+      <tr><td>一次 MySQL 主键查询</td><td>~500,000 ns（0.5ms）</td><td><strong>250,000×</strong></td></tr>
+    </tbody>
+  </table>
+
+  <p>结论：代理的相对开销是 3~15 倍，<strong>但绝对开销是纳秒级</strong>。拿「AOP 慢」当不用 AOP 的理由，就像嫌鞋带太紧不肯出门——真正的开销在 IO，不在这几纳秒。这段数字对比在面试里非常加分，因为它证明你会<strong>分数量级</strong>，而不是背结论。</p>
+
+  <div class="trap">
+    <b>常见错答：</b>「JDK 代理性能比 CGLIB 好，所以 Spring 默认用 JDK。」——事实相反：Boot 2.x 起默认 <strong>CGLIB</strong>（<code class="inl">spring.aop.proxy-target-class=true</code>，<code class="inl">matchIfMissing=true</code>）。原因不是性能，是<strong>兼容性</strong>：业务类经常不写接口，JDK 代理直接抛 <code class="inl">BeanNotOfRequiredTypeException</code>。性能上 CGLIB 单次调用还更快一点。
+  </div>
+
+  <h3>自调用：AOP 世界的头号坑</h3>
+
+<figure>
+<svg viewBox="0 0 900 332" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="s8a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#1d4ed8"/>
+    </marker>
+    <marker id="s8b" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#be123c"/>
+    </marker>
+  </defs>
+
+  <rect x="24" y="92" width="126" height="52" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="87" y="114" text-anchor="middle" font-size="10.5" fill="#334155">外部调用者</text>
+  <text x="87" y="131" text-anchor="middle" font-size="8.5" fill="#64748b">Controller</text>
+
+  <rect x="196" y="84" width="176" height="68" rx="9" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="284" y="106" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e3a8a">代理对象</text>
+  <text x="284" y="123" text-anchor="middle" font-size="8.5" fill="#475569">$$EnhancerByCGLIB</text>
+  <text x="284" y="139" text-anchor="middle" font-size="8.5" fill="#be123c">TransactionInterceptor</text>
+
+  <rect x="418" y="84" width="196" height="68" rx="9" fill="#fff1f2" stroke="#fda4af"/>
+  <text x="516" y="106" text-anchor="middle" font-size="10.5" font-weight="700" fill="#9f1239">目标对象（this）</text>
+  <text x="516" y="123" text-anchor="middle" font-size="8.5" fill="#475569">OrderService 实例本体</text>
+  <text x="516" y="139" text-anchor="middle" font-size="8.5" fill="#9f1239">不是代理，没有切面</text>
+
+  <line x1="152" y1="118" x2="192" y2="118" stroke="#1d4ed8" stroke-width="1.5" marker-end="url(#s8a)"/>
+  <text x="172" y="110" text-anchor="middle" font-size="8.5" fill="#1d4ed8">调用</text>
+
+  <line x1="374" y1="118" x2="414" y2="118" stroke="#1d4ed8" stroke-width="1.5" marker-end="url(#s8a)"/>
+  <text x="394" y="110" text-anchor="middle" font-size="8.5" fill="#1d4ed8">开启事务</text>
+
+  <path d="M516 152 L516 196 L574 196 L574 152" fill="none" stroke="#be123c" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#s8b)"/>
+  <text x="596" y="186" font-size="9" fill="#be123c">this.calcPrice()</text>
+  <text x="596" y="202" font-size="9" fill="#be123c">✗ 一条直线，绕开代理</text>
+
+  <text x="24" y="238" font-size="9.5" fill="#334155" font-weight="700">为什么失效：</text>
+  <text x="112" y="238" font-size="9.5" fill="#475569">外部持有的是代理，代理把调用转给 target 后，方法内的 this 指向 target 本身，</text>
+  <text x="24" y="256" font-size="9.5" fill="#475569">this.calcPrice() 就是一次普通 Java 调用 —— 中间没有任何拦截器，注解等于注释。</text>
+
+  <rect x="24" y="274" width="842" height="44" rx="8" fill="#f0fdf4" stroke="#a7f3d0"/>
+  <text x="40" y="292" font-size="9" fill="#065f46" font-weight="700">修法优先级：</text>
+  <text x="126" y="292" font-size="9" fill="#334155">① 拆到另一个 Bean（最干净）　② 注入自身 @Lazy self　③ AopContext.currentProxy()（需 exposeProxy）　</text>
+  <text x="40" y="309" font-size="9" fill="#334155">④ 用 TransactionTemplate 编程式事务（最不容易错）。①②③ 都是「让调用经过代理」，只有 ① 顺带修了架构。</text>
+</svg>
+<figcaption><b>图 8</b>　自调用的物理原因：<b>this 指向目标对象，不指向代理</b>。所以任何依赖代理的注解（事务 / 缓存 / 异步 / 自定义切面）在自调用里全部失效。</figcaption>
+</figure>
+
+<pre class="java">@Service
+public class OrderService {
+
+    @Transactional
+    public void createOrder(Order o) {
+        saveOrder(o);
+        this.calcPrice(o);        // ★ this 调用，绕过代理 → calcPrice 的事务注解失效
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void calcPrice(Order o) { /* 期望新事务，实际跑在外层事务里 */ }
+}
+
+// 修法①：拆到另一个 Bean（推荐）
+@Service
+public class PriceService {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void calcPrice(Order o) { /* ... */ }
+}
+
+// 修法②：注入自身，@Lazy 打破构造器循环
+@Service
+public class OrderService {
+    @Lazy @Autowired private OrderService self;
+    public void createOrder(Order o) { self.calcPrice(o); }
+}
+
+// 修法③：暴露代理（ThreadLocal 开销；异步线程里取不到）
+@EnableAspectJAutoProxy(exposeProxy = true)
+public class AopConfig {}
+
+public void createOrder(Order o) {
+    ((OrderService) AopContext.currentProxy()).calcPrice(o);
+}
+</pre>
+</section>
+
+<!-- ============ L5 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">L5</span><em>难度 ★★★★ · 六种失效，一条原理</em></div>
+  <h2>@Transactional：事务不是注解带来的，是代理带来的</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    <code class="inl">@Transactional</code> <strong>本身不开启任何事务</strong>。它只是往 BeanDefinition 上挂了一个「属性」，由 <code class="inl">InfrastructureAdvisorAutoProxyCreator</code> 在第 ⑧ 步生成代理，由 <code class="inl">TransactionInterceptor</code> 在方法前后开 / 提交 / 回滚。所以：<strong>没有经过代理的调用 = 没有事务</strong>。所有失效场景，最终都归结为「代理没被经过」或「异常没被看见」。
+  </div>
+
+  <h3>原理链路（一句话串起来）</h3>
+
+<pre class="java">@EnableTransactionManagement
+  └─ 导入 TransactionManagementConfigurationSelector
+       └─ ProxyTransactionManagementConfiguration 注册两样东西
+            ① BeanFactoryTransactionAttributeSourceAdvisor（切面）
+                 ├─ Pointcut：TransactionAttributeSourcePointcut（判断方法/类上有没有 @Transactional）
+                 └─ Advice  ：TransactionInterceptor（MethodInterceptor）
+            ② InfrastructureAdvisorAutoProxyCreator（BPP，负责生成代理）
+
+调用时：代理 → TransactionInterceptor.invoke → invokeWithinTransaction
+        ├─ createTransactionIfNecessary   拿连接、setAutoCommit(false)、绑定到 ThreadLocal
+        ├─ invocation.proceed()           真正的业务方法
+        ├─ commitTransactionAfterReturning
+        └─ completeTransactionAfterThrowing → rollbackOn(ex) 判断是否回滚
+</pre>
+
+<pre class="java">// TransactionAspectSupport#invokeWithinTransaction 主干
+protected Object invokeWithinTransaction(Method method, @Nullable Class&lt;?&gt; targetClass,
+        final InvocationCallback invocation) throws Throwable {
+
+    TransactionAttributeSource tas = getTransactionAttributeSource();
+    TransactionAttribute txAttr = (tas != null ? tas.getTransactionAttribute(method, targetClass) : null);
+    TransactionManager tm = determineTransactionManager(txAttr);
+
+    TransactionInfo txInfo = createTransactionIfNecessary(tm, txAttr, joinpointIdentification);
+    Object retVal;
+    try {
+        retVal = invocation.proceedWithInvocation();        // 业务方法
+    } catch (Throwable ex) {
+        completeTransactionAfterThrowing(txInfo, ex);       // ★ 这里判断要不要回滚
+        throw ex;
+    } finally {
+        cleanupTransactionInfo(txInfo);                     // 一定要清 ThreadLocal
+    }
+    commitTransactionAfterReturning(txInfo);
+    return retVal;
+}
+</pre>
+
+  <h3>六种失效（附最小复现代码）</h3>
+
+  <p><strong>① 自调用 / 同类内部调用</strong>——上一节已拆透，<code class="inl">this.b()</code> 不经过代理。</p>
+
+  <p><strong>② 方法不可见（private）</strong></p>
+
+<pre class="java">@Service
+public class UserService {
+    @Transactional
+    private void doSave() { /* ... */ }     // ✗ CGLIB 覆写不了 private，代理链根本不经过它
+}
+</pre>
+
+  <p>Spring Framework 6.0 起把「只允许 public」放宽到「非 private 方法」，但 <strong>private 永远不行</strong>。这个版本差异是现在的加分点——答「5.x 只支持 public、6.0 起支持 protected 和包级、private 始终不支持」比一句「必须 public」专业得多。</p>
+
+  <p><strong>③ 异常被吞 / 抛受检异常</strong></p>
+
+<pre class="java">@Transactional
+public void a() {
+    try {
+        int i = 1 / 0;
+    } catch (Exception e) {
+        log.error("忽略", e);                 // ✗ 异常没抛出去，Spring 认为一切正常 → 提交
+    }
+}
+
+@Transactional
+public void b() throws IOException {
+    throw new IOException();                  // ✗ 默认只回滚 RuntimeException 和 Error
+}
+
+@Transactional(rollbackFor = Exception.class) // ✓ 显式指定
+public void c() throws IOException { throw new IOException(); }
+</pre>
+
+  <p>默认规则来自 <code class="inl">DefaultTransactionAttribute#rollbackOn</code>：只有 <code class="inl">RuntimeException</code> 或 <code class="inl">Error</code> 才回滚。为什么这么设计？因为受检异常在 Java 里代表「可预期的业务分支」，框架不敢替你决定回滚——你抛个「库存不足」的业务异常，它凭什么擅自回滚整笔交易。</p>
+
+  <p><strong>④ 类没被 Spring 管理</strong>——<code class="inl">new UserService().save()</code>、工具类里静态持有的 Service、<code class="inl">@Bean</code> 方法里返回的对象被再次 <code class="inl">new</code>。代码没错，就是没代理。</p>
+
+  <p><strong>⑤ 存储引擎 / 数据源不支持事务</strong>——MyISAM 表、部分分库分表中间件的非事务路由。代码没问题，底层不认。</p>
+
+  <p><strong>⑥ 跨线程 / 异步调用</strong></p>
+
+<pre class="java">@Transactional
+public void a() {
+    new Thread(() -&gt; b()).start();        // ✗ 事务绑定在 ThreadLocal，子线程拿不到
+}
+
+@Async
+public void b() { /* 独立线程，没有事务上下文 */ }
+</pre>
+
+  <p>事务上下文存在 <code class="inl">TransactionSynchronizationManager</code> 的 <code class="inl">ThreadLocal</code> 里（<code class="inl">resources</code>、<code class="inl">synchronizations</code>），线程一换就断。这也是 <code class="inl">@Async</code> + <code class="inl">@Transactional</code> 组合经常出问题的根因。</p>
+
+  <h3>数形结合：传播行为的「连接数账本」</h3>
+
+  <p>七种传播行为里，只有三个会决定<strong>物理连接数</strong>：</p>
+
+  <table>
+    <thead><tr><th style="width:26%">传播行为</th><th style="width:20%">连接数</th><th style="width:24%">外层回滚 → 内层</th><th>典型用途</th></tr></thead>
+    <tbody>
+      <tr><td><code>REQUIRED</code>（默认）</td><td><strong>1</strong></td><td>一起回滚</td><td>90% 的场景</td></tr>
+      <tr><td><code>REQUIRES_NEW</code></td><td><strong>2</strong></td><td>内层已独立提交，不受影响</td><td>记日志、发消息、幂等表</td></tr>
+      <tr><td><code>NESTED</code></td><td><strong>1 + savepoint</strong></td><td>一起回滚</td><td>批量导入「部分失败不影响整体」</td></tr>
+    </tbody>
+  </table>
+
+  <p>这张表能直接算出一道真实事故题。看下面这张图，问题一目了然：</p>
+
+<figure>
+<svg viewBox="0 0 900 384" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="s9a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#be123c"/>
+    </marker>
+  </defs>
+
+  <text x="30" y="26" font-size="10.5" font-weight="700" fill="#334155">连接池 maximumPoolSize = 10</text>
+  <rect x="30" y="38" width="380" height="150" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+
+  <rect x="52" y="58" width="62" height="46" rx="5" fill="#fecdd3" stroke="#fda4af"/>
+  <text x="83" y="86" text-anchor="middle" font-size="9" fill="#9f1239">占用 1</text>
+  <rect x="124" y="58" width="62" height="46" rx="5" fill="#fecdd3" stroke="#fda4af"/>
+  <text x="155" y="86" text-anchor="middle" font-size="9" fill="#9f1239">占用 2</text>
+  <rect x="196" y="58" width="62" height="46" rx="5" fill="#fecdd3" stroke="#fda4af"/>
+  <text x="227" y="86" text-anchor="middle" font-size="9" fill="#9f1239">占用 3</text>
+  <rect x="268" y="58" width="62" height="46" rx="5" fill="#fecdd3" stroke="#fda4af"/>
+  <text x="299" y="86" text-anchor="middle" font-size="9" fill="#9f1239">占用 4</text>
+  <rect x="340" y="58" width="62" height="46" rx="5" fill="#fecdd3" stroke="#fda4af"/>
+  <text x="371" y="86" text-anchor="middle" font-size="9" fill="#9f1239">占用 5</text>
+
+  <rect x="52" y="112" width="62" height="46" rx="5" fill="#fecdd3" stroke="#fda4af"/>
+  <text x="83" y="140" text-anchor="middle" font-size="9" fill="#9f1239">占用 6</text>
+  <rect x="124" y="112" width="62" height="46" rx="5" fill="#fecdd3" stroke="#fda4af"/>
+  <text x="155" y="140" text-anchor="middle" font-size="9" fill="#9f1239">占用 7</text>
+  <rect x="196" y="112" width="62" height="46" rx="5" fill="#fecdd3" stroke="#fda4af"/>
+  <text x="227" y="140" text-anchor="middle" font-size="9" fill="#9f1239">占用 8</text>
+  <rect x="268" y="112" width="62" height="46" rx="5" fill="#fecdd3" stroke="#fda4af"/>
+  <text x="299" y="140" text-anchor="middle" font-size="9" fill="#9f1239">占用 9</text>
+  <rect x="340" y="112" width="62" height="46" rx="5" fill="#fecdd3" stroke="#fda4af"/>
+  <text x="371" y="140" text-anchor="middle" font-size="9" fill="#9f1239">占用 10</text>
+
+  <text x="220" y="178" text-anchor="middle" font-size="9" fill="#be123c">10 个连接全部被外层 REQUIRED 事务占满</text>
+
+  <line x1="420" y1="112" x2="466" y2="112" stroke="#be123c" stroke-width="1.6" marker-end="url(#s9a)"/>
+  <text x="443" y="104" text-anchor="middle" font-size="9" fill="#be123c">仍需</text>
+
+  <rect x="476" y="42" width="196" height="142" rx="10" fill="#fff1f2" stroke="#fda4af"/>
+  <text x="574" y="76" text-anchor="middle" font-size="11" fill="#9f1239">需要连接数</text>
+  <text x="574" y="118" text-anchor="middle" font-size="30" font-weight="800" fill="#be123c">20</text>
+  <text x="574" y="146" text-anchor="middle" font-size="9" fill="#9f1239">10 并发 × 每请求 2 层</text>
+  <text x="574" y="164" text-anchor="middle" font-size="9" fill="#9f1239">（REQUIRED + REQUIRES_NEW）</text>
+
+  <rect x="700" y="42" width="170" height="142" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="785" y="68" text-anchor="middle" font-size="10" fill="#334155">后果</text>
+  <text x="785" y="92" text-anchor="middle" font-size="9" fill="#475569">10 个线程各占 1 个连接</text>
+  <text x="785" y="110" text-anchor="middle" font-size="9" fill="#475569">等第 2 个连接</text>
+  <text x="785" y="132" text-anchor="middle" font-size="9" fill="#be123c">全部阻塞</text>
+  <text x="785" y="152" text-anchor="middle" font-size="9" fill="#be123c">30s 后超时</text>
+  <text x="785" y="170" text-anchor="middle" font-size="8.5" fill="#94a3b8">Connection is not available</text>
+
+  <rect x="30" y="204" width="840" height="58" rx="9" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="46" y="224" font-size="9.5" fill="#7c2d12" font-weight="700">为什么外层连接不释放：</text>
+  <text x="196" y="224" font-size="9.5" fill="#475569">REQUIRES_NEW 的语义是「挂起」而非「释放」—— 外层事务的 Connection 仍被线程持有，只是解绑了同步状态。</text>
+  <text x="46" y="246" font-size="9.5" fill="#be123c" font-weight="700">这不是 Spring 的 bug，是「池大小 × 传播行为」的乘法。</text>
+
+  <text x="450" y="292" text-anchor="middle" font-size="10" fill="#334155">排查顺序：① 算术先算一遍（并发 × 层数）　② SHOW PROCESSLIST 看长事务 Sleeper</text>
+  <text x="450" y="312" text-anchor="middle" font-size="10" fill="#334155">③ 查 spring.jpa.open-in-view 是否开着（它让连接在整个请求期被持有，最常见的隐形元凶）</text>
+  <text x="450" y="332" text-anchor="middle" font-size="10" fill="#be123c">调大池子只是把爆炸时间往后推，不是修复</text>
+  <text x="450" y="360" text-anchor="middle" font-size="9" fill="#94a3b8">注：NESTED 用 savepoint 复用同一连接，不增加连接数，但只对 DataSourceTransactionManager 有效</text>
+</svg>
+<figcaption><b>图 9</b>　一道能在白板上算出来的事故题：<b>10 × 2 = 20 &gt; 10</b>。能把 20 这个数字算出来的人，比背七种传播行为定义的人值钱得多。</figcaption>
+</figure>
+</section>
+
+<!-- ============ L6 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L6</span><em>难度 ★★★ · 十四条，答要点不答定义</em></div>
+  <h2>高频问答 14 条</h2>
+
+  <div class="q">
+    <div class="qh"><span class="num">1</span><span class="qt">BeanFactory 和 ApplicationContext 的区别？</span><span class="tagline">送分题</span></div>
+    <p><strong>功能上</strong>：ApplicationContext 继承 BeanFactory，额外提供事件发布、国际化、资源加载、Environment、自动注册 BPP/BFPP。<strong>行为上</strong>：BeanFactory 懒加载，ApplicationContext 启动时 <code class="inl">preInstantiateSingletons()</code> 预实例化所有非 lazy 单例。<strong>实现上</strong>：ApplicationContext 内部<strong>委托</strong>一个 DefaultListableBeanFactory，不是继承它的实现——这句能补上，说明你读过源码。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">2</span><span class="qt">@Autowired 和 @Resource 的区别？</span><span class="tagline">高频</span></div>
+    <p><code class="inl">@Autowired</code>：Spring 的，<strong>byType 优先</strong>，类型不唯一再按名字，<code class="inl">required</code> 可改；配合 <code class="inl">@Qualifier</code> 精确指定。<code class="inl">@Resource</code>：JSR-250 标准，<strong>byName 优先</strong>（字段名），再 byType，不支持 required。构造器注入只能用 <code class="inl">@Autowired</code>（单构造器可省略）。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">3</span><span class="qt">构造器注入和字段注入怎么选？</span><span class="tagline">有标准答案</span></div>
+    <p>构造器注入：依赖不可变（可 <code class="inl">final</code>）、对象创建即完整、便于单测、<strong>循环依赖会直接暴露（这是优点不是缺点）</strong>。字段注入：写法短，但隐藏依赖、不能 final、单测必须启容器或用反射。官方从 4.3 起就在文档里明确推荐构造器注入。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">4</span><span class="qt">@Component / @Service / @Repository / @Controller 有什么区别？</span><span class="tagline">细节题</span></div>
+    <p>语义上没有区别，都是 <code class="inl">@Component</code> 的派生（元注解）。实际差异只有一处：<code class="inl">@Repository</code> 会被 <code class="inl">PersistenceExceptionTranslationPostProcessor</code> 增强，把厂商异常翻译成 <code class="inl">DataAccessException</code>。<code class="inl">@Controller</code> 是 <code class="inl">@RequestMapping</code> 处理器的识别标记。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">5</span><span class="qt">单例 Bean 是线程安全的吗？</span><span class="tagline">送分题</span></div>
+    <p>不是。Spring 只保证<strong>创建过程</strong>线程安全（<code class="inl">singletonObjects</code> 是 ConcurrentHashMap + 双重检查），不保证<strong>使用过程</strong>线程安全。单例 Bean 里的可变成员变量就是共享状态，得自己加锁或做无状态设计。追问「<code class="inl">@Scope("prototype")</code> 能解决吗」——不能，prototype 只是每次注入新对象；它被注入到单例里之后，依然只有那一个实例。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">6</span><span class="qt">Bean 的作用域有哪些？</span><span class="tagline">高频</span></div>
+    <p><code class="inl">singleton</code>（默认）、<code class="inl">prototype</code>、<code class="inl">request</code>、<code class="inl">session</code>、<code class="inl">application</code>、<code class="inl">websocket</code>。后四种需要 Web 环境，靠 <code class="inl">RequestContextHolder</code> + ThreadLocal 实现。<strong>坑</strong>：单例注入 prototype 只注入一次，要用 <code class="inl">@Lookup</code> 或 <code class="inl">ObjectProvider</code> 才能每次拿新的。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">7</span><span class="qt">三级缓存为什么不能只有两级？</span><span class="tagline">本期核心</span></div>
+    <p>二级只能存「已确定形态」的对象，而 AOP 代理要不要生成、生成什么，取决于 <code class="inl">getEarlyBeanReference</code> 这个回调。三级存 <code class="inl">ObjectFactory</code>，把「要不要代理」<strong>推迟到真正有人来取的那一刻</strong>。若只有两级，早期引用只能是裸对象，B 注入裸 A、一级缓存里是代理 A，同一个 bean 两个实例，事务、缓存、<code class="inl">==</code> 全废。还有一个隐藏收益：<strong>没循环依赖的 Bean 不需要提前代理</strong>，工厂模式天然实现了「按需」。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">8</span><span class="qt">构造器循环依赖为什么解决不了？怎么绕？</span><span class="tagline">加分题</span></div>
+    <p>因为曝光的前提是「对象已 new 出来」，构造器要求参数先就绪，形成死等。绕法：改字段/setter 注入；在其中一个参数上加 <code class="inl">@Lazy</code>（注入代理，真正调用时才 getBean）；重构拆层（正确做法）。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">9</span><span class="qt">BeanPostProcessor 里能 getBean 吗？</span><span class="tagline">区分度</span></div>
+    <p>能，但极危险。BPP 在 ⑥ 步注册，此时 <code class="inl">getBean</code> 会触发目标 Bean 的完整创建，而创建又要过 BPP——如果该 Bean 依赖当前 BPP 正在处理的东西，就是无限递归或 <code class="inl">BeanCurrentlyInCreationException</code>。正确做法：用 <code class="inl">ObjectProvider</code> 延迟获取，或放到 <code class="inl">SmartInitializingSingleton#afterSingletonsInstantiated</code>。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">10</span><span class="qt">AOP 为什么代理不了 final 方法？</span><span class="tagline">送分题</span></div>
+    <p>CGLIB 靠生成子类覆写方法，final 不能覆写，代理类里根本不存在这个方法，调用直接落到父类实现，切面无从插入。同理 private（子类看不见）、static（编译期绑定）。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">11</span><span class="qt">@Transactional 加类上和加方法上，哪个优先？</span><span class="tagline">细节题</span></div>
+    <p>方法级优先。<code class="inl">AbstractFallbackTransactionAttributeSource</code> 的查找顺序是「方法 → 类」，找到即返回。类级相当于给所有方法一个默认值。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">12</span><span class="qt">事务里发 MQ / 调远程，怎么保证一致性？</span><span class="tagline">实战题</span></div>
+    <p>事务内做 IO 是反模式：连接被占住、超时拖长事务、回滚了消息却已发出。正确做法是<strong>提交后再执行</strong>：<code class="inl">TransactionSynchronizationManager.registerSynchronization(...)</code> 的 <code class="inl">afterCommit()</code>，或本地消息表 + 定时补偿。别在 <code class="inl">@Transactional</code> 方法里直接 <code class="inl">mq.send()</code>。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">13</span><span class="qt">@Async 和 @Transactional 能同时用在一个方法上吗？</span><span class="tagline">进阶</span></div>
+    <p>能，但顺序微妙。两个注解各对应一个 BPP，谁先谁后取决于 <code class="inl">Ordered</code> 值，结果是「异步代理包事务代理」或反过来。实践上更稳的做法是拆两个方法：外层 <code class="inl">@Async</code> 提交任务，内层 <code class="inl">@Transactional</code> 执行。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">14</span><span class="qt">怎么排查「事务没生效」？</span><span class="tagline">方法论</span></div>
+    <p>四步：① 确认类被 Spring 管理——打印 <code class="inl">ctx.getBean(X.class).getClass()</code>，看是不是 <code class="inl">$$EnhancerBySpringCGLIB</code> 或 <code class="inl">$Proxy</code>；② 确认调用方持有的是代理——断点看 <code class="inl">this</code> 的运行时类型；③ 开 <code class="inl">logging.level.org.springframework.transaction=TRACE</code>，看有没有 <code class="inl">Creating new transaction</code>；④ 检查异常类型与 <code class="inl">rollbackFor</code>。<strong>第 ② 步能省掉 80% 的排查时间</strong>。</p>
+  </div>
+</section>
+
+<!-- ============ L7 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L7</span><em>难度 ★★★★ · 三题定生死</em></div>
+  <h2>三道模拟面试题</h2>
+
+  <div class="q">
+    <div class="qh"><span class="num">1</span><span class="qt">说说 Spring 启动都做了什么。如果我想在所有 Bean 实例化之前动态注册一批 Bean，用哪个扩展点？为什么不用另一个？</span></div>
+    <div class="lab">优秀回答骨架</div>
+    <ul>
+      <li>先给结构：12 步，四步真干活（② 读图纸、⑤ 改图纸、⑥ 装插件、⑪ 造对象），其余是插槽和基础设施。</li>
+      <li>强调 ② 和 ⑤ 的差异：② 只注册配置类本身，⑤ 里的 <code class="inl">ConfigurationClassPostProcessor</code> 才扫 <code class="inl">@ComponentScan</code>、解析 <code class="inl">@Import</code>。</li>
+      <li>选型：用 <code class="inl">BeanDefinitionRegistryPostProcessor</code>，在 <code class="inl">postProcessBeanDefinitionRegistry</code> 里 <code class="inl">registry.registerBeanDefinition(...)</code>。它比普通 BFPP 更早执行（分 PriorityOrdered → Ordered → 其余 三批）。</li>
+      <li>为什么不用 BPP：BPP 处理的是<strong>实例</strong>，那时图纸已定型；且 BPP 在 ⑥ 步才注册，时间上已经晚了。</li>
+      <li>加分：提到 <code class="inl">ImportBeanDefinitionRegistrar</code>——写 starter 时的标准姿势，<code class="inl">@EnableXxx</code> 内部 <code class="inl">@Import</code> 一个 Registrar，比直接实现 BFPP 更符合分层。</li>
+    </ul>
+    <div class="lab g">追问预判</div>
+    <ul>
+      <li>「Registrar 里能 getBean 吗？」→ 几乎不能，会提前触发实例化，启动日志警告 <code class="inl">is not eligible for getting processed by all BeanPostProcessors</code>。</li>
+      <li>「动态注册的 Bean 支持 @Autowired 吗？」→ 支持，属性填充在 ⑪ 步，晚于注册。</li>
+    </ul>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">2</span><span class="qt">A 依赖 B、B 依赖 A，能启动吗？如果 A 上加了 @Async 呢？</span></div>
+    <div class="lab">优秀回答骨架</div>
+    <ul>
+      <li>第一问直接过：能，靠三级缓存，条件是<strong>单例 + 字段/setter 注入</strong>。</li>
+      <li>讲时序：实例化 A → 写三级 → 填充属性触发 B → B 填充时 <code class="inl">getSingleton("a", true)</code> 命中三级 → 调 <code class="inl">getEarlyBeanReference</code> 得到早期引用 → B 完成 → A 完成。</li>
+      <li>第二问是分水岭：<strong>不能</strong>。<code class="inl">@Async</code> 的代理在 <code class="inl">postProcessAfterInitialization</code> 生成，<code class="inl">AsyncAnnotationBeanPostProcessor</code> 不实现 <code class="inl">SmartInstantiationAwareBeanPostProcessor</code>，所以提前曝光拿到的还是裸对象。最终 Spring 在 <code class="inl">doCreateBean</code> 尾部检测到「曝光对象 ≠ 最终对象 + 有依赖者」，抛 <code class="inl">BeanCurrentlyInCreationException</code>，报错里带 <code class="inl">in its raw version as part of a circular reference</code>。</li>
+      <li>修复：<code class="inl">@Lazy</code> / 抽第三个 Bean / 把 <code class="inl">@Async</code> 挪到独立组件；<code class="inl">allow-circular-references=true</code> 只是掩盖。</li>
+      <li>拔高：三级缓存不是银弹，它只解决「代理时机早于属性填充」这一类问题；<code class="inl">@Cacheable</code> 同理（也是普通 BPP）。</li>
+    </ul>
+    <div class="lab r">失分点</div>
+    <ul>
+      <li>只答「三级缓存能解决」，完全不看注解。</li>
+      <li>答「加 @Lazy 就行」却说不出为什么——<code class="inl">@Lazy</code> 注入的是代理，代理被调用时才 <code class="inl">getBean</code>，此时循环已解开。</li>
+    </ul>
+  </div>
+
+  <div class="q">
+    <div class="qh"><span class="num">3</span><span class="qt">生产报 Connection is not available, request timed out after 30000ms，连接池 10 个，QPS 不高，你怎么查？</span></div>
+    <div class="lab">优秀回答骨架</div>
+    <ul>
+      <li><strong>先算账，别先猜</strong>：池 10、超时 30s，说明有线程长期占着连接不放。QPS 不高还打满，只有两种可能——连接泄漏，或<strong>传播行为导致的连接翻倍</strong>（REQUIRES_NEW / NESTED 挂起外层而不释放连接）。</li>
+      <li>给公式：<code class="inl">需要连接数 = 并发事务数 × 事务嵌套层数</code>（REQUIRED 不增加，REQUIRES_NEW 每层 +1）。10 × 2 = 20 &gt; 10。</li>
+      <li>排查路径：<code class="inl">SHOW PROCESSLIST</code> 看长事务；确认 <code class="inl">spring.jpa.open-in-view=false</code>（OSIV 让连接在整个请求期被持有，最常见的隐形元凶）；看 ThreadLocal 里的 <code class="inl">resources</code> 是否被正确清理。</li>
+      <li>修复：REQUIRES_NEW 改 REQUIRED（业务允许时）；MQ / 远程调用移到 <code class="inl">afterCommit</code>；调大池子只是延后爆炸。</li>
+      <li>补一刀：<code class="inl">@Transactional</code> + <code class="inl">@Async</code>、事务里做 HTTP、OSIV 是三大长事务元凶。</li>
+    </ul>
+    <div class="lab r">失分点</div>
+    <ul>
+      <li>一上来就「调大 maximumPoolSize」。</li>
+      <li>只答「有慢 SQL」，却解释不了「QPS 不高为什么会打满」。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ checklist ============ -->
+<section class="card">
+  <h2 style="margin-bottom:14px">本轮自测清单</h2>
+  <p style="color:var(--muted);font-size:14px;margin-top:0">合上页面，能不看稿讲出来才算过。讲不出来的那条，回去看对应层级。</p>
+  <ul class="check">
+    <li><b>L0</b>　画出图纸仓库 / 一级 / 二级 / 三级 / <code class="inl">singletonsCurrentlyInCreation</code> 五个结构，说清各自存什么。</li>
+    <li><b>L0</b>　解释为什么 ApplicationContext 启动慢但错误暴露早，以及手动 new 的 Context 为什么要显式 refresh。</li>
+    <li><b>L1</b>　默写 refresh 十二步，标出哪 4 步真干活、哪 5 个是插槽。</li>
+    <li><b>L1</b>　说清 ② 和 ⑤ 都注册 BeanDefinition 却不合并的原因。</li>
+    <li><b>L1</b>　用一张表对比 BFPP 和 BPP（对象、时机、能否 getBean、典型实现、数量级）。</li>
+    <li><b>L2</b>　默写九步，标出 <code class="inl">@PostConstruct</code> / <code class="inl">afterPropertiesSet</code> / <code class="inl">init-method</code> / AOP 代理各自的位置。</li>
+    <li><b>L2</b>　解释「代理在初始化后生成」如何导致循环依赖需要三级缓存。</li>
+    <li><b>L3</b>　画出 A→B→A 状态流转，说清三级 → 二级的单向迁移。</li>
+    <li><b>L3</b>　说出三级缓存救不了的三种循环，以及报错关键词。</li>
+    <li><b>L4</b>　对比 JDK 代理与 CGLIB 的六个维度，说清 Boot 默认选 CGLIB 的真实原因。</li>
+    <li><b>L4</b>　用 ns / ms 的数量级反驳「AOP 影响性能」。</li>
+    <li><b>L5</b>　列出六种事务失效，每种给出最小复现代码。</li>
+    <li><b>L5</b>　算出「池 10 + 10 并发 + REQUIRES_NEW = 需要 20 个连接」并解释为什么外层连接不释放。</li>
+    <li><b>L7</b>　完整讲一遍「循环依赖 + @Async」，包括报错原文关键词。</li>
+  </ul>
+  <div class="warn" style="margin-top:18px">
+    <b>下一轮预告：</b>MySQL 索引与事务隔离 —— 从 B+ 树的三层高度讲起，算清「一张 2000 万行的表为什么是 3 次 IO」；再讲最左前缀、索引下推、覆盖索引的物理含义；最后落到 <code class="inl">MVCC</code> 的 <code class="inl">ReadView</code> 四字段与「RR 到底能不能防幻读」这个经典争论。<strong>本期与下期的接点</strong>：<code class="inl">@Transactional(isolation = ...)</code> 最终只是给数据库发了一句 <code class="inl">SET TRANSACTION ISOLATION LEVEL</code>，Spring 只是传话筒；而 <code class="inl">rollbackFor</code> 撞上 MySQL 的 DDL 隐式提交，是下期要拆的第一个坑。
+  </div>
+</section>
+
+<footer>
+  Java 面试深挖 · 第 04 期　|　主题：Spring 核心（refresh / 生命周期 / 三级缓存 / AOP / 事务）<br>
+  口径说明：Spring Framework 6.x / Spring Boot 3.x；<code class="inl">@Transactional</code> 非 public 方法支持从 6.0 起（private 始终不支持）；三级缓存机制在 5.x / 6.x 一致
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var KW = /\b(public|private|protected|static|final|class|interface|extends|implements|void|int|long|boolean|char|double|float|byte|short|if|else|for|while|do|return|new|this|super|null|true|false|try|catch|throw|throws|instanceof|break|continue|default|switch|case|synchronized|volatile|transient|abstract|package|import|enum|assert|finally)\b/g;
+
+  function escRaw(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  var pres = document.querySelectorAll('pre.java');
+  for (var i = 0; i < pres.length; i++) {
+    var pre = pres[i];
+    var src = pre.textContent;
+    var parts = src.split(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*")/g);
+    var out = '';
+    for (var k = 0; k < parts.length; k++) {
+      var seg = parts[k];
+      if (k % 2 === 1) {
+        var cls = (seg.indexOf('//') === 0 || seg.indexOf('/*') === 0) ? 'c' : 's';
+        out += '<span class="' + cls + '">' + escRaw(seg) + '</span>';
+      } else {
+        out += escRaw(seg)
+          .replace(KW, '<span class="k">$1</span>')
+          .replace(/\b(\d+)\b/g, '<span class="n">$1</span>');
+      }
+    }
+    pre.innerHTML = out;
+  }
+})();
+</script>
+</body>
+</html>

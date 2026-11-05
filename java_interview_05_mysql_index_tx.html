@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 05 · MySQL：B+ 树 / 联合索引 / 锁 / MVCC</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#1d4ed8 50%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:30px; line-height:1.3; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 6px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:760px}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6ff; border-color:#bfdbfe; color:#1e40af}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#312e81;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.8px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .s{color:#0369a1}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#312e81}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q .qh{display:flex; gap:10px; align-items:baseline; margin-bottom:10px}
+  .q .num{flex:none; width:26px; height:26px; border-radius:8px; background:#0369a1; color:#fff; font-size:13px; font-weight:800; display:grid; place-items:center; transform:translateY(3px)}
+  .q .qt{font-weight:750; font-size:15.5px; line-height:1.5}
+  .q .tagline{font-size:12px; color:var(--muted); margin-left:auto; white-space:nowrap}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q ul{margin:4px 0; padding-left:20px}
+  .q li{font-size:14px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #bfdbfe}
+  .check li b{color:#075985}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">每 2 小时 · Java 面试深挖 · 第 05 期</div>
+  <h1>B+ 树<span class="arrow">→</span>联合索引<span class="arrow">→</span>锁<span class="arrow">→</span>MVCC</h1>
+  <p class="sub">MySQL 面的分水岭只有一条：你到底把索引当成<strong>「一种加速技巧」</strong>还是<strong>「一种物理排序」</strong>。前者只能背出「最左前缀」，后者能解释为什么 <code class="inl">(a,b,c)</code> 上 <code class="inl">b=1</code> 走不了、为什么 <code class="inl">a&gt;1 and b=1</code> 的 b 只能过滤不能定位、为什么加个索引后某个 <code class="inl">update</code> 突然开始死锁。这一期从「一页 16KB」一路钉到「RR 到底防不防幻读」。</p>
+  <div class="meta">
+    <div><strong>8</strong>层递进</div>
+    <div><strong>8</strong>张原理图</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span class="on">L0 页与表</span><span>L1 树高</span><span>L2 联合索引</span>
+  <span>L3 锁</span><span>L4 MVCC</span><span>L5 排查</span><span>L6 问答</span><span>L7 模拟</span>
+</div>
+
+<!-- ============ L0 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>难度 ★★☆ · 不搞清「页」，后面每句话都是空中楼阁</em></div>
+  <h2>契约层：InnoDB 的世界里只有页，没有行</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    InnoDB 的磁盘 IO 单位是 <strong>16KB 的页</strong>，不是「一行」。所以你读 1 行和读 100 行，如果它们在同一页里，<strong>磁盘成本完全一样</strong>。这一点决定了后面所有设计：索引要做的不是「少读行」，而是<strong>「少读页」</strong>；B+ 树要做的不是「二分查找」，而是<strong>「让一次 IO 干掉一层、把树高压到 3 层」</strong>。同时 InnoDB 是<strong>索引组织表（IOT）</strong>——数据本身就是一个索引，聚簇索引的叶子页里躺着的就是整行，没有「单独的数据文件」这回事。
+  </div>
+
+  <p>先纠正一个几乎人人都说错的表述：「索引是空间换时间，用额外的 B+ 树指向数据行」。在 InnoDB 里，主键索引<strong>不是指向</strong>数据，它<strong>就是</strong>数据。你把 <code class="inl">PRIMARY KEY</code> 换成什么，表的物理存储顺序就跟着变成什么——这也是为什么「用 UUID 当主键」会被面试官追着打：随机主键导致页分裂、页利用率掉到 50%、缓冲池命中率崩盘。</p>
+
+  <h3>一页里到底装了什么</h3>
+
+  <p>把页剖开看，只有两个部件是面试考点：<strong>User Records（行记录，按主键严格有序）</strong>和 <strong>Page Directory（稀疏槽位，每 4~8 条记录一个槽）</strong>。页内查找是「先二分页目录定位到小组，再在组内沿 <code class="inl">next_record</code> 单向链表走」——所以页内不是纯二分，是<strong>二分 + 短链表</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 900 316" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="24" y="24" font-size="12.5" font-weight="700" fill="#0f172a">① 一页 = 16KB，是磁盘 IO 的最小单位</text>
+
+  <rect x="24" y="40" width="200" height="240" rx="8" fill="#ffffff" stroke="#c7d2fe"/>
+  <rect x="32" y="48" width="184" height="24" rx="4" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="124" y="64" text-anchor="middle" font-size="9.5" fill="#1e293b">File Header　38B　页号/校验和</text>
+  <rect x="32" y="74" width="184" height="24" rx="4" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="124" y="90" text-anchor="middle" font-size="9.5" fill="#1e293b">Page Header　56B　槽数/堆顶</text>
+  <rect x="32" y="100" width="184" height="22" rx="4" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="124" y="115" text-anchor="middle" font-size="9" fill="#475569">Infimum / Supremum</text>
+  <rect x="32" y="124" width="184" height="70" rx="4" fill="#f0fdfa" stroke="#5eead4"/>
+  <text x="124" y="146" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">User Records</text>
+  <text x="124" y="162" text-anchor="middle" font-size="9" fill="#0f766e">行记录 · 按主键有序</text>
+  <text x="124" y="178" text-anchor="middle" font-size="9" fill="#0f766e">next_record 单向链表</text>
+  <rect x="32" y="196" width="184" height="32" rx="4" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="124" y="216" text-anchor="middle" font-size="9" fill="#475569">Free Space（新行插这里）</text>
+  <rect x="32" y="230" width="184" height="30" rx="4" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="124" y="242" text-anchor="middle" font-size="9.5" font-weight="700" fill="#991b1b">Page Directory</text>
+  <text x="124" y="255" text-anchor="middle" font-size="8.5" fill="#b91c1c">稀疏槽 · 页内二分靠它</text>
+  <rect x="32" y="262" width="184" height="12" rx="3" fill="#f1f5f9" stroke="#e2e8f0"/>
+  <text x="124" y="271" text-anchor="middle" font-size="7.5" fill="#64748b">File Trailer 8B</text>
+
+  <text x="248" y="132" font-size="9.5" fill="#be123c">一次随机 IO 只读一页</text>
+  <text x="248" y="150" font-size="9.5" fill="#be123c">读 1 行 = 读 100 行（同页）</text>
+
+  <text x="470" y="24" font-size="12.5" font-weight="700" fill="#0f172a">② 同样一页，两种索引装的东西完全不同</text>
+
+  <rect x="470" y="40" width="406" height="106" rx="8" fill="#f0fdfa" stroke="#5eead4"/>
+  <text x="482" y="58" font-size="11" font-weight="700" fill="#065f46">聚簇索引（主键）叶子页 —— 叶子即数据</text>
+  <rect x="482" y="66" width="382" height="22" rx="3" fill="#ffffff" stroke="#99f6e4"/>
+  <text x="492" y="81" font-size="9" fill="#1f2937">id=1 | 张三 | 28 | 南京 | 138**** | 302.00</text>
+  <rect x="482" y="91" width="382" height="22" rx="3" fill="#ffffff" stroke="#99f6e4"/>
+  <text x="492" y="106" font-size="9" fill="#1f2937">id=2 | 李四 | 31 | 杭州 | 139**** | 88.50</text>
+  <rect x="482" y="116" width="382" height="22" rx="3" fill="#ffffff" stroke="#99f6e4"/>
+  <text x="492" y="131" font-size="9" fill="#1f2937">id=3 | 王五 | 25 | 上海 | 137**** | 1200.00</text>
+
+  <rect x="470" y="170" width="406" height="106" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="482" y="188" font-size="11" font-weight="700" fill="#1e3a8a">二级索引 idx_name 叶子页 —— 只存索引列 + 主键</text>
+  <rect x="482" y="196" width="382" height="22" rx="3" fill="#ffffff" stroke="#c7d2fe"/>
+  <text x="492" y="211" font-size="9" fill="#1f2937">『张三』 → id=1</text>
+  <rect x="482" y="221" width="382" height="22" rx="3" fill="#ffffff" stroke="#c7d2fe"/>
+  <text x="492" y="236" font-size="9" fill="#1f2937">『李四』 → id=2</text>
+  <rect x="482" y="246" width="382" height="22" rx="3" fill="#ffffff" stroke="#c7d2fe"/>
+  <text x="492" y="261" font-size="9" fill="#1f2937">『王五』 → id=3</text>
+
+  <text x="24" y="302" font-size="9.5" fill="#64748b">读「王五的余额」：走 idx_name 找到 id=3，再拿 id=3 回聚簇索引取整行 —— 这就是「回表」，两次树查找。</text>
+</svg>
+<figcaption><b>图 1　页结构 &amp; 两种索引的叶子长什么样</b>　叶子页装的是「整行」还是「索引列+主键」，直接决定了回表成本</figcaption>
+</figure>
+
+  <h3>行格式：隐藏列才是 MVCC 的地基</h3>
+
+  <p>Compact 行格式在真实数据前面塞了三样东西：<strong>变长字段长度列表</strong>（倒序）、<strong>NULL 值位图</strong>、<strong>5 字节记录头</strong>（含 <code class="inl">next_record</code> 相对偏移）。另外 InnoDB 还会偷偷加两个隐藏列，这两个是 L4 讲 MVCC 的全部前提：</p>
+
+<pre class="java">
+-- 你以为的表结构
+CREATE TABLE t_user (
+  id   BIGINT PRIMARY KEY,
+  name VARCHAR(64),
+  age  INT
+) ENGINE=InnoDB;
+
+-- InnoDB 眼里的真实结构（隐藏列你看不见，但一定存在）
+--   DB_TRX_ID  6B  ：最后修改这行的事务 ID —— ReadView 拿它做可见性判断
+--   DB_ROLL_PTR 7B ：指向 undo log 中这条记录的上一个版本 —— 版本链的指针
+--   DB_ROW_ID   6B ：仅当表没有主键/唯一非空索引时才有（此时它就是聚簇索引的 key）
+</pre>
+
+  <div class="trap">
+    <b>坑：没有主键的表。</b>InnoDB 会挑第一个「非空唯一索引」当聚簇索引；如果一个都没有，就造一个 6 字节的 <code class="inl">DB_ROW_ID</code> 当主键。后果不是「性能略差」，而是：① 你<strong>无法用主键做任何范围优化</strong>；② 主从复制时 row 格式的 binlog 找不到稳定的行标识，<code class="inl">update</code> 会变成全表扫描匹配；③ 页分裂完全随机。面试里被问「为什么必须建主键」，正确答案是这三条，不是「规范要求」。
+  </div>
+
+  <h3>数量级：一页能装多少行</h3>
+
+  <table>
+    <tr><th>场景</th><th>单行大小</th><th>每页行数</th><th>2000 万行需要叶子页</th></tr>
+    <tr><td>窄表（id + 2 个 int）</td><td>~40 B</td><td>~400</td><td>~5 万页 ≈ 800 MB</td></tr>
+    <tr><td>典型业务表（十几个字段）</td><td>~500 B</td><td>~32</td><td>~62 万页 ≈ 10 GB</td></tr>
+    <tr><td>宽表（含 text / 多 varchar）</td><td>~2 KB</td><td>~8</td><td>~250 万页 ≈ 40 GB</td></tr>
+  </table>
+
+  <p>这张表是下一节的地基：<strong>「一行多大」直接决定树能压多少行</strong>。所以「大字段拆表」不是审美问题，是扇出问题。</p>
+</section>
+
+<!-- ============ L1 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>难度 ★★★ · 能把「3 次 IO」算出来，这一层就过了</em></div>
+  <h2>结构层：为什么是 B+ 树，为什么高度是 3</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    B+ 树的三个设计都是为了<strong>「一次 IO 干掉一层」</strong>：① 非叶子节点<strong>只存 key + 页号</strong>，一个 16KB 页能塞约 <strong>1170</strong> 个指针；② 所有数据只在叶子、叶子之间用双向链表串起来，范围查询<strong>顺序扫页</strong>而不用回溯；③ 树矮而胖，2000 万行的表只有 <strong>3 层</strong>，根页常驻缓冲池，实际查询 <strong>2 次 IO</strong>。
+  </div>
+
+  <h3>把高度算出来，别背结论</h3>
+
+<figure>
+<svg viewBox="0 0 900 404" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a51" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <text x="24" y="22" font-size="12.5" font-weight="700" fill="#0f172a">三层 B+ 树：2000 万行只需 2 次真实 IO</text>
+
+  <rect x="120" y="34" width="150" height="34" rx="6" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="195" y="56" text-anchor="middle" font-size="10" fill="#1e3a8a">根页（常驻内存）</text>
+
+  <rect x="30" y="112" width="140" height="34" rx="6" fill="#e0f2fe" stroke="#7dd3fc"/>
+  <text x="100" y="134" text-anchor="middle" font-size="9.5" fill="#075985">非叶：1170 指针</text>
+  <rect x="200" y="112" width="140" height="34" rx="6" fill="#e0f2fe" stroke="#7dd3fc"/>
+  <text x="270" y="134" text-anchor="middle" font-size="9.5" fill="#075985">非叶：1170 指针</text>
+  <rect x="370" y="112" width="140" height="34" rx="6" fill="#e0f2fe" stroke="#7dd3fc"/>
+  <text x="440" y="134" text-anchor="middle" font-size="9.5" fill="#075985">… 共 1170 个</text>
+
+  <line x1="195" y1="68" x2="100" y2="112" stroke="#94a3b8" marker-end="url(#a51)"/>
+  <line x1="195" y1="68" x2="270" y2="112" stroke="#94a3b8" marker-end="url(#a51)"/>
+  <line x1="195" y1="68" x2="440" y2="112" stroke="#94a3b8" stroke-dasharray="3 3" marker-end="url(#a51)"/>
+
+  <rect x="14" y="196" width="120" height="42" rx="6" fill="#f0fdfa" stroke="#5eead4"/>
+  <text x="74" y="213" text-anchor="middle" font-size="9" fill="#065f46">叶子：16 行</text>
+  <text x="74" y="228" text-anchor="middle" font-size="8.5" fill="#0f766e">16KB / 1KB</text>
+  <rect x="148" y="196" width="120" height="42" rx="6" fill="#f0fdfa" stroke="#5eead4"/>
+  <text x="208" y="213" text-anchor="middle" font-size="9" fill="#065f46">叶子：16 行</text>
+  <text x="208" y="228" text-anchor="middle" font-size="8.5" fill="#0f766e">← → 双向链表</text>
+  <rect x="282" y="196" width="120" height="42" rx="6" fill="#f0fdfa" stroke="#5eead4"/>
+  <text x="342" y="213" text-anchor="middle" font-size="9" fill="#065f46">叶子：16 行</text>
+  <text x="342" y="228" text-anchor="middle" font-size="8.5" fill="#0f766e">顺序扫，不回溯</text>
+  <rect x="416" y="196" width="120" height="42" rx="6" fill="#f0fdfa" stroke="#5eead4"/>
+  <text x="476" y="213" text-anchor="middle" font-size="9" fill="#065f46">叶子：16 行</text>
+  <text x="476" y="228" text-anchor="middle" font-size="8.5" fill="#0f766e">… 共 1170² 页</text>
+
+  <line x1="100" y1="146" x2="74" y2="196" stroke="#94a3b8" marker-end="url(#a51)"/>
+  <line x1="100" y1="146" x2="208" y2="196" stroke="#94a3b8" marker-end="url(#a51)"/>
+  <line x1="270" y1="146" x2="342" y2="196" stroke="#94a3b8" marker-end="url(#a51)"/>
+  <line x1="440" y1="146" x2="476" y2="196" stroke="#94a3b8" stroke-dasharray="3 3" marker-end="url(#a51)"/>
+
+  <text x="24" y="276" font-size="9.5" fill="#64748b">非叶子项 = 主键 8B + 页号 6B = 14B → 16KB / 14B ≈ 1170 个指针</text>
+
+  <rect x="560" y="34" width="316" height="242" rx="10" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="576" y="56" font-size="11.5" font-weight="700" fill="#92400e">容量账本（每层扇出）</text>
+  <text x="576" y="80" font-size="9.5" fill="#78350f">第 3 层（叶子）：1170² × 16 ≈ 2190 万行</text>
+  <text x="576" y="100" font-size="9.5" fill="#78350f">第 2 层：1170² = 136.9 万页</text>
+  <text x="576" y="120" font-size="9.5" fill="#78350f">第 1 层（根）：1170 个指针</text>
+  <line x1="576" y1="132" x2="860" y2="132" stroke="#fcd34d"/>
+  <text x="576" y="154" font-size="9.5" fill="#78350f">一行 1KB → 一页 16 行 → 三层 2190 万</text>
+  <text x="576" y="174" font-size="9.5" fill="#78350f">一行 200B → 一页 80 行 → 三层 1.09 亿</text>
+  <text x="576" y="194" font-size="9.5" fill="#78350f">所以「2000 万」是三层树的分水岭</text>
+  <line x1="576" y1="206" x2="860" y2="206" stroke="#fcd34d"/>
+  <text x="576" y="228" font-size="9.5" font-weight="700" fill="#b91c1c">IO 次数 = 树高 - 1（根在内存）</text>
+  <text x="576" y="248" font-size="9.5" fill="#b91c1c">冷启动：3 次；热查询：2 次；覆盖索引：2 次</text>
+  <text x="576" y="266" font-size="9.5" fill="#b91c1c">回表一次 = 再走一遍树 = 翻倍</text>
+
+  <text x="24" y="322" font-size="9.5" fill="#be123c">关键：非叶节点「不存数据」才可能有 1170 的扇出。B 树非叶存行 → 扇出掉到几十 → 树高 5~6 层 → 5 次 IO。</text>
+  <text x="24" y="344" font-size="9.5" fill="#be123c">范围查询：B+ 树走到起始叶子后沿链表右扫，全程顺序 IO；B 树要中序回溯，在磁盘上就是来回随机跳。</text>
+  <text x="24" y="372" font-size="9.5" fill="#64748b">二叉树（红黑树/AVL）在这张表上是灾难：log2(2000 万) ≈ 24 层，24 次随机 IO，早被淘汰。</text>
+  <text x="24" y="392" font-size="9.5" fill="#64748b">跳表（Redis 的选择）每层节点在磁盘上随机分布，每层一次随机 IO，同样是几十次 —— 只适合纯内存。</text>
+</svg>
+<figcaption><b>图 2　三层 B+ 树的容量与 IO 账本</b>　把 1170 × 1170 × 16 记住，比背「三层两千万」有用得多</figcaption>
+</figure>
+
+  <h3>为什么不选另外三个</h3>
+
+  <table>
+    <tr><th>结构</th><th>为什么不行（面试要答的）</th><th>什么场景它反而对</th></tr>
+    <tr><td>B 树</td><td>非叶节点也存行 → 扇出骤降 → 树高升到 5~6；范围查询要中序回溯，随机 IO</td><td>几乎无。B 树适合「key 少、全量常驻内存」</td></tr>
+    <tr><td>哈希索引</td><td>只支持等值，<strong>不支持范围、排序、最左前缀</strong>；哈希冲突退化链表</td><td>Memory 引擎；InnoDB 的 AHI（自适应哈希）只对等值热点自动加</td></tr>
+    <tr><td>跳表</td><td>节点分散，每层一次<strong>随机</strong> IO；B+ 树一个页装 1170 个指针，一次 IO 灭一层</td><td>纯内存有序集合（Redis ZSet）</td></tr>
+    <tr><td>红黑树 / AVL</td><td>二叉树，2000 万行 24 层，24 次 IO</td><td>内存中的有序 Map（TreeMap）</td></tr>
+  </table>
+
+  <div class="warn">
+    <b>AHI（自适应哈希索引）的真相：</b>它是 InnoDB 在内存里<strong>自动</strong>为热点等值查询建的哈希表，命中时确实只 1 次查找。但 ① 你无法手动干预、无法强制；② 它和缓冲池抢内存；③ 高并发下 <code class="inl">rw-latch</code> 争用反而可能变慢。所以 <code class="inl">innodb_adaptive_hash_index=OFF</code> 在不少互联网公司是默认操作。<strong>面试里说「InnoDB 有哈希索引」不算错，但要补上这三句，否则就是背了个名词。</strong>
+  </div>
+
+  <h3>一次等值查询的完整 IO 路径</h3>
+
+<pre class="java">
+// SELECT * FROM t_user WHERE name = '王五';   -- idx_name 二级索引
+
+第 0 步  优化器：idx_name 的 cardinality 够高、等值条件 → 选 ref 访问
+第 1 步  根页（page_no=3）：缓冲池命中 → 0 次磁盘 IO
+         页内：二分 Page Directory(7 次比较) → 组内走 next_record
+         得到子页号 57
+第 2 步  读 page 57（非叶）→ 【第 1 次 IO】
+         同样二分 → 子页号 812
+第 3 步  读 page 812（叶子）→ 【第 2 次 IO】
+         页内二分 → 拿到索引项 ('王五', id=3)
+第 4 步  ⚠️ 因为要 SELECT *，必须回表：拿着 id=3 再走一遍聚簇索引
+         → 【第 3 次 IO】+【第 4 次 IO】
+         共 4 次 IO
+
+// 改成 SELECT id, name FROM t_user WHERE name='王五';
+// idx_name 已包含 name 和 id → 不需要回表 → Extra: Using index
+// 只剩 2 次 IO。这就是「覆盖索引」的全部秘密：省的不是 CPU，是 IO 次数。
+</pre>
+
+  <p>把这段背下来，你就能回答 90% 的「索引为什么快」：<strong>不是二分查找快，是把 N 次随机 IO 压成了常数 3~4 次</strong>。全表扫描 2000 万行、每行 200B，按页算是 62 万次 IO——这才是真正的差距来源。</p>
+</section>
+
+<!-- ============ L2 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>难度 ★★★★ · 「最左前缀」不是规则，是排序的必然结果</em></div>
+  <h2>使用层：联合索引、索引下推、覆盖索引、失效清单</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    联合索引 <code class="inl">(a,b,c)</code> 在磁盘上就是<strong>按 a 排序、a 相同按 b 排序、b 相同按 c 排序</strong>的一份有序列表。所以「最左前缀」根本不是什么优化器规则，而是<strong>「只有前缀连续的一段才是连续存储的」这个物理事实</strong>。<code class="inl">b=1</code> 走不了索引，因为 b 在整个列表里是<strong>跳跃重复</strong>的，找不到一个连续区间。
+  </div>
+
+  <h3>看一遍物理布局，胜过背十条规则</h3>
+
+<figure>
+<svg viewBox="0 0 900 356" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a52" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">
+      <path d="M0,0 L5,2.5 L0,5 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <text x="24" y="22" font-size="12.5" font-weight="700" fill="#0f172a">KEY idx_abc (a, b, c) 的真实存储顺序</text>
+
+  <rect x="24" y="34" width="404" height="24" rx="4" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="70" y="50" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1e3a8a">a</text>
+  <text x="172" y="50" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1e3a8a">b</text>
+  <text x="274" y="50" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1e3a8a">c</text>
+  <text x="376" y="50" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1e3a8a">id</text>
+
+  <rect x="24" y="58" width="404" height="26" rx="3" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="70" y="75" text-anchor="middle" font-size="9.5" fill="#166534">1</text><text x="172" y="75" text-anchor="middle" font-size="9.5" fill="#166534">1</text><text x="274" y="75" text-anchor="middle" font-size="9.5" fill="#166534">1</text><text x="376" y="75" text-anchor="middle" font-size="9.5" fill="#166534">11</text>
+  <rect x="24" y="84" width="404" height="26" rx="3" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="70" y="101" text-anchor="middle" font-size="9.5" fill="#166534">1</text><text x="172" y="101" text-anchor="middle" font-size="9.5" fill="#166534">1</text><text x="274" y="101" text-anchor="middle" font-size="9.5" fill="#166534">5</text><text x="376" y="101" text-anchor="middle" font-size="9.5" fill="#166534">12</text>
+  <rect x="24" y="110" width="404" height="26" rx="3" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="70" y="127" text-anchor="middle" font-size="9.5" fill="#166534">1</text><text x="172" y="127" text-anchor="middle" font-size="9.5" fill="#166534">2</text><text x="274" y="127" text-anchor="middle" font-size="9.5" fill="#166534">3</text><text x="376" y="127" text-anchor="middle" font-size="9.5" fill="#166534">13</text>
+  <rect x="24" y="136" width="404" height="26" rx="3" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="70" y="153" text-anchor="middle" font-size="9.5" fill="#166534">1</text><text x="172" y="153" text-anchor="middle" font-size="9.5" fill="#166534">2</text><text x="274" y="153" text-anchor="middle" font-size="9.5" fill="#166534">7</text><text x="376" y="153" text-anchor="middle" font-size="9.5" fill="#166534">14</text>
+  <rect x="24" y="162" width="404" height="26" rx="3" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="70" y="179" text-anchor="middle" font-size="9.5" fill="#166534">1</text><text x="172" y="179" text-anchor="middle" font-size="9.5" fill="#166534">3</text><text x="274" y="179" text-anchor="middle" font-size="9.5" fill="#166534">2</text><text x="376" y="179" text-anchor="middle" font-size="9.5" fill="#166534">15</text>
+  <rect x="24" y="188" width="404" height="26" rx="3" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="70" y="205" text-anchor="middle" font-size="9.5" fill="#334155">2</text><text x="172" y="205" text-anchor="middle" font-size="9.5" fill="#334155">1</text><text x="274" y="205" text-anchor="middle" font-size="9.5" fill="#334155">4</text><text x="376" y="205" text-anchor="middle" font-size="9.5" fill="#334155">16</text>
+  <rect x="24" y="214" width="404" height="26" rx="3" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="70" y="231" text-anchor="middle" font-size="9.5" fill="#334155">2</text><text x="172" y="231" text-anchor="middle" font-size="9.5" fill="#334155">2</text><text x="274" y="231" text-anchor="middle" font-size="9.5" fill="#334155">9</text><text x="376" y="231" text-anchor="middle" font-size="9.5" fill="#334155">17</text>
+  <rect x="24" y="240" width="404" height="26" rx="3" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="70" y="257" text-anchor="middle" font-size="9.5" fill="#9a3412">3</text><text x="172" y="257" text-anchor="middle" font-size="9.5" fill="#9a3412">1</text><text x="274" y="257" text-anchor="middle" font-size="9.5" fill="#9a3412">6</text><text x="376" y="257" text-anchor="middle" font-size="9.5" fill="#9a3412">18</text>
+
+  <text x="24" y="288" font-size="9" fill="#64748b">a 只有 1/2/3 三段连续；b 在全局是 1,1,2,2,3,1,2,1 —— 跳跃重复</text>
+  <text x="24" y="306" font-size="9" fill="#be123c">b 列没有全局有序性 → 无法二分 → 无法定位连续区间</text>
+
+  <rect x="452" y="34" width="424" height="70" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="464" y="52" font-size="9.5" font-weight="700" fill="#166534">① WHERE a=1 AND b=2 　✓ 完整三列</text>
+  <text x="464" y="70" font-size="9" fill="#166534">a=1,b=2 是一段连续区间 (13,14 两行)</text>
+  <text x="464" y="88" font-size="9" fill="#166534">两列都用于定位；若再 AND c=7，c 也能定位</text>
+
+  <rect x="452" y="114" width="424" height="70" rx="8" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="464" y="132" font-size="9.5" font-weight="700" fill="#92400e">② WHERE a=1 AND c=7 　△ 跳过 b</text>
+  <text x="464" y="150" font-size="9" fill="#92400e">只能定位 a=1 的 5 行；c 在索引里无序</text>
+  <text x="464" y="168" font-size="9" fill="#92400e">→ ICP 在索引上逐行筛 c=7，减少回表</text>
+
+  <rect x="452" y="194" width="424" height="70" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+  <text x="464" y="212" font-size="9.5" font-weight="700" fill="#be123c">③ WHERE b=2 　✗ 没有前缀</text>
+  <text x="464" y="230" font-size="9" fill="#be123c">b 全局无序 → 无法二分 → 全表扫描</text>
+  <text x="464" y="248" font-size="9" fill="#be123c">除非能建 (b) 或 (b,a) 的独立索引</text>
+
+  <rect x="452" y="274" width="424" height="70" rx="8" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="464" y="292" font-size="9.5" font-weight="700" fill="#92400e">④ WHERE a&gt;1 AND b=1 　△ 范围截断</text>
+  <text x="464" y="310" font-size="9" fill="#92400e">a 是范围 → b 不再有序 → b 只能过滤</text>
+  <text x="464" y="328" font-size="9" fill="#92400e">「范围之后的所有列都只能过滤，不能定位」</text>
+</svg>
+<figcaption><b>图 3　联合索引的物理排序与四种查询的命中情况</b>　最左前缀 = 「能不能找到连续区间」，与优化器无关</figcaption>
+</figure>
+
+  <h3>索引下推：MySQL 5.6 才有的「少回表」</h3>
+
+  <p>没有 ICP 时，<code class="inl">WHERE a=1 AND c=7</code> 的执行过程是：走索引拿到 a=1 的 5 条记录 → <strong>逐条回表</strong>取整行 → 用 c=7 过滤 → 只剩 1 条。5 次回表只为留下 1 条，浪费了 4 次。</p>
+
+  <p>有了 ICP（Index Condition Pushdown，5.6+），优化器把 <code class="inl">c=7</code> <strong>下推到索引层</strong>——虽然 c 不能用二分定位，但索引项里就带着 c 的值，可以就地比较、筛掉 4 条，只回表 1 次。EXPLAIN 的 <code class="inl">Extra</code> 显示 <code class="inl">Using index condition</code>。</p>
+
+<figure>
+<svg viewBox="0 0 900 348" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a53" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <text x="24" y="22" font-size="11.5" font-weight="700" fill="#0f172a">① 普通二级索引（无覆盖）→ 每条都要回表</text>
+  <rect x="24" y="34" width="176" height="46" rx="6" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="112" y="53" text-anchor="middle" font-size="9.5" fill="#1e3a8a">idx_name 叶子页</text>
+  <text x="112" y="70" text-anchor="middle" font-size="8.5" fill="#4338ca">5 个索引项</text>
+  <line x1="200" y1="57" x2="246" y2="57" stroke="#64748b" marker-end="url(#a53)"/>
+  <rect x="250" y="34" width="196" height="46" rx="6" fill="#fff5f6" stroke="#f5ccd4"/>
+  <text x="348" y="53" text-anchor="middle" font-size="9.5" fill="#be123c">回表 5 次</text>
+  <text x="348" y="70" text-anchor="middle" font-size="8.5" fill="#9f1239">每次 = 走一遍聚簇索引</text>
+  <line x1="446" y1="57" x2="492" y2="57" stroke="#64748b" marker-end="url(#a53)"/>
+  <rect x="496" y="34" width="176" height="46" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="584" y="53" text-anchor="middle" font-size="9.5" fill="#334155">剩 1 行</text>
+  <text x="584" y="70" text-anchor="middle" font-size="8.5" fill="#64748b">4 次 IO 白花</text>
+  <text x="692" y="53" font-size="9.5" font-weight="700" fill="#be123c">IO ≈ 2 + 5×2</text>
+  <text x="692" y="72" font-size="8.5" fill="#9f1239">≈ 12 次</text>
+
+  <text x="24" y="112" font-size="11.5" font-weight="700" fill="#0f172a">② 覆盖索引：SELECT 的列全在索引里 → 不回表</text>
+  <rect x="24" y="124" width="176" height="46" rx="6" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="112" y="143" text-anchor="middle" font-size="9.5" fill="#1e3a8a">idx_name 叶子页</text>
+  <text x="112" y="160" text-anchor="middle" font-size="8.5" fill="#4338ca">name + id 都在</text>
+  <line x1="200" y1="147" x2="246" y2="147" stroke="#64748b" marker-end="url(#a53)"/>
+  <rect x="250" y="124" width="196" height="46" rx="6" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="348" y="143" text-anchor="middle" font-size="9.5" fill="#166534">直接返回，0 次回表</text>
+  <text x="348" y="160" text-anchor="middle" font-size="8.5" fill="#15803d">Extra: Using index</text>
+  <line x1="446" y1="147" x2="492" y2="147" stroke="#64748b" marker-end="url(#a53)"/>
+  <rect x="496" y="124" width="176" height="46" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="584" y="143" text-anchor="middle" font-size="9.5" fill="#334155">1 行</text>
+  <text x="584" y="160" text-anchor="middle" font-size="8.5" fill="#64748b">成本只有索引树</text>
+  <text x="692" y="143" font-size="9.5" font-weight="700" fill="#15803d">IO ≈ 2 次</text>
+  <text x="692" y="162" font-size="8.5" fill="#15803d">降 80%</text>
+
+  <text x="24" y="204" font-size="11.5" font-weight="700" fill="#0f172a">③ 索引下推 ICP：先在索引上筛，能少回就少回</text>
+  <rect x="24" y="216" width="176" height="46" rx="6" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="112" y="235" text-anchor="middle" font-size="9.5" fill="#1e3a8a">idx_abc 叶子页</text>
+  <text x="112" y="252" text-anchor="middle" font-size="8.5" fill="#4338ca">a=1 命中 5 项</text>
+  <line x1="200" y1="239" x2="246" y2="239" stroke="#64748b" marker-end="url(#a53)"/>
+  <rect x="250" y="216" width="196" height="46" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="348" y="235" text-anchor="middle" font-size="9.5" fill="#92400e">就地比较 c=7</text>
+  <text x="348" y="252" text-anchor="middle" font-size="8.5" fill="#a16207">Using index condition</text>
+  <line x1="446" y1="239" x2="492" y2="239" stroke="#64748b" marker-end="url(#a53)"/>
+  <rect x="496" y="216" width="176" height="46" rx="6" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="584" y="235" text-anchor="middle" font-size="9.5" fill="#166534">只回表 1 次</text>
+  <text x="584" y="252" text-anchor="middle" font-size="8.5" fill="#15803d">筛掉 4 条</text>
+  <text x="692" y="235" font-size="9.5" font-weight="700" fill="#b45309">IO ≈ 2 + 1×2</text>
+  <text x="692" y="254" font-size="8.5" fill="#a16207">≈ 4 次</text>
+
+  <rect x="24" y="286" width="852" height="46" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="40" y="305" font-size="9.5" fill="#334155">三者的关系不是互斥：覆盖索引决定「要不要回表」，ICP 决定「回表几次」，前缀索引决定「能不能覆盖」。</text>
+  <text x="40" y="323" font-size="9.5" fill="#be123c">注意：ICP 只对二级索引有效（聚簇索引本来就要读整行，无「下推」可言），且只下推 WHERE 条件，不下推 SELECT 列。</text>
+</svg>
+<figcaption><b>图 4　回表 / 覆盖索引 / 索引下推的成本对比</b>　一条 SQL 的 IO 次数，是可以算出来的，不是玄学</figcaption>
+</figure>
+
+  <h3>排序也是索引：ORDER BY 的三个坑</h3>
+
+<pre>
+-- 索引 (a, b, c)
+WHERE a=1 ORDER BY b        -- ✓ 走索引顺序，无 filesort
+WHERE a=1 ORDER BY b, c     -- ✓ 同上
+WHERE a=1 ORDER BY c        -- ✗ 跳过 b，必须 filesort
+WHERE a>1 ORDER BY b        -- ✗ a 是范围，b 不再全局有序 → filesort
+WHERE a=1 ORDER BY b DESC, c ASC   -- ✗ 8.0 之前方向不一致必 filesort
+
+-- 8.0 新增降序索引：INDEX idx (a, b DESC, c ASC) 才能真正消除
+-- 8.0 起支持索引反向扫描（backward index scan）：ORDER BY b DESC 可直接倒着读索引
+</pre>
+
+  <div class="trap">
+    <b>坑：<code class="inl">ORDER BY ... LIMIT 20</code> 并不是只排 20 行。</b>如果有 <code class="inl">WHERE</code> 条件且走不了索引排序，MySQL 要先把<strong>所有匹配行</strong>取出来排完，再取前 20 行。除非用的是<strong>优先队列排序</strong>（<code class="inl">ORDER BY</code> 列 + <code class="inl">LIMIT</code> 且排序缓冲区不够时的优化）或者本身走索引有序。这就是「深分页」慢的根因之一，L7 会算这笔账。
+  </div>
+
+  <h3>索引失效清单（面试必背的七条）</h3>
+
+  <table>
+    <tr><th>写法</th><th>为什么失效</th><th>怎么改</th></tr>
+    <tr><td><code>WHERE YEAR(create_time)=2026</code></td><td>列被函数包裹，索引里存的是原值，B+ 树有序性被破坏</td><td>改写成 <code>create_time &gt;= '2026-01-01' AND &lt; '2027-01-01'</code></td></tr>
+    <tr><td><code>WHERE phone = 13800000000</code>（phone 是 varchar）</td><td>字符串列遇数字 → 把<strong>列</strong>转成 double 比较 → 等价于对列用函数</td><td>加引号 <code>phone = '13800000000'</code></td></tr>
+    <tr><td><code>WHERE id = '100'</code>（id 是 int）</td><td>数字列遇字符串 → 把<strong>常量</strong>转成数字 → 列不变，<strong>索引仍有效</strong></td><td>无需改（但要理解方向差异，面试高频追问）</td></tr>
+    <tr><td><code>WHERE name LIKE '%三'</code></td><td>左侧不确定 → 无法二分定位起始位置</td><td>只能 <code>'三%'</code>；或上 ES / 倒排</td></tr>
+    <tr><td><code>WHERE a=1 OR b=2</code>（只有 a 有索引）</td><td>OR 要求两侧都能走索引，否则退化为全表</td><td>给 b 也建索引，或拆成两条 UNION</td></tr>
+    <tr><td><code>WHERE a != 1</code> / <code>NOT IN</code></td><td>不等于意味着「多个不连续区间」，通常直接全表</td><td>改成 <code>a &gt; 1 OR a &lt; 1</code> 也没用，换思路（覆盖索引）</td></tr>
+    <tr><td><code>ORDER BY RAND()</code> / 隐式字符集不一致的 JOIN</td><td>前者必然临时表 + filesort；后者 JOIN 列被隐式转换</td><td>后者统一 <code>utf8mb4</code> + <code>utf8mb4_0900_ai_ci</code></td></tr>
+  </table>
+
+  <div class="warn">
+    <b>隐式转换的方向必须讲清，这是区分「背过」和「懂了」的关键：</b>MySQL 比较字符串和数字时，规则是<strong>「把字符串转成数字」</strong>。所以 <code class="inl">varchar_col = 123</code> 等价于 <code class="inl">CAST(varchar_col AS DOUBLE) = 123</code>——列被函数包了，索引废。<br>反过来 <code class="inl">int_col = '123'</code> 等价于 <code class="inl">int_col = CAST('123' AS SIGNED)</code>——常量被转，列没动，<strong>索引照样走</strong>。<strong>「索引失效只发生在列被转换的那一侧」</strong>，这句话能一次性干掉面试官三个连环追问。
+  </div>
+
+  <h3>选择性：不是所有列都配拥有索引</h3>
+
+  <p><code class="inl">cardinality / 总行数</code> 就是选择性。<code class="inl">status</code>（只有 3 个值）、<code class="inl">sex</code>（2 个值）的选择性接近 0——优化器算一下发现「回表 2000 万次还不如全表扫」，直接<strong>拒绝使用你的索引</strong>。经验阈值：<strong>选择性 &lt; 10% 的列，单列索引基本是负担</strong>，应该做联合索引的一部分，或者根本别建。</p>
+
+<pre>
+-- 看选择性：cardinality 是采样估算，重复 ANALYZE TABLE 会更准
+SELECT
+  COUNT(DISTINCT user_id) / COUNT(*) AS sel_user_id,   -- ≈ 0.8  好
+  COUNT(DISTINCT status)  / COUNT(*) AS sel_status     -- ≈ 0.00001  差
+FROM t_order;
+
+-- 前缀索引：长字符串只索引前 N 位，省空间但失去覆盖能力
+ALTER TABLE t_user ADD INDEX idx_name10 (name(10));
+-- 代价：SELECT name ... 无法使用覆盖索引（索引里没有完整 name）
+-- 找合适的 N：让 COUNT(DISTINCT LEFT(name,N)) / COUNT(*) 接近 1
+</pre>
+</section>
+
+<!-- ============ L3 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>难度 ★★★★ · 锁加在索引上，不是加在行上</em></div>
+  <h2>并发层：记录锁 / 间隙锁 / 临键锁与加锁规则</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    InnoDB 的行锁<strong>是加在索引项上的</strong>，不是加在「行」上。<code class="inl">UPDATE t SET x=1 WHERE name='张三'</code> 如果 name 没索引，InnoDB 会<strong>扫全表并把每一条记录都锁住</strong>（实际是锁住所有 next-key），效果等于表锁，但表面上看还能读写其他行——直到你并发起来才发现全堵死。这是线上「加了个 update 就雪崩」的头号原因。
+  </div>
+
+  <h3>三种锁的几何形状</h3>
+
+<figure>
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="24" y="22" font-size="12.5" font-weight="700" fill="#0f172a">表里主键只有 1、5、10 三行：锁到底锁住了哪一段？</text>
+
+  <line x1="60" y1="70" x2="860" y2="70" stroke="#cbd5e1" stroke-width="1.5"/>
+  <circle cx="180" cy="70" r="7" fill="#0f172a"/><text x="180" y="56" text-anchor="middle" font-size="10" fill="#0f172a">1</text>
+  <circle cx="420" cy="70" r="7" fill="#0f172a"/><text x="420" y="56" text-anchor="middle" font-size="10" fill="#0f172a">5</text>
+  <circle cx="660" cy="70" r="7" fill="#0f172a"/><text x="660" y="56" text-anchor="middle" font-size="10" fill="#0f172a">10</text>
+  <text x="120" y="88" text-anchor="middle" font-size="8.5" fill="#94a3b8">(-∞,1)</text>
+  <text x="300" y="88" text-anchor="middle" font-size="8.5" fill="#94a3b8">(1,5)</text>
+  <text x="540" y="88" text-anchor="middle" font-size="8.5" fill="#94a3b8">(5,10)</text>
+  <text x="780" y="88" text-anchor="middle" font-size="8.5" fill="#94a3b8">(10,+∞)</text>
+
+  <text x="24" y="126" font-size="10.5" font-weight="700" fill="#166534">Record Lock</text>
+  <text x="24" y="143" font-size="8.5" fill="#15803d">锁索引记录本身</text>
+  <rect x="408" y="132" width="24" height="16" rx="3" fill="#bbf7d0" stroke="#16a34a"/>
+  <text x="500" y="145" font-size="9" fill="#166534">唯一索引等值命中 → 退化为记录锁（只锁 id=5 这一条）</text>
+
+  <text x="24" y="190" font-size="10.5" font-weight="700" fill="#b45309">Gap Lock</text>
+  <text x="24" y="207" font-size="8.5" fill="#a16207">锁「开区间」，不含端点</text>
+  <rect x="426" y="194" width="228" height="18" rx="3" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="540" y="207" text-anchor="middle" font-size="9" fill="#92400e">(5, 10)</text>
+  <text x="680" y="207" font-size="9" fill="#a16207">→ 挡住 id=7 插入；但更新 id=5 不受影响</text>
+
+  <text x="24" y="254" font-size="10.5" font-weight="700" fill="#be123c">Next-Key Lock</text>
+  <text x="24" y="271" font-size="8.5" fill="#9f1239">Record + Gap，左开右闭</text>
+  <rect x="414" y="258" width="252" height="18" rx="3" fill="#fecdd3" stroke="#f43f5e"/>
+  <text x="540" y="271" text-anchor="middle" font-size="9" fill="#9f1239">(1, 5]</text>
+  <text x="690" y="271" font-size="9" fill="#be123c">→ 锁 id=5 且禁止往 (1,5) 插；RR 默认行为</text>
+
+  <text x="24" y="306" font-size="9.5" fill="#64748b">RC 隔离级别下几乎不加 Gap Lock（仅外键检查与唯一性检查例外）→ 并发高、但有幻读。这是「互联网公司用 RC」的核心原因。</text>
+</svg>
+<figcaption><b>图 5　三种行锁的加锁区间</b>　记住「左开右闭」这四个字，判死锁的题能直接秒</figcaption>
+</figure>
+
+  <h3>加锁规则（五条，能覆盖 95% 的面试题）</h3>
+
+  <ol>
+    <li><strong>加锁的基本单位是 next-key lock</strong>，即 <code class="inl">(前一条记录, 当前记录]</code>。RR 下默认如此。</li>
+    <li><strong>唯一索引等值命中且记录存在 → 退化为记录锁</strong>。例如 <code class="inl">id=5</code> 只锁 5，不锁 (1,5)。</li>
+    <li><strong>唯一索引等值但记录不存在 → 退化为间隙锁</strong>。例如 <code class="inl">id=7</code> 不存在，锁住 (5,10)，防止别人插 7。</li>
+    <li><strong>非唯一索引（包括普通二级索引）等值 → next-key lock 且会向右扩展到第一个不满足条件的值</strong>。这是最容易踩的一条。</li>
+    <li><strong>范围查询 → 从第一个满足的索引项开始，到第一个不满足的项为止，全部 next-key</strong>。所以 <code class="inl">id&gt;=5 AND id&lt;10</code> 锁的是 (1,5] 和 (5,10] 两段。</li>
+  </ol>
+
+<pre>
+-- 环境：CREATE TABLE t (id INT PRIMARY KEY, c INT, KEY idx_c(c));
+--      数据：(1,10) (5,25) (10,39) (15,23) (20,8)
+
+-- 【题 1】RC 下：UPDATE t SET c=100 WHERE c=25;
+--   idx_c 等值命中 c=25 → 记录锁，只锁 (5,25) 这一条
+
+-- 【题 2】RR 下：UPDATE t SET c=100 WHERE c=25;
+--   c 是普通索引 → next-key lock，锁住 (10,25]? 不，是锁 (10, 25] 与 (25, 39]
+--   实际：idx_c 上锁 (10,25] 和 (25,39]，因为要防止 25 附近插入新的 c=25
+
+-- 【题 3】RR 下：SELECT * FROM t WHERE id=7 FOR UPDATE;
+--   id=7 不存在（唯一索引等值未命中）→ 间隙锁 (5,10)
+--   别人 INSERT id=6 会被阻塞，INSERT id=11 不受影响
+
+-- 【题 4】RR 下：SELECT * FROM t WHERE c=25 FOR UPDATE;
+--   c 是普通索引，且 c=25 只有一行 → next-key (10,25] + gap (25,39]?
+
+-- 【题 5】WHERE 没有索引：UPDATE t SET c=1 WHERE c=1 AND id=1;
+--   ⚠️ 如果 c 没索引（本例有），条件里的 c 用不上 → 全表扫 → 锁全部 next-key
+--   并发 insert 全部阻塞，表现为「莫名其妙的表锁」
+</pre>
+
+  <div class="trap">
+    <b>坑：意向锁不是给你用的。</b><code class="inl">IS</code>/<code class="inl">IX</code> 是<strong>表级</strong>锁，由 InnoDB 在加行锁前自动加，唯一作用是让「<code class="inl">LOCK TABLES ... WRITE</code>」这类表锁能<strong>快速判断「表里有没有行锁」</strong>，不用逐行扫。它的兼容矩阵是：IS 和 IX 互相兼容（因为可以同时有多行被不同事务锁住），只有 X 表锁才和它们冲突。<strong>面试问「意向锁会不会阻塞 DML」——答案是「不会，IX 之间不冲突」。</strong>
+  </div>
+
+  <h3>死锁：两个事务不同顺序更新</h3>
+
+<pre>
+-- 事务 A                          -- 事务 B
+BEGIN;                            BEGIN;
+UPDATE t SET v=1 WHERE id=1;      UPDATE t SET v=2 WHERE id=2;   -- 各自拿到记录锁
+UPDATE t SET v=1 WHERE id=2;      UPDATE t SET v=2 WHERE id=1;   -- 互相等待 → 死锁
+                                  -- ERROR 1213 (40001): Deadlock found
+
+-- InnoDB 的处理：开启 innodb_deadlock_detect（默认 ON）时主动检测，
+-- 回滚「代价小」的那个事务（按 undo 量估算），另一个继续。
+-- 8.0 起 innodb_deadlock_detect 可动态关闭，改用 innodb_lock_wait_timeout 兜底
+-- 关闭检测适合「热点行冲突极多」的场景，用超时（默认 50s）换吞吐
+
+-- 根治：所有业务按同一顺序加锁（先锁小 id）；或用乐观锁/分布式锁前置串行化
+</pre>
+
+  <p>面试里答死锁要分三层：<strong>① 现象</strong>（1213 报错 / <code class="inl">SHOW ENGINE INNODB STATUS</code> 里 <code class="inl">LATEST DETECTED DEADLOCK</code>）；<strong>② 机制</strong>（等待图 + 环检测，或超时）；<strong>③ 治理</strong>（统一加锁顺序 &gt; 缩小事务 &gt; 降隔离级别到 RC &gt; 关掉检测用超时兜底）。只答第三层是背答案，三层都答是懂原理。</p>
+</section>
+
+<!-- ============ L4 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>难度 ★★★★★ · 本期真正的分水岭，答错这里基本就废了</em></div>
+  <h2>隔离层：MVCC 版本链、ReadView 四字段、RR 与幻读</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    MVCC 的全部机制只有两句话：<strong>① 每行数据通过 <code class="inl">DB_ROLL_PTR</code> 挂了一条 undo 版本链</strong>（历史版本不删，只挂链）；<strong>② 每次「快照读」拿一个 ReadView 当尺子，量一下链上哪个版本对我可见</strong>。RC 和 RR 的唯一差别是<strong>这把尺子造几次</strong>：RC 每条 SELECT 造一把新的（所以能看到别人已提交的修改）；RR 只在事务里第一次 SELECT 造一把，之后一直用（所以可重复读）。
+  </div>
+
+  <h3>版本链：数据不是被覆盖，是被挂上去</h3>
+
+<figure>
+<svg viewBox="0 0 900 424" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a54" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <text x="24" y="22" font-size="12" font-weight="700" fill="#0f172a">① undo 版本链：每次更新都挂一个新版本，ROLL_PTR 指向上一个</text>
+
+  <rect x="24" y="34" width="196" height="78" rx="8" fill="#f0fdfa" stroke="#5eead4"/>
+  <text x="122" y="52" text-anchor="middle" font-size="9.5" font-weight="700" fill="#065f46">当前行（最新）</text>
+  <text x="122" y="68" text-anchor="middle" font-size="9" fill="#0f766e">name = '王五'</text>
+  <text x="122" y="84" text-anchor="middle" font-size="9" fill="#0f766e">DB_TRX_ID = 100</text>
+  <text x="122" y="100" text-anchor="middle" font-size="8.5" fill="#0f766e">ROLL_PTR → 版本 90</text>
+
+  <rect x="252" y="34" width="196" height="78" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="350" y="52" text-anchor="middle" font-size="9.5" fill="#334155">undo 版本 90</text>
+  <text x="350" y="68" text-anchor="middle" font-size="9" fill="#475569">name = '李四'</text>
+  <text x="350" y="84" text-anchor="middle" font-size="9" fill="#475569">DB_TRX_ID = 90</text>
+  <text x="350" y="100" text-anchor="middle" font-size="8.5" fill="#64748b">已提交</text>
+
+  <rect x="480" y="34" width="196" height="78" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="578" y="52" text-anchor="middle" font-size="9.5" fill="#334155">undo 版本 80</text>
+  <text x="578" y="68" text-anchor="middle" font-size="9" fill="#475569">name = '张三'</text>
+  <text x="578" y="84" text-anchor="middle" font-size="9" fill="#475569">DB_TRX_ID = 80</text>
+  <text x="578" y="100" text-anchor="middle" font-size="8.5" fill="#64748b">已提交</text>
+
+  <rect x="708" y="34" width="168" height="78" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="792" y="52" text-anchor="middle" font-size="9.5" fill="#334155">更早版本…</text>
+  <text x="792" y="68" text-anchor="middle" font-size="9" fill="#475569">直到事务 70 插入时</text>
+  <text x="792" y="84" text-anchor="middle" font-size="8.5" fill="#64748b">链尾 = 插入版本</text>
+
+  <line x1="220" y1="73" x2="250" y2="73" stroke="#94a3b8" marker-end="url(#a54)"/>
+  <line x1="448" y1="73" x2="478" y2="73" stroke="#94a3b8" marker-end="url(#a54)"/>
+  <line x1="676" y1="73" x2="706" y2="73" stroke="#94a3b8" marker-end="url(#a54)"/>
+
+  <text x="24" y="132" font-size="12" font-weight="700" fill="#0f172a">② ReadView：一把「量可见性」的尺子，四个字段</text>
+
+  <rect x="24" y="146" width="336" height="150" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="40" y="166" font-size="10" font-weight="700" fill="#1e3a8a">m_ids</text>
+  <text x="120" y="166" font-size="9" fill="#3730a3">生成快照时「尚未提交」的事务 ID 集合</text>
+  <text x="40" y="186" font-size="10" font-weight="700" fill="#1e3a8a">min_trx_id</text>
+  <text x="120" y="186" font-size="9" fill="#3730a3">m_ids 里的最小值（活跃事务下界）</text>
+  <text x="40" y="206" font-size="10" font-weight="700" fill="#1e3a8a">max_trx_id</text>
+  <text x="120" y="206" font-size="9" fill="#3730a3">下一个要分配的事务 ID（不是最大值！）</text>
+  <text x="40" y="226" font-size="10" font-weight="700" fill="#1e3a8a">creator_trx_id</text>
+  <text x="120" y="226" font-size="9" fill="#3730a3">创建这个 ReadView 的事务自己</text>
+  <text x="40" y="252" font-size="9" fill="#be123c">示例：m_ids=[90,100]  min=90  max=101  creator=105</text>
+  <text x="40" y="272" font-size="9" fill="#be123c">→ 事务 100 未提交，它改的版本对别人不可见</text>
+  <text x="40" y="289" font-size="9" fill="#64748b">（max_trx_id 是「下一个」，所以 ≥ max 的一定不可见）</text>
+
+  <text x="392" y="162" font-size="11" font-weight="700" fill="#0f172a">可见性判定（对链上每个版本依次比）</text>
+
+  <rect x="392" y="172" width="486" height="34" rx="6" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="404" y="194" font-size="9.2" fill="#166534">① trx_id == creator_trx_id → 自己改的，可见 ✔</text>
+
+  <rect x="392" y="212" width="486" height="34" rx="6" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="404" y="234" font-size="9.2" fill="#166534">② trx_id &lt; min_trx_id → 快照前就提交了，可见 ✔</text>
+
+  <rect x="392" y="252" width="486" height="34" rx="6" fill="#fff5f6" stroke="#f5ccd4"/>
+  <text x="404" y="274" font-size="9.2" fill="#be123c">③ trx_id ≥ max_trx_id → 快照后才开的事务，不可见 ✘</text>
+
+  <rect x="392" y="292" width="486" height="42" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="404" y="310" font-size="9.2" fill="#92400e">④ min ≤ trx_id &lt; max：在 m_ids 里 → 未提交，不可见 ✘</text>
+  <text x="404" y="326" font-size="9.2" fill="#92400e">　　　　　　　　　　　不在 m_ids 里 → 已提交，可见 ✔</text>
+
+  <text x="24" y="332" font-size="9.5" fill="#be123c">不可见时：沿 ROLL_PTR 跳到上一个版本，重新判 —— 一直跳到链尾。</text>
+  <text x="24" y="352" font-size="9.5" fill="#64748b">这就是「快照读不加锁也能读到一致数据」的全部原理：读的是历史版本，不是等锁。</text>
+  <text x="392" y="352" font-size="9.5" fill="#64748b">判定顺序不能乱：先判①②（快通道），再判③④（区间）。</text>
+  <text x="24" y="384" font-size="9.5" fill="#64748b">undo 什么时候清？当没有 ReadView 再需要它时（Purge 线程），这也是「长事务撑爆 undo 表空间」的原因。</text>
+  <text x="24" y="404" font-size="9.5" fill="#be123c">一个跑 1 小时的事务，能让 undo 从几百 MB 涨到几十 GB —— 这在生产上是真实事故。</text>
+</svg>
+<figcaption><b>图 6　版本链 + ReadView 四字段 + 可见性判定四步</b>　「max_trx_id 是下一个待分配 ID」这个细节，一半候选人会说错</figcaption>
+</figure>
+
+  <h3>RC 与 RR：唯一的差别是尺子造几次</h3>
+
+<figure>
+<svg viewBox="0 0 900 348" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="24" y="22" font-size="12" font-weight="700" fill="#0f172a">同一段业务，两个隔离级别下「快照」的生成时机完全不同</text>
+
+  <line x1="90" y1="66" x2="856" y2="66" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="90" y="52" text-anchor="middle" font-size="9" font-weight="700" fill="#334155">T1 BEGIN</text>
+  <line x1="90" y1="58" x2="90" y2="74" stroke="#94a3b8"/>
+  <text x="280" y="52" text-anchor="middle" font-size="9" font-weight="700" fill="#334155">T2 选 ①</text>
+  <line x1="280" y1="58" x2="280" y2="74" stroke="#94a3b8"/>
+  <text x="470" y="52" text-anchor="middle" font-size="9" font-weight="700" fill="#334155">T3 选 ②</text>
+  <line x1="470" y1="58" x2="470" y2="74" stroke="#94a3b8"/>
+  <text x="660" y="52" text-anchor="middle" font-size="9" font-weight="700" fill="#334155">外部事务 COMMIT</text>
+  <line x1="660" y1="58" x2="660" y2="74" stroke="#16a34a" stroke-width="2"/>
+  <text x="820" y="52" text-anchor="middle" font-size="9" font-weight="700" fill="#334155">T4 选 ③</text>
+  <line x1="820" y1="58" x2="820" y2="74" stroke="#94a3b8"/>
+
+  <text x="24" y="102" font-size="10.5" font-weight="700" fill="#0369a1">RC</text>
+  <text x="24" y="118" font-size="8.5" fill="#0c4a6e">每条 SELECT</text>
+  <text x="24" y="132" font-size="8.5" fill="#0c4a6e">新建 ReadView</text>
+  <rect x="216" y="96" width="128" height="30" rx="15" fill="#e0f2fe" stroke="#7dd3fc"/>
+  <text x="280" y="116" text-anchor="middle" font-size="9" fill="#075985">新快照 #1</text>
+  <rect x="406" y="96" width="128" height="30" rx="15" fill="#e0f2fe" stroke="#7dd3fc"/>
+  <text x="470" y="116" text-anchor="middle" font-size="9" fill="#075985">新快照 #2</text>
+  <rect x="756" y="96" width="128" height="30" rx="15" fill="#e0f2fe" stroke="#7dd3fc"/>
+  <text x="820" y="116" text-anchor="middle" font-size="9" fill="#075985">新快照 #3</text>
+  <text x="280" y="146" text-anchor="middle" font-size="8.5" fill="#075985">看外部旧值</text>
+  <text x="470" y="146" text-anchor="middle" font-size="8.5" fill="#075985">仍是旧值</text>
+  <text x="820" y="146" text-anchor="middle" font-size="8.5" fill="#b91c1c">看到新值 → 不可重复读</text>
+
+  <line x1="90" y1="196" x2="856" y2="196" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="24" y="232" font-size="10.5" font-weight="700" fill="#b45309">RR</text>
+  <text x="24" y="248" font-size="8.5" fill="#78350f">只在第一次</text>
+  <text x="24" y="262" font-size="8.5" fill="#78350f">SELECT 建一次</text>
+  <rect x="216" y="226" width="128" height="30" rx="15" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="280" y="246" text-anchor="middle" font-size="9" fill="#92400e">快照（唯一）</text>
+  <line x1="344" y1="241" x2="744" y2="241" stroke="#f59e0b" stroke-dasharray="5 3"/>
+  <text x="545" y="234" text-anchor="middle" font-size="9" fill="#92400e">后续所有 SELECT 复用同一个 ReadView</text>
+  <text x="290" y="276" text-anchor="middle" font-size="8.5" fill="#92400e">②③ 都读到旧值 → 可重复读成立</text>
+  <text x="820" y="276" text-anchor="middle" font-size="8.5" fill="#166534">仍看不到新值 ✔</text>
+
+  <rect x="24" y="296" width="852" height="38" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="40" y="320" font-size="9.5" fill="#334155">关键：RR 的「可重复读」只对快照读成立。一旦写 FOR UPDATE / UPDATE / DELETE，走的是当前读，看到的是最新提交值 —— 这就是幻读的裂缝。</text>
+</svg>
+<figcaption><b>图 7　RC 与 RR 的 ReadView 生成时机</b>　一句话记住：RC 每次读都「重新睁眼」，RR 一直「闭着第一次的眼」</figcaption>
+</figure>
+
+  <h3>幻读：RR 到底防不防？</h3>
+
+  <p>这是 MySQL 面试最爱的一个「连环坑」，标准的正确答法是<strong>分场景</strong>，而不是简单回答「防」或「不防」：</p>
+
+<figure>
+<svg viewBox="0 0 900 386" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="24" y="22" font-size="12" font-weight="700" fill="#0f172a">同一个「幻读」，三种场景三种结论 —— 只答一句必被追问到崩</text>
+
+  <rect x="20" y="36" width="272" height="256" rx="10" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="156" y="58" text-anchor="middle" font-size="10.5" font-weight="700" fill="#166534">① 纯快照读 → 不会幻读</text>
+  <text x="36" y="84" font-size="9" fill="#166534">T1: BEGIN</text>
+  <text x="36" y="102" font-size="9" fill="#166534">T1: SELECT * WHERE c&gt;10  → 3 行</text>
+  <text x="36" y="120" font-size="9" fill="#9a3412">T2: INSERT c=99, COMMIT</text>
+  <text x="36" y="138" font-size="9" fill="#166534">T1: SELECT * WHERE c&gt;10  → 还是 3 行</text>
+  <line x1="36" y1="152" x2="276" y2="152" stroke="#bbf7d0"/>
+  <text x="36" y="172" font-size="9" font-weight="700" fill="#166534">结论：MVCC 挡住了</text>
+  <text x="36" y="190" font-size="8.8" fill="#15803d">ReadView 里 max_trx_id 卡住</text>
+  <text x="36" y="206" font-size="8.8" fill="#15803d">T2 的新行 trx_id ≥ max → 不可见</text>
+  <text x="36" y="228" font-size="8.8" fill="#64748b">这就是「可重复读」的字面含义</text>
+  <text x="36" y="262" font-size="8.8" fill="#15803d">业务上：报表两次查询一致 ✔</text>
+
+  <rect x="314" y="36" width="272" height="256" rx="10" fill="#f0fdfa" stroke="#99f6e4"/>
+  <text x="450" y="58" text-anchor="middle" font-size="10.5" font-weight="700" fill="#065f46">② 纯当前读 → 不会幻读</text>
+  <text x="330" y="84" font-size="9" fill="#065f46">T1: BEGIN</text>
+  <text x="330" y="102" font-size="9" fill="#065f46">T1: SELECT * FOR UPDATE → 3 行</text>
+  <text x="330" y="120" font-size="9" fill="#9a3412">T2: INSERT c=99 → 被间隙锁阻塞</text>
+  <text x="330" y="138" font-size="9" fill="#065f46">T1: SELECT * FOR UPDATE → 还是 3 行</text>
+  <line x1="330" y1="152" x2="570" y2="152" stroke="#99f6e4"/>
+  <text x="330" y="172" font-size="9" font-weight="700" fill="#065f46">结论：next-key lock 挡住了</text>
+  <text x="330" y="190" font-size="8.8" fill="#0f766e">T1 锁住 (10,+∞) 的间隙</text>
+  <text x="330" y="206" font-size="8.8" fill="#0f766e">T2 的 INSERT 拿不到插入意向锁</text>
+  <text x="330" y="228" font-size="8.8" fill="#64748b">代价：并发插入全被阻塞</text>
+  <text x="330" y="262" font-size="8.8" fill="#0f766e">业务上：库存扣减靠它保安全 ✔</text>
+
+  <rect x="608" y="36" width="272" height="256" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+  <text x="744" y="58" text-anchor="middle" font-size="10.5" font-weight="700" fill="#be123c">③ 混用 → 会幻读 ✘</text>
+  <text x="624" y="84" font-size="9" fill="#9f1239">T1: BEGIN</text>
+  <text x="624" y="102" font-size="9" fill="#9f1239">T1: SELECT * WHERE c&gt;10 → 3 行</text>
+  <text x="624" y="120" font-size="9" fill="#9a3412">T2: INSERT c=99, COMMIT</text>
+  <text x="624" y="138" font-size="9" fill="#9f1239">T1: UPDATE ... WHERE c&gt;10 → 4 行!</text>
+  <text x="624" y="156" font-size="9" fill="#9f1239">T1: SELECT * WHERE c&gt;10 → 4 行!</text>
+  <line x1="624" y1="168" x2="864" y2="168" stroke="#f5ccd4"/>
+  <text x="624" y="188" font-size="9" font-weight="700" fill="#be123c">结论：RR 不能 100% 防幻读</text>
+  <text x="624" y="206" font-size="8.8" fill="#9f1239">UPDATE 是当前读，把 T2 的新行</text>
+  <text x="624" y="222" font-size="8.8" fill="#9f1239">也改了 → 其 trx_id 变成自己</text>
+  <text x="624" y="238" font-size="8.8" fill="#9f1239">→ 之后的快照读也看得见了</text>
+  <text x="624" y="262" font-size="8.8" fill="#9f1239">这是教科书级的「RR 幻读」证据</text>
+
+  <rect x="20" y="306" width="860" height="62" rx="8" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="36" y="326" font-size="9.5" font-weight="700" fill="#92400e">所以标准答案是分三句：</text>
+  <text x="36" y="346" font-size="9.5" fill="#78350f">「快照读靠 MVCC 防住；当前读靠 next-key lock 防住；两者混用时仍可能幻读，因为当前读会把新行纳入自己的可见范围。」</text>
+  <text x="36" y="362" font-size="9" fill="#b45309">官方文档只说「RR 通过 next-key lock 避免幻读」，那是站在当前读角度讲的 —— 面试官要的就是你知道这个前提。</text>
+</svg>
+<figcaption><b>图 8　幻读的三种场景</b>　答「RR 能防幻读」不加限定条件，等于把后半场送给面试官</figcaption>
+</figure>
+
+  <h3>隔离级别总表（含实现手段）</h3>
+
+  <table>
+    <tr><th>级别</th><th>脏读</th><th>不可重复读</th><th>幻读</th><th>靠什么实现</th></tr>
+    <tr><td>READ UNCOMMITTED</td><td>可能</td><td>可能</td><td>可能</td><td>直接读最新版本，无 ReadView</td></tr>
+    <tr><td>READ COMMITTED</td><td>不会</td><td><strong>可能</strong></td><td>可能</td><td>每条 SELECT 新建 ReadView；几乎无 gap lock</td></tr>
+    <tr><td>REPEATABLE READ（默认）</td><td>不会</td><td>不会</td><td>快照读不会 / 当前读不会 / 混用可能</td><td>首次 SELECT 建 ReadView + next-key lock</td></tr>
+    <tr><td>SERIALIZABLE</td><td>不会</td><td>不会</td><td>不会</td><td>所有 SELECT 隐式加 <code>LOCK IN SHARE MODE</code></td></tr>
+  </table>
+
+  <div class="oneline">
+    <b>为什么互联网公司普遍把默认隔离级别改成 RC</b>
+    ① <strong>gap lock 是并发杀手</strong>：RR 下插入会被间隙锁阻塞，秒杀/订单场景直接排队；② <strong>减少死锁</strong>：没有间隙锁，冲突面小一个数量级；③ <strong>半一致性读</strong>（semi-consistent read）只在 RC 生效，<code class="inl">UPDATE</code> 时能先跳过不匹配的行，减少回滚；④ <strong>binlog 用 ROW 格式后，RR 的「主从一致」优势已经不需要了</strong>——这才是最根本的原因。<br>代价是「不可重复读」，但业务里本来就该用<strong>乐观锁 / 版本号</strong>解决，而不是指望数据库隔离级别。
+  </div>
+
+  <div class="trap">
+    <b>坑：<code class="inl">SET TRANSACTION ISOLATION LEVEL</code> 的位置很要命。</b>它只对<strong>下一个事务</strong>生效；要全局生效得改 <code class="inl">transaction-isolation</code> 配置。更坑的是 <strong>Spring 的 <code class="inl">@Transactional(isolation=...)</code> 只在「新建连接」时下发</strong>——如果连接来自池且已被使用过，隔离级别可能还是上一次的。这也是上一期那句「Spring 只是传话筒」的具体含义。
+  </div>
+</section>
+
+<!-- ============ L5 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">L5</span><em>难度 ★★★ · 原理最终要落到「你怎么查出来」，这一节是区分度所在</em></div>
+  <h2>排查层：EXPLAIN 怎么读，慢 SQL 怎么治</h2>
+
+  <div class="oneline">
+    <b>一句话答案</b>
+    排查慢 SQL 的顺序永远是：<strong>看 <code class="inl">type</code> 判断访问方式 → 看 <code class="inl">key</code> 判断用没用上索引 → 看 <code class="inl">key_len</code> 判断用了几列 → 看 <code class="inl">rows × filtered</code> 估算扫描量 → 看 <code class="inl">Extra</code> 判断有没有额外排序/临时表</strong>。只背「type 要 ref 以上」是不够的，能从 <code class="inl">key_len</code> 反推出「联合索引用到了第几列」，才是真会看。
+  </div>
+
+  <h3>type 的七个等级（从好到坏）</h3>
+
+  <table>
+    <tr><th>type</th><th>含义</th><th>典型场景</th><th>可接受？</th></tr>
+    <tr><td><code>system</code></td><td>表只有一行</td><td>系统表</td><td>✓</td></tr>
+    <tr><td><code>const</code></td><td>主键/唯一索引等值，最多一行</td><td><code>WHERE id=1</code></td><td>✓ 最佳</td></tr>
+    <tr><td><code>eq_ref</code></td><td>JOIN 时被驱动表用主键/唯一索引等值</td><td><code>a JOIN b ON b.id=a.bid</code></td><td>✓ 最佳</td></tr>
+    <tr><td><code>ref</code></td><td>非唯一索引等值</td><td><code>WHERE name='张三'</code></td><td>✓ 常见目标</td></tr>
+    <tr><td><code>range</code></td><td>索引范围扫描</td><td><code>WHERE id BETWEEN 1 AND 100</code></td><td>✓ 可接受</td></tr>
+    <tr><td><code>index</code></td><td><strong>全索引扫描</strong>（扫整棵二级索引树）</td><td>覆盖索引但无过滤条件</td><td>△ 数据量大时要警惕</td></tr>
+    <tr><td><code>ALL</code></td><td>全表扫描</td><td>无索引 / 索引失效</td><td>✗ 大表必须解决</td></tr>
+  </table>
+
+  <div class="warn">
+    <b><code class="inl">index</code> 不等于「用了索引就快」。</b><code class="inl">type=index</code> 是「把整棵索引树从头扫到尾」，如果表有 2000 万行，等于扫 2000 万个索引项。它只有在<strong>覆盖索引 + 需要避免回表 + 数据量可控</strong>时才划算。看到 <code class="inl">type=index</code> 且 <code class="inl">rows</code> 很大，要当成 <code class="inl">ALL</code> 一样警惕。
+  </div>
+
+  <h3>key_len：反推「用到了联合索引的第几列」</h3>
+
+<pre>
+-- 表：CREATE TABLE t (
+--   id BIGINT PRIMARY KEY,
+--   a  INT NULL,
+--   b  VARCHAR(20) NOT NULL,
+--   c  DATETIME NULL,
+--   KEY idx_abc (a, b)
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 计算规则（utf8mb4 = 4 字节/字符）：
+--   INT       → 4 字节；可 NULL 再 +1
+--   BIGINT    → 8 字节；可 NULL 再 +1
+--   VARCHAR(n)→ n*4 + 2（2 字节存长度）；可 NULL 再 +1
+--   DATETIME  → 5 字节（8.0 起；5.6 前是 8 字节）
+
+-- 情形 1：WHERE a=1
+--   key_len = 4 + 1 = 5        → 只用了 a 这一列
+-- 情形 2：WHERE a=1 AND b='x'
+--   key_len = (4+1) + (20*4+2) = 5 + 82 = 87  → 两列都用上了
+-- 情形 3：WHERE b='x'
+--   key_len = NULL / 走全表     → 最左前缀缺失
+-- 情形 4：WHERE a=1 AND b LIKE 'x%'
+--   key_len = 87               → 前缀匹配仍可用于定位
+-- 情形 5：WHERE a=1 AND b LIKE '%x'
+--   key_len = 5                → b 只参与过滤，不参与定位
+
+-- 面试话术：「key_len 帮我确认联合索引是否被完整使用，
+--            如果只到第一列，说明后面的列因为范围/函数/类型问题失效了。」
+</pre>
+
+  <h3>Extra：五个关键词各代表什么</h3>
+
+  <table>
+    <tr><th>Extra</th><th>含义</th><th>处理</th></tr>
+    <tr><td><code>Using index</code></td><td>覆盖索引，无回表</td><td>✓ 最优，尽量凑出来</td></tr>
+    <tr><td><code>Using index condition</code></td><td>索引下推生效</td><td>✓ 好，减少回表</td></tr>
+    <tr><td><code>Using where</code></td><td>server 层还有过滤（索引没覆盖全部条件）</td><td>△ 看 rows 是否已经很小</td></tr>
+    <tr><td><code>Using filesort</code></td><td>需要额外排序（可能在内存或磁盘）</td><td>✗ 试着让 ORDER BY 走索引顺序</td></tr>
+    <tr><td><code>Using temporary</code></td><td>用了临时表（GROUP BY / DISTINCT / UNION）</td><td>✗ 优先治理，代价最大</td></tr>
+  </table>
+
+  <h3>慢查询治理的三板斧</h3>
+
+<pre>
+-- ① 打开慢日志（生产建议 long_query_time = 0.1，别用默认 10s）
+SET GLOBAL slow_query_log = ON;
+SET GLOBAL long_query_time = 0.1;
+SET GLOBAL log_queries_not_using_indexes = ON;   -- 抓「没走索引」的，量大慎用
+
+-- ② 用 performance_schema 抓 Top SQL（8.0 推荐，比 slow log 更细）
+SELECT DIGEST_TEXT, COUNT_STAR,
+       SUM_TIMER_WAIT/1e12 AS total_sec,
+       SUM_ROWS_EXAMINED/COUNT_STAR AS avg_rows
+FROM performance_schema.events_statements_summary_by_digest
+ORDER BY SUM_TIMER_WAIT DESC LIMIT 10;
+-- 注意看 avg_rows：扫描行数 / 返回行数 比值 > 100 就是典型「索引没设计好」
+
+-- ③ 大表加索引不锁表（MySQL 5.6+ Online DDL）
+ALTER TABLE t_order ADD INDEX idx_uid_ct (user_id, create_time),
+  ALGORITHM=INPLACE, LOCK=NONE;
+-- 但 DROP INDEX / 改列类型 仍可能 rebuild；GB 级表建议 gh-ost / pt-online-schema-change
+</pre>
+
+  <div class="trap">
+    <b>坑：<code class="inl">ALTER TABLE</code> 卡住整个库的真实原因不是 DDL 慢，是 <strong>MDL（元数据锁）等待</strong>。</b>DDL 要拿排他 MDL，而前面有个长事务持着共享 MDL 不放 → DDL 等 → 后面所有请求又排在 DDL 后面等 MDL → 连接池瞬间打满。<code class="inl">SHOW PROCESSLIST</code> 里会看到一串 <code class="inl">Waiting for table metadata lock</code>。<strong>解法：DDL 前先 <code class="inl">SELECT * FROM information_schema.innodb_trx</code> 找长事务 kill 掉，并设置 <code class="inl">lock_wait_timeout</code> 短一些。</strong>
+  </div>
+</section>
+
+<!-- ============ L6 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L6</span><em>难度 ★★★ · 14 条，每条都给了「追问防线」</em></div>
+  <h2>高频问答：14 条，按被问概率排序</h2>
+
+  <div class="q">
+    <div class="qh"><div class="num">1</div><div class="qt">为什么 InnoDB 用 B+ 树，不用 B 树、哈希、红黑树？</div><div class="tagline">出现率 95%</div></div>
+    <p><strong>核心：一切为了「减少磁盘 IO 次数」。</strong>B+ 树非叶只存 key+页号 → 扇出 1170 → 2000 万行只需 3 层（2 次真实 IO）；B 树非叶存行 → 扇出掉到几十 → 5~6 层。B+ 树叶子有双向链表 → 范围查询顺序扫；B 树要中序回溯，随机 IO。哈希只支持等值，不支持范围/排序/最左前缀。红黑树是二叉树，24 层 = 24 次 IO。</p>
+    <p class="lab">追问防线</p>
+    <ul>
+      <li>「那为什么不用跳表？」→ 跳表节点在磁盘上分散，每层一次随机 IO，是<strong>为内存设计</strong>的结构（Redis 用它是纯内存场景）。</li>
+      <li>「B+ 树比 B 树多存了一遍 key，不是浪费空间吗？」→ 多花的空间换来的是<strong>扇出</strong>，扇出换的是<strong>层数</strong>，层数换的是<strong>IO</strong>。这笔交易极其划算。</li>
+    </ul>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">2</div><div class="qt">三层 B+ 树大概能存多少行？一次查询几次 IO？</div><div class="tagline">出现率 80%</div></div>
+    <p>按 <code class="inl">bigint 主键 8B + 页号 6B = 14B</code> 算，非叶页 <code class="inl">16KB/14B ≈ 1170</code> 个指针；叶子页按一行 1KB 算装 16 行 → <code class="inl">1170 × 1170 × 16 ≈ 2190 万</code>。所以「2000 万行三层」这个经验值是有出处的。</p>
+    <p>IO 次数：根页常驻缓冲池 → 实际 <strong>2 次</strong>；冷启动或根页被淘汰 → 3 次；需要回表 → <strong>翻倍</strong>（4~6 次）。</p>
+    <p class="lab">追问防线</p>
+    <ul>
+      <li>「一行 2KB 呢？」→ 一页 8 行 → 三层约 1095 万行，仍然是三层。<strong>关键是「2000 万」不是硬阈值，取决于行宽。</strong></li>
+      <li>「四层什么时候出现？」→ 约 2000 万 × 1170 ≈ 250 亿行，现实中几乎不可能。</li>
+    </ul>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">3</div><div class="qt">聚簇索引和二级索引的区别？为什么二级索引要回表？</div><div class="tagline">出现率 90%</div></div>
+    <p>聚簇索引的<strong>叶子页存整行</strong>，所以「索引即数据」；二级索引的叶子页只存<strong>索引列 + 主键</strong>，要拿其他列必须再按主键查一次聚簇索引，这就是回表。InnoDB 必须有且只有一个聚簇索引（主键；无主键则选第一个非空唯一索引；都没有则用隐藏 6B 的 <code class="inl">DB_ROW_ID</code>）。</p>
+    <p class="lab g">加分点</p>
+    <p>「为什么二级索引不直接存行地址（像 MyISAM 那样）？」→ 因为行会移动（页分裂、行迁移），存物理地址要维护所有索引的地址更新；存主键则天然稳定。<strong>代价就是回表。</strong></p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">4</div><div class="qt">什么是覆盖索引？怎么判断生效了？</div><div class="tagline">出现率 85%</div></div>
+    <p>SELECT 要返回的列全部在索引里，不需要回表。EXPLAIN 的 <code class="inl">Extra = Using index</code>。</p>
+<pre>
+-- 索引 (user_id, status, create_time)
+SELECT id, user_id, status, create_time FROM t_order
+WHERE user_id = 100 AND status = 1;   -- ✓ 覆盖（id 隐含在二级索引里）
+SELECT id, amount FROM t_order WHERE user_id = 100;  -- ✗ 需要回表拿 amount
+</pre>
+    <p class="lab r">注意</p>
+    <p>前缀索引 <code class="inl">name(10)</code> <strong>无法</strong>实现覆盖索引（索引里只有前 10 个字符）。<code class="inl">SELECT *</code> 几乎永远无法覆盖。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">5</div><div class="qt">最左前缀原理是什么？为什么跳列就失效？</div><div class="tagline">出现率 95%</div></div>
+    <p>联合索引按 <code class="inl">(a,b,c)</code> 字典序存储：先按 a 排，a 相同按 b，b 相同按 c。所以只有<strong>前缀连续</strong>的一段才在磁盘上连续。跳掉 a 直接查 b，b 在整个索引里是跳跃重复的，二分查找无从下手 → 全表扫。</p>
+    <p class="lab">追问防线</p>
+    <ul>
+      <li>「<code class="inl">WHERE a=1 AND c=1</code> 呢？」→ 能用到 a，c 只能靠 ICP 在索引层过滤，无法定位。</li>
+      <li>「<code class="inl">WHERE a&gt;1 AND b=1</code> 呢？」→ a 是范围，b 失去全局有序性 → b 只能过滤。<strong>「范围之后全失效」</strong>这句要会说。</li>
+      <li>「<code class="inl">WHERE b=1 AND a=1</code> 顺序反了行吗？」→ 行。优化器会调整条件顺序，<strong>索引顺序由建索引时决定，与 WHERE 书写顺序无关</strong>。</li>
+    </ul>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">6</div><div class="qt">索引下推（ICP）解决了什么问题？</div><div class="tagline">出现率 70%</div></div>
+    <p>5.6 引入。原来 <code class="inl">WHERE a=1 AND c=7</code>（c 无法定位）要把 a=1 的<strong>所有行回表</strong>再判断 c；ICP 把 c 的判断下推到索引层，就地筛掉，只回表真正匹配的行。EXPLAIN 显示 <code class="inl">Using index condition</code>。</p>
+    <p class="lab r">边界</p>
+    <p>只对<strong>二级索引</strong>有效（聚簇索引本来就要读整行）；只下推 WHERE，不下推 SELECT 列。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">7</div><div class="qt">哪些情况索引会失效？</div><div class="tagline">出现率 95%</div></div>
+    <p>七条主线：① 列被函数包裹；② <strong>隐式类型转换（列被转的那一侧）</strong>；③ 前导模糊 <code class="inl">%x</code>；④ OR 一侧无索引；⑤ <code class="inl">!=</code> / <code class="inl">NOT IN</code>；⑥ 联合索引跳前缀 / 范围截断；⑦ 字符集不一致的 JOIN。</p>
+    <p class="lab g">最容易被追问的一条</p>
+    <p><code class="inl">varchar_col = 123</code> <strong>失效</strong>（字符串列被转成 double，等于对列用函数）；<code class="inl">int_col = '123'</code> <strong>不失效</strong>（常量被转，列没动）。<strong>「只失效在列被转换的一侧」</strong>——这一句能挡住绝大多数追问。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">8</div><div class="qt">索引是不是越多越好？</div><div class="tagline">出现率 75%</div></div>
+    <p>不是。代价有三：① <strong>写放大</strong>——每次 INSERT/UPDATE 要维护所有相关索引，一张表 10 个索引写入性能可能掉一半；② <strong>空间</strong>——索引可能比数据还大；③ <strong>优化器选择成本</strong>——候选索引太多，选错概率上升，还会出现「两个索引都想用」的 index merge（往往更慢）。</p>
+    <p class="lab g">判断标准</p>
+    <p>看选择性 <code class="inl">COUNT(DISTINCT col)/COUNT(*)</code>，低于 10% 的单列索引基本是负担；能合并成联合索引的不要建多个单列索引（<code class="inl">(a)</code> + <code class="inl">(a,b)</code> 里前者冗余）。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">9</div><div class="qt">行锁加在哪？没有索引会怎样？</div><div class="tagline">出现率 90%</div></div>
+    <p>锁加在<strong>索引项</strong>上，不是行上。没有索引 → 全表扫描 → 把扫描到的每一条记录都加 next-key lock → 效果等同表锁，但表面看不出来，直到并发上来集体超时。</p>
+    <p class="lab r">经典事故</p>
+    <p><code class="inl">UPDATE t SET status=2 WHERE order_no='X'</code>，<code class="inl">order_no</code> 忘了建索引 → 所有 <code class="inl">INSERT</code> 全部阻塞（间隙全被锁）→ 订单服务雪崩。<strong>排查口诀：先看 <code class="inl">innodb_trx</code>，再看 <code class="inl">innodb_locks</code>，最后回头看 SQL 有没有索引。</strong></p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">10</div><div class="qt">间隙锁什么时候加？RC 下有吗？</div><div class="tagline">出现率 70%</div></div>
+    <p>RR 下，<strong>非唯一索引的等值/范围查询</strong>都会加 next-key lock（含间隙），目的是防幻读。RC 下几乎不加（除了外键检查和唯一性检查）——这是 RC 并发更好的根本原因。</p>
+    <p class="lab">唯一索引的两个特例</p>
+    <ul>
+      <li>等值 <strong>命中</strong> → 退化为记录锁（不加间隙）。</li>
+      <li>等值 <strong>未命中</strong> → 退化为<strong>间隙锁</strong>（锁住这个值「本该在」的那个空档）。</li>
+    </ul>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">11</div><div class="qt">MVCC 是怎么实现的？ReadView 有哪四个字段？</div><div class="tagline">出现率 95%</div></div>
+    <p>两件事：<strong>undo 版本链</strong>（<code class="inl">DB_ROLL_PTR</code> 串起历史版本）+ <strong>ReadView</strong>（可见性尺子）。四个字段：<code class="inl">m_ids</code>（活跃事务 ID 集合）、<code class="inl">min_trx_id</code>（集合最小值）、<code class="inl">max_trx_id</code>（<strong>下一个待分配</strong>的 ID）、<code class="inl">creator_trx_id</code>（自己）。</p>
+    <p>判定：等于自己 → 可见；&lt; min → 可见；≥ max → 不可见；在 m_ids 里 → 不可见，否则可见。不可见就沿链往上跳。</p>
+    <p class="lab r">最常错的一处</p>
+    <p><code class="inl">max_trx_id</code> 不是「当前最大事务 ID」，是<strong>「下一个要分配的 ID」</strong>，所以判定用 <code class="inl">≥</code> 而不是 <code class="inl">&gt;</code>。这个细节答对，面试官基本认定你真读过源码级资料。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">12</div><div class="qt">RR 能防止幻读吗？</div><div class="tagline">出现率 85%</div></div>
+    <p><strong>必须分场景答。</strong>① 纯快照读 → 能（MVCC 的 ReadView 卡住新行）；② 纯当前读（<code class="inl">FOR UPDATE</code>）→ 能（next-key lock 挡住插入）；③ <strong>混用 → 不能</strong>：先快照读，再 <code class="inl">UPDATE</code>（当前读把新行也改了，其 trx_id 变成自己），再快照读就能看见新行了。</p>
+    <p class="lab">一句话收尾</p>
+    <p>「严格说，InnoDB 的 RR 只在快照读语义下满足可重复读，无法在所有读写组合下消除幻读；SQL 标准里的 SERIALIZABLE 才能真正做到。」</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">13</div><div class="qt">为什么很多公司用 RC 而不是 RR？</div><div class="tagline">出现率 60%</div></div>
+    <p>四条：① 减少 gap lock → 插入不被阻塞，并发显著提升；② 死锁概率大幅下降；③ 半一致性读（semi-consistent read）只在 RC 生效，<code class="inl">UPDATE</code> 能先跳过不匹配的行；④ <strong>binlog 用 ROW 格式后，RR 用于保证主从一致的价值已经消失</strong>。</p>
+    <p class="lab r">必须补的一句</p>
+    <p>「代价是不可重复读，业务上要用乐观锁/版本号解决，而不是把责任推给隔离级别。」—— 不加这句，会被认为只是背了阿里手册。</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">14</div><div class="qt">一条 SQL 很慢，你怎么排查？</div><div class="tagline">出现率 95%</div></div>
+    <p>按顺序五步：<strong>① 确认是偶发还是稳定</strong>（看慢日志趋势，偶发先怀疑锁等待/缓冲池抖动）；<strong>② EXPLAIN 看 type/key/key_len/rows/Extra</strong>；<strong>③ 算扫描比</strong> <code class="inl">rows × filtered / 返回行数</code>，超过 100 就是索引问题；<strong>④ 看是否回表过多</strong>（试着只 SELECT 索引列对比耗时）；<strong>⑤ 看是否排序/临时表</strong>（<code class="inl">Using filesort</code> / <code class="inl">Using temporary</code>）。</p>
+    <p class="lab g">加分</p>
+    <p>「如果是 <code class="inl">LIMIT 1000000, 20</code> 这种深分页，我会改成延迟关联或游标法，因为 MySQL 要先读 100 万行再扔掉。」这句话直接把话题引到你准备好的 L7。</p>
+  </div>
+</section>
+
+<!-- ============ L7 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L7</span><em>难度 ★★★★★ · 三道完整模拟，按「先复述→再拆解→给方案→说代价」讲</em></div>
+  <h2>模拟面试：三个真实场景题</h2>
+
+  <div class="q">
+    <div class="qh"><div class="num">1</div><div class="qt">订单表 5000 万行，这个查询要 8 秒，怎么优化？<br><span style="font-weight:400;font-size:13.5px;color:#5d6675">SELECT * FROM t_order WHERE user_id=? AND status=1 ORDER BY create_time DESC LIMIT 20;</span></div><div class="tagline">深分页 · 联合索引</div></div>
+
+    <p class="lab">① 先复述 + 确认边界（面试官在等你问）</p>
+    <p>「我先确认几点：这个 <code class="inl">user_id</code> 下大概多少订单？<code class="inl">status=1</code> 的占比多少？是首页第一页还是深翻页？—— 这三点决定方案，尤其是第三点。」</p>
+
+    <p class="lab">② 拆解：慢在哪</p>
+    <p>假设已有索引 <code class="inl">(user_id)</code>：走 <code class="inl">ref</code> 拿到该用户全部订单（比如 5000 条）→ <strong>逐条回表</strong>取整行 → 在 server 层按 <code class="inl">status</code> 过滤 → <strong>filesort</strong> 排序 → 取 20 条。5000 次回表 + 一次排序，8 秒完全说得通。</p>
+
+    <p class="lab">③ 方案：一个联合索引解决 90%</p>
+<pre>
+ALTER TABLE t_order ADD INDEX idx_uid_status_ct (user_id, status, create_time);
+-- 顺序依据：等值列在前（user_id, status），排序列在后（create_time）
+-- 这样 WHERE 定位 + ORDER BY 直接走索引顺序，filesort 消失
+
+EXPLAIN SELECT id, user_id, status, create_time, amount
+FROM t_order WHERE user_id = 100 AND status = 1
+ORDER BY create_time DESC LIMIT 20;
+-- type=ref  key=idx_uid_status_ct  Extra=Using index condition
+-- 注意：因为 SELECT 里有 amount，无法覆盖，仍需回表 20 次 —— 但只有 20 次
+</pre>
+
+    <p class="lab">④ 深分页：<code class="inl">LIMIT 1000000, 20</code> 怎么办</p>
+<pre>
+-- 病根：MySQL 要先取出 1000020 行（含回表），再扔掉前 100 万行
+-- 方案 A：延迟关联（先只查主键，再 JOIN 回原表）
+SELECT o.* FROM t_order o
+JOIN (SELECT id FROM t_order
+      WHERE user_id=100 AND status=1
+      ORDER BY create_time DESC LIMIT 1000000, 20) t
+ON o.id = t.id;
+-- 子查询走覆盖索引（只取 id），100 万行的回表被省掉
+
+-- 方案 B：游标法（推荐，产品上改成「下一页」而不是「跳页」）
+SELECT id, user_id, create_time, amount FROM t_order
+WHERE user_id=100 AND status=1
+  AND (create_time, id) < ('2026-11-01 10:00:00', 88231)
+ORDER BY create_time DESC, id DESC LIMIT 20;
+-- 关键：排序键要加 id 兜底，防止 create_time 重复导致漏行/重行
+</pre>
+
+    <p class="lab">⑤ 主动说代价（这一步最加分）</p>
+    <ul>
+      <li><code class="inl">(user_id, status, create_time)</code> 这个索引对 <code class="inl">WHERE status=1</code>（不带 user_id）<strong>完全无效</strong>，如果还有「运营按状态查全量订单」的需求，得另建索引或走 ES。</li>
+      <li>索引宽度增加 → 写入变慢。5000 万行的表加索引本身要走 Online DDL，建议低峰期 + <code class="inl">LOCK=NONE</code>，GB 级用 gh-ost。</li>
+      <li>如果 <code class="inl">status</code> 选择性极低（99% 都是 1），可以把它从索引里去掉，改成 <code class="inl">(user_id, create_time)</code> + 业务上保证只查有效单 —— <strong>这是「懂选择性」和「背方案」的分界线</strong>。</li>
+    </ul>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">2</div><div class="qt">库存扣减：<code style="font-size:13px">UPDATE stock SET num=num-1 WHERE id=1 AND num&gt;0</code>，RR 下加了什么锁？并发会不会死锁？</div><div class="tagline">锁行为 · 死锁</div></div>
+
+    <p class="lab">① 锁分析（先给结论，再给推理）</p>
+    <p>「<code class="inl">id</code> 是主键、等值命中 → 唯一索引等值命中 → <strong>退化为记录锁</strong>，只锁 <code class="inl">id=1</code> 这一条记录。不加间隙锁，所以其他 id 的插入不受影响。这正是「用主键做单行扣减」高效的原因。」</p>
+    <p>如果 <code class="inl">num&gt;0</code> 这个条件走的是二级索引（比如按 <code class="inl">sku_id</code> 扣减），那就是非唯一索引 → <strong>next-key lock</strong>，会锁住一段间隙，同 SKU 的并发插入/更新都可能被阻塞。</p>
+
+    <p class="lab">② 死锁场景（面试官八成会追问这个）</p>
+<pre>
+-- 事务 A：扣商品 1，再扣商品 2
+BEGIN;
+UPDATE stock SET num=num-1 WHERE id=1 AND num&gt;0;
+UPDATE stock SET num=num-1 WHERE id=2 AND num&gt;0;   -- 等 B 释放 id=2
+
+-- 事务 B：扣商品 2，再扣商品 1
+BEGIN;
+UPDATE stock SET num=num-1 WHERE id=2 AND num&gt;0;
+UPDATE stock SET num=num-1 WHERE id=1 AND num&gt;0;   -- 等 A 释放 id=1 → 死锁
+</pre>
+    <p>「InnoDB 检测到等待图成环，回滚 undo 量小的那个（通常是 B），抛 1213。<strong>A 拿到锁后继续。</strong>」</p>
+
+    <p class="lab">③ 治理（三层，从根到表）</p>
+    <ul>
+      <li><strong>业务层统一加锁顺序</strong>：一次扣多个 SKU 时，先按 <code class="inl">id</code> 升序排序再逐个扣 —— 这是根治。</li>
+      <li><strong>缩短事务</strong>：把 RPC 调用、日志写入挪出事务，事务里只留 SQL。</li>
+      <li><strong>降级兜底</strong>：降 RC 去掉间隙锁；<code class="inl">innodb_lock_wait_timeout</code> 调到 3~5s 快速失败 + 重试。</li>
+      <li><strong>架构层</strong>：热点行用 Redis 预扣 + 异步落库，或分段库存（把一行拆成 10 行，按 hash 分散冲突）。</li>
+    </ul>
+
+    <p class="lab">④ 反问加分</p>
+    <p>「如果面试官问『为什么不用 <code class="inl">SELECT ... FOR UPDATE</code> 再 update』—— 答：那是两次网络往返 + 两次加锁，而且 <code class="inl">num&gt;0</code> 的判断被搬到应用层后，还得处理『查到有货但更新时没了』的竞态。<strong>单条 <code class="inl">UPDATE ... WHERE num&gt;0</code> 才是原子的。</strong>」</p>
+  </div>
+
+  <div class="q">
+    <div class="qh"><div class="num">3</div><div class="qt">读写分离后，用户下单成功立刻查订单查不到，怎么排查和解决？</div><div class="tagline">主从延迟 · 一致性</div></div>
+
+    <p class="lab">① 定位</p>
+    <p>「先看 <code class="inl">SHOW SLAVE STATUS</code> 的 <code class="inl">Seconds_Behind_Master</code>。如果是 0 却还查不到，那不是延迟，是<strong>路由问题</strong>（读请求打到从库、主库事务还没提交完就返回了）。」</p>
+
+    <p class="lab">② 四种原因，四种解法</p>
+    <table>
+      <tr><th>原因</th><th>表现</th><th>解法</th></tr>
+      <tr><td>主从复制延迟（大事务/DDL/从库压力）</td><td>SBM &gt; 0，批量写入时更明显</td><td>拆小事务；从库加索引；并行复制 <code>slave_parallel_workers</code></td></tr>
+      <tr><td>异步复制本身不保证</td><td>概率性、偶发</td><td>半同步复制（<code>rpl_semi_sync</code>）至少一个从库 ACK 才返回</td></tr>
+      <tr><td>刚写完立刻读（read-your-writes）</td><td>下单后跳详情页 100% 复现</td><td><strong>写后 N 秒内强制走主库</strong>（ThreadLocal 标记 + AOP）</td></tr>
+      <tr><td>缓存与库不一致</td><td>清了缓存但读从库又写回旧值</td><td>延迟双删 / 先更新库再删缓存 / binlog 订阅（Canal）删除</td></tr>
+    </table>
+
+    <p class="lab">③ 最小可行方案（面试要具体的）</p>
+<pre>
+// 写后读一致：主库标记 + 过期时间，只影响「本人」
+public class MasterForceHolder {
+    private static final ThreadLocal&lt;Long&gt; HIT = new ThreadLocal&lt;&gt;();
+
+    public static void forceMasterFor(long millis) {
+        HIT.set(System.currentTimeMillis() + millis);   // 写入后 1s 内读主库
+    }
+    public static boolean shouldReadMaster() {
+        Long until = HIT.get();
+        return until != null &amp;&amp; System.currentTimeMillis() &lt; until;
+    }
+}
+
+// 切面里根据 shouldReadMaster() 决定数据源；
+// 更稳的做法是把「强制主库」放进 Session/请求上下文，而不是 ThreadLocal
+// （异步线程、线程池复用会丢上下文 —— 这个坑能答出来说明真上过线）
+</pre>
+
+    <p class="lab">④ 主动补一句架构判断</p>
+    <p>「如果业务能接受最终一致，<strong>最好的方案不是强一致读主库，而是把『下单成功』的响应体直接带回订单信息</strong>，前端不需要再查一次 —— 从产品设计上消灭这个问题，比在中间件层打补丁更彻底。」</p>
+  </div>
+</section>
+
+<!-- ============ 收尾 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">CHECK</span><em>自测清单 · 讲不出来就回去看对应层</em></div>
+  <h2>合上页面，能不看稿讲出来才算过</h2>
+  <p style="color:var(--muted);font-size:14px;margin-top:0">这 13 条是本期的「过线标准」，每条都对应一个面试官必问的追问。</p>
+  <ul class="check">
+    <li><b>L0</b>　解释「为什么读 1 行和读 100 行成本一样」，以及为什么 InnoDB 说「索引即数据」。</li>
+    <li><b>L0</b>　说出没有主键的表的三条真实代价（不是「不规范」）。</li>
+    <li><b>L1</b>　手算 1170 × 1170 × 16，解释 2000 万这个数字从哪来。</li>
+    <li><b>L1</b>　用三句话否掉 B 树 / 哈希 / 跳表 / 红黑树。</li>
+    <li><b>L2</b>　画出 <code class="inl">(a,b,c)</code> 的存储顺序，解释为什么 <code class="inl">b=2</code> 找不到连续区间。</li>
+    <li><b>L2</b>　说清 ICP 和覆盖索引各自省的是哪一段 IO。</li>
+    <li><b>L2</b>　讲清隐式转换的方向差异，并给出两个方向的例子。</li>
+    <li><b>L3</b>　画出记录锁 / 间隙锁 / 临键锁的区间，说出「唯一索引等值命中」的退化规则。</li>
+    <li><b>L3</b>　解释「没有索引的 UPDATE 等于表锁」的完整因果链。</li>
+    <li><b>L4</b>　默写 ReadView 四字段，指出 <code class="inl">max_trx_id</code> 的陷阱。</li>
+    <li><b>L4</b>　分三场景回答「RR 防不防幻读」，并给出混用场景的复现步骤。</li>
+    <li><b>L5</b>　从 <code class="inl">key_len</code> 反推出联合索引用到第几列。</li>
+    <li><b>L7</b>　完整讲一遍深分页的三层优化 + 库存扣减的死锁治理。</li>
+  </ul>
+  <div class="warn" style="margin-top:18px">
+    <b>下一轮预告：</b>Redis —— 从「为什么单线程还能这么快」讲到「缓存穿透/击穿/雪崩的三套解法」，再到「分布式锁的四种实现与 Redlock 争议」，最后落到「大 key / 热 key / 持久化 RDB+AOF 混合」这些线上真问题。<strong>与本期接点</strong>：本期讲的「缓存与主从延迟导致的不一致」，正是 Redis 缓存一致性那一节的开场题；而 <code class="inl">SETNX</code> 加锁失败后的重试策略，会和本期「死锁 + 超时兜底」形成对照。
+  </div>
+</section>
+
+<footer>
+  Java 面试深挖 · 第 05 期　|　主题：MySQL 索引与事务隔离（B+ 树 / 联合索引 / 锁 / MVCC）<br>
+  口径说明：MySQL 8.0 / InnoDB；<code class="inl">DATETIME</code> 为 5 字节、<code class="inl">utf8mb4</code> 按 4 字节/字符计算；ICP 自 5.6 起、降序索引自 8.0 起；RC 下仅在特殊场景加 gap lock
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var KW = /\b(public|private|protected|static|final|class|interface|extends|implements|void|int|long|boolean|char|double|float|byte|short|if|else|for|while|do|return|new|this|super|null|true|false|try|catch|throw|throws|instanceof|break|continue|default|switch|case|synchronized|volatile|transient|abstract|package|import|enum|assert|finally)\b/g;
+
+  function escRaw(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  var pres = document.querySelectorAll('pre.java');
+  for (var i = 0; i < pres.length; i++) {
+    var pre = pres[i];
+    var src = pre.textContent;
+    var parts = src.split(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*")/g);
+    var out = '';
+    for (var k = 0; k < parts.length; k++) {
+      var seg = parts[k];
+      if (k % 2 === 1) {
+        var cls = (seg.indexOf('//') === 0 || seg.indexOf('/*') === 0) ? 'c' : 's';
+        out += '<span class="' + cls + '">' + escRaw(seg) + '</span>';
+      } else {
+        out += escRaw(seg)
+          .replace(KW, '<span class="k">$1</span>')
+          .replace(/\b(\d+)\b/g, '<span class="n">$1</span>');
+      }
+    }
+    pre.innerHTML = out;
+  }
+})();
+</script>
+</body>
+</html>

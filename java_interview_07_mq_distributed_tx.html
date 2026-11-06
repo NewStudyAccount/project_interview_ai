@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 07 · 消息队列与分布式事务：顺序写 / 零拷贝 / ISR / 幂等 / 五种事务方案</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:29px; line-height:1.3; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:770px}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.8px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .an{color:#0369a1; font-weight:600}
+  pre .e{color:#be123c; font-weight:600}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #bcdcf2}
+  .check li b{color:#075985}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">每 2 小时 · Java 面试深挖 · 第 07 期</div>
+  <h1>顺序写<span class="arrow">→</span>零拷贝<span class="arrow">→</span>ISR 水位<span class="arrow">→</span>幂等<span class="arrow">→</span>五种分布式事务</h1>
+  <p class="sub">「为什么用 MQ」，十个人里八个答「解耦、异步、削峰」，然后被追问一句「消息丢了怎么办」，场面立刻安静。这三个词是<strong>收益</strong>，不是答案——真正的答案是：为了这三个收益，你主动接下了<strong>丢、重、乱</strong>三张账单。这一期从 Kafka 一个 batch 怎么落盘，钉到 <code class="inl">600MB/s vs 100KB/s</code> 的物理差距，再到 TCC 的空回滚与悬挂。每层都给数字。</p>
+  <div class="meta">
+    <div><strong>8</strong>层递进</div>
+    <div><strong>11</strong>张原理图</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span>01 HashMap</span><span>02 JVM/GC</span><span>03 并发</span>
+  <span>04 Spring</span><span>05 MySQL</span><span>06 Redis</span>
+  <span class="on">07 MQ · 分布式事务</span><span>08 微服务治理</span>
+</div>
+
+<!-- ============ L0 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>契约层 · 你买到了什么，又卖掉了什么</em></div>
+  <h2>三个收益，三张账单</h2>
+
+  <p>先把账算清楚。左边是不用 MQ 的同步串行，右边是加了一层的异步解耦：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m0" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <rect x="24" y="16" width="410" height="210" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="40" font-size="12.5" font-weight="700" fill="#3b4252">A · 同步串行：一次下单 400ms</text>
+
+      <rect x="42" y="56" width="105" height="42" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="94" y="74" font-size="12" text-anchor="middle" fill="#0c4a6e">下单</text>
+      <text x="94" y="90" font-size="10.5" text-anchor="middle" fill="#5d6675">120ms</text>
+
+      <line x1="149" y1="77" x2="176" y2="77" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m0)"/>
+      <rect x="178" y="56" width="105" height="42" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="230" y="74" font-size="12" text-anchor="middle" fill="#0c4a6e">扣库存</text>
+      <text x="230" y="90" font-size="10.5" text-anchor="middle" fill="#5d6675">80ms</text>
+
+      <line x1="285" y1="77" x2="312" y2="77" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m0)"/>
+      <rect x="314" y="56" width="105" height="42" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="366" y="74" font-size="12" text-anchor="middle" fill="#0c4a6e">发积分</text>
+      <text x="366" y="90" font-size="10.5" text-anchor="middle" fill="#5d6675">200ms</text>
+
+      <text x="42" y="128" font-size="11.5" fill="#3b4252">RT = 120 + 80 + 200 = 400ms</text>
+      <text x="42" y="150" font-size="11.5" fill="#be123c">发积分超时 → 整个下单失败（用户钱扣了？）</text>
+      <text x="42" y="172" font-size="11.5" fill="#3b4252">再加第 4 个下游「发短信」→ RT 再 +150ms</text>
+      <text x="42" y="194" font-size="11.5" fill="#3b4252">上游被下游的抖动直接拖死</text>
+
+      <rect x="466" y="16" width="410" height="210" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="484" y="40" font-size="12.5" font-weight="700" fill="#3b4252">B · MQ 异步：一次下单 120ms</text>
+
+      <rect x="484" y="70" width="96" height="42" rx="7" fill="#eaf7f0" stroke="#047857"/>
+      <text x="532" y="88" font-size="12" text-anchor="middle" fill="#065f46">下单</text>
+      <text x="532" y="104" font-size="10.5" text-anchor="middle" fill="#5d6675">120ms</text>
+
+      <line x1="582" y1="91" x2="606" y2="91" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m0)"/>
+      <rect x="608" y="70" width="66" height="42" rx="7" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="641" y="88" font-size="12" text-anchor="middle" fill="#5b21b6">MQ</text>
+      <text x="641" y="104" font-size="10" text-anchor="middle" fill="#5d6675">持久化</text>
+
+      <path d="M676,86 L700,86" stroke="#8b93a5" stroke-width="1.3" fill="none"/>
+      <path d="M700,52 L700,120" stroke="#8b93a5" stroke-width="1.3" fill="none"/>
+      <line x1="700" y1="52" x2="720" y2="52" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m0)"/>
+      <line x1="700" y1="86" x2="720" y2="86" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m0)"/>
+      <line x1="700" y1="120" x2="720" y2="120" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m0)"/>
+
+      <rect x="722" y="36" width="138" height="32" rx="6" fill="#fff5e6" stroke="#b45309"/>
+      <text x="791" y="57" font-size="11.5" text-anchor="middle" fill="#92400e">扣库存（80ms）</text>
+      <rect x="722" y="70" width="138" height="32" rx="6" fill="#fff5e6" stroke="#b45309"/>
+      <text x="791" y="91" font-size="11.5" text-anchor="middle" fill="#92400e">发积分（200ms）</text>
+      <rect x="722" y="104" width="138" height="32" rx="6" fill="#fff5e6" stroke="#b45309"/>
+      <text x="791" y="125" font-size="11.5" text-anchor="middle" fill="#92400e">发短信（150ms）</text>
+
+      <text x="484" y="152" font-size="11.5" fill="#3b4252">RT 只取决于「下单 + 发 MQ」= 120ms</text>
+      <text x="484" y="174" font-size="11.5" fill="#047857">下游全挂？消息留在 MQ，恢复后重投</text>
+      <text x="484" y="196" font-size="11.5" fill="#be123c">代价：下单成功 ≠ 下游一定成功 → 最终一致</text>
+    </svg>
+    <figcaption>加一层 MQ，<b>把同步调用链的 RT 累加问题，换成了异步的不一致问题</b>。没有免费的午餐，只有你选哪种账单。</figcaption>
+  </figure>
+
+  <table>
+    <tr><th style="width:50%">你买到的</th><th>你卖掉的</th></tr>
+    <tr><td><strong>解耦</strong>：下游加一个「发短信」，下单代码一行不改</td><td><strong>一致性</strong>：本地事务成功 ≠ 消息一定投递成功</td></tr>
+    <tr><td><strong>异步</strong>：RT 从 400ms 降到 120ms</td><td><strong>可观测性</strong>：链路断在 MQ，排障要顺 traceId 捞</td></tr>
+    <tr><td><strong>削峰</strong>：10 万 QPS 灌进 MQ，下游按 2000 TPS 慢消费</td><td><strong>顺序性</strong>：多分区并发消费，天然乱序</td></tr>
+  </table>
+
+  <h3>一条消息的完整生命周期，和它可能死掉的四个位置</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m1" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+      <rect x="30" y="52" width="150" height="56" rx="9" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="105" y="76" font-size="12.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">Producer</text>
+      <text x="105" y="94" font-size="10.5" text-anchor="middle" fill="#5d6675">攒批 · 压缩 · 选分区</text>
+
+      <line x1="182" y1="80" x2="244" y2="80" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#m1)"/>
+      <text x="213" y="72" font-size="10" text-anchor="middle" fill="#be123c">acks</text>
+
+      <rect x="246" y="42" width="180" height="76" rx="9" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="336" y="66" font-size="12.5" text-anchor="middle" font-weight="700" fill="#5b21b6">Broker</text>
+      <text x="336" y="84" font-size="10.5" text-anchor="middle" fill="#5d6675">顺序写 .log + 页缓存</text>
+      <text x="336" y="101" font-size="10.5" text-anchor="middle" fill="#5d6675">ISR 副本同步 → 更新 HW</text>
+
+      <line x1="428" y1="80" x2="492" y2="80" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#m1)"/>
+      <text x="460" y="72" font-size="10" text-anchor="middle" fill="#be123c">fetch</text>
+
+      <rect x="494" y="52" width="160" height="56" rx="9" fill="#eaf7f0" stroke="#047857"/>
+      <text x="574" y="76" font-size="12.5" text-anchor="middle" font-weight="700" fill="#065f46">Consumer</text>
+      <text x="574" y="94" font-size="10.5" text-anchor="middle" fill="#5d6675">poll → 处理 → commit</text>
+
+      <rect x="700" y="46" width="170" height="68" rx="9" fill="#f8f9fc" stroke="#c7ccd8" stroke-dasharray="4 3"/>
+      <text x="785" y="68" font-size="11" text-anchor="middle" fill="#3b4252">__consumer_offsets</text>
+      <text x="785" y="86" font-size="10.5" text-anchor="middle" fill="#5d6675">位移存这里</text>
+      <text x="785" y="102" font-size="10.5" text-anchor="middle" fill="#5d6675">「提交到哪」= 语义</text>
+      <line x1="656" y1="80" x2="696" y2="80" stroke="#8b93a5" stroke-width="1.4" stroke-dasharray="3 3" marker-end="url(#m1)"/>
+
+      <g font-size="10.5">
+        <rect x="30" y="150" width="200" height="88" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+        <text x="44" y="170" font-weight="700" fill="#be123c">① 生产端丢</text>
+        <text x="44" y="190" fill="#3b4252">send 没接回调，异常被吞</text>
+        <text x="44" y="208" fill="#3b4252">linger 期间进程被 kill</text>
+        <text x="44" y="226" fill="#3b4252">delivery.timeout 已到点</text>
+
+        <rect x="244" y="150" width="200" height="88" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+        <text x="258" y="170" font-weight="700" fill="#be123c">② 存储端丢</text>
+        <text x="258" y="190" fill="#3b4252">acks=1，leader 落盘即返回</text>
+        <text x="258" y="208" fill="#3b4252">min.insync.replicas=1</text>
+        <text x="258" y="226" fill="#3b4252">unclean 选举选到落后副本</text>
+
+        <rect x="458" y="150" width="200" height="88" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+        <text x="472" y="170" font-weight="700" fill="#b45309">③ 消费端重复</text>
+        <text x="472" y="190" fill="#3b4252">auto.commit 按时间提交</text>
+        <text x="472" y="208" fill="#3b4252">rebalance 后未提交位移重投</text>
+        <text x="472" y="226" fill="#3b4252">生产端 retries 重复写入</text>
+
+        <rect x="672" y="150" width="198" height="88" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+        <text x="686" y="170" font-weight="700" fill="#b45309">④ 消费端丢</text>
+        <text x="686" y="190" fill="#3b4252">先 commit 后处理（at-most-once）</text>
+        <text x="686" y="208" fill="#3b4252">catch 吞异常仍提交位移</text>
+        <text x="686" y="226" fill="#3b4252">异步线程池，主线程已提交</text>
+      </g>
+    </svg>
+    <figcaption>后面所有「不丢不重」的方案，都是在补这<b>四个位置</b>。任何只说「用 MQ 保证可靠」而不指位置的回答，都是背的。</figcaption>
+  </figure>
+
+  <div class="oneline">
+    <b>本期的地基</b>
+    MQ 只能给你 <strong>at-least-once</strong>（至少一次）。<strong>exactly-once 是业务侧用幂等造出来的幻觉</strong>——这句话能贯穿整场面试，也是后面五种分布式事务方案的共同终点。
+  </div>
+</section>
+
+<!-- ============ L1 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>存储层 · 一条消息是怎么落到磁盘上的</em></div>
+  <h2>Topic → Partition → Segment：三级结构</h2>
+
+  <figure>
+    <svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m2" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+      <rect x="350" y="14" width="200" height="42" rx="9" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="450" y="34" font-size="12.5" text-anchor="middle" font-weight="700" fill="#5b21b6">Topic: order-created</text>
+      <text x="450" y="50" font-size="10.5" text-anchor="middle" fill="#5d6675">3 个分区</text>
+
+      <line x1="400" y1="58" x2="196" y2="84" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m2)"/>
+      <line x1="450" y1="58" x2="450" y2="84" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m2)"/>
+      <line x1="500" y1="58" x2="704" y2="84" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m2)"/>
+
+      <rect x="120" y="88" width="152" height="44" rx="8" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="196" y="108" font-size="12" text-anchor="middle" font-weight="700" fill="#0c4a6e">Partition-0</text>
+      <text x="196" y="124" font-size="10" text-anchor="middle" fill="#5d6675">并行单元 / 顺序单元</text>
+
+      <rect x="374" y="88" width="152" height="44" rx="8" fill="#eef1f7" stroke="#c7ccd8"/>
+      <text x="450" y="108" font-size="12" text-anchor="middle" fill="#3b4252">Partition-1</text>
+      <text x="450" y="124" font-size="10" text-anchor="middle" fill="#5d6675">（同构）</text>
+
+      <rect x="628" y="88" width="152" height="44" rx="8" fill="#eef1f7" stroke="#c7ccd8"/>
+      <text x="704" y="108" font-size="12" text-anchor="middle" fill="#3b4252">Partition-2</text>
+      <text x="704" y="124" font-size="10" text-anchor="middle" fill="#5d6675">（同构）</text>
+
+      <line x1="196" y1="134" x2="196" y2="152" stroke="#0369a1" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#m2)"/>
+      <text x="60" y="168" font-size="11" fill="#0369a1">Partition-0 的磁盘目录</text>
+
+      <rect x="60" y="176" width="196" height="38" rx="7" fill="#f2fbf6" stroke="#047857"/>
+      <text x="158" y="200" font-size="11.5" text-anchor="middle" fill="#065f46">00000000000000000000.log</text>
+
+      <rect x="272" y="176" width="196" height="38" rx="7" fill="#fbfcfe" stroke="#c7ccd8"/>
+      <text x="370" y="200" font-size="11.5" text-anchor="middle" fill="#3b4252">00000000000000000000.index</text>
+
+      <rect x="484" y="176" width="208" height="38" rx="7" fill="#fbfcfe" stroke="#c7ccd8"/>
+      <text x="588" y="200" font-size="11.5" text-anchor="middle" fill="#3b4252">00000000000000000000.timeindex</text>
+
+      <rect x="708" y="176" width="162" height="38" rx="7" fill="#fff5e6" stroke="#b45309" stroke-dasharray="4 3"/>
+      <text x="789" y="194" font-size="10.5" text-anchor="middle" fill="#92400e">…00001073874123.log</text>
+      <text x="789" y="208" font-size="10" text-anchor="middle" fill="#b45309">1GB 写满 → 滚动新段</text>
+
+      <text x="60" y="242" font-size="11" fill="#0369a1">.log 内部：batch 连续追加，只写不改</text>
+      <rect x="60" y="252" width="196" height="34" rx="4" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="158" y="274" font-size="10.5" text-anchor="middle" fill="#0c4a6e">batch 1000–1010</text>
+      <rect x="258" y="252" width="196" height="34" rx="4" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="356" y="274" font-size="10.5" text-anchor="middle" fill="#0c4a6e">batch 1011–1024</text>
+      <rect x="456" y="252" width="196" height="34" rx="4" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="554" y="274" font-size="10.5" text-anchor="middle" fill="#0c4a6e">batch 1025–1038</text>
+      <rect x="654" y="252" width="196" height="34" rx="4" fill="#fbfcfe" stroke="#c7ccd8" stroke-dasharray="4 3"/>
+      <text x="752" y="274" font-size="10.5" text-anchor="middle" fill="#5d6675">仍在追加 …→</text>
+    </svg>
+    <figcaption><b>日志文件只追加、永不修改</b>——这一条决定了后面所有性能优势：顺序写、零拷贝、页缓存友好。</figcaption>
+  </figure>
+
+  <h3>稀疏索引：为什么不是每条消息都建索引</h3>
+
+  <p><code class="inl">.index</code> 里存的是 <code class="inl">相对offset(4B) → 物理位置(4B)</code>，但<strong>每 4KB 日志才记一条</strong>（<code class="inl">index.interval.bytes=4096</code>）。查 offset=10738：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 290" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m3" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+      <text x="40" y="26" font-size="12" font-weight="700" fill="#3b4252">① 在 .index 里二分，找 ≤ 目标 offset 的最大项（全部载入内存，约 10MB / GB 日志）</text>
+
+      <rect x="40" y="40" width="176" height="52" rx="7" fill="#fbfcfe" stroke="#c7ccd8"/>
+      <text x="128" y="62" font-size="11.5" text-anchor="middle" fill="#3b4252">off 1000</text>
+      <text x="128" y="79" font-size="10.5" text-anchor="middle" fill="#5d6675">pos 0</text>
+
+      <rect x="228" y="40" width="176" height="52" rx="7" fill="#fbfcfe" stroke="#c7ccd8"/>
+      <text x="316" y="62" font-size="11.5" text-anchor="middle" fill="#3b4252">off 1050</text>
+      <text x="316" y="79" font-size="10.5" text-anchor="middle" fill="#5d6675">pos 2048</text>
+
+      <rect x="416" y="40" width="176" height="52" rx="7" fill="#fff5e6" stroke="#b45309" stroke-width="2"/>
+      <text x="504" y="62" font-size="11.5" text-anchor="middle" font-weight="700" fill="#92400e">off 1100 ✓</text>
+      <text x="504" y="79" font-size="10.5" text-anchor="middle" fill="#b45309">pos 4096</text>
+
+      <rect x="604" y="40" width="176" height="52" rx="7" fill="#fbfcfe" stroke="#c7ccd8"/>
+      <text x="692" y="62" font-size="11.5" text-anchor="middle" fill="#3b4252">off 1107</text>
+      <text x="692" y="79" font-size="10.5" text-anchor="middle" fill="#5d6675">pos 6000</text>
+
+      <text x="40" y="118" font-size="12" font-weight="700" fill="#3b4252">② 从 pos 4096 开始顺序扫，最多 4KB</text>
+      <line x1="504" y1="94" x2="504" y2="132" stroke="#b45309" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#m3)"/>
+
+      <rect x="40" y="140" width="740" height="42" rx="5" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="220" y="166" font-size="11" fill="#0c4a6e">pos 4096（off 1100）</text>
+      <line x1="330" y1="140" x2="330" y2="182" stroke="#0369a1" stroke-width="1" stroke-dasharray="3 2"/>
+      <text x="420" y="166" font-size="11" fill="#0c4a6e">off 1101 … 10737（顺序扫）</text>
+      <rect x="600" y="140" width="76" height="42" rx="4" fill="#fdeef0" stroke="#be123c"/>
+      <text x="638" y="166" font-size="11" text-anchor="middle" font-weight="700" fill="#9f1239">10738</text>
+      <line x1="622" y1="132" x2="622" y2="140" stroke="#be123c" stroke-width="1.5"/>
+
+      <text x="40" y="212" font-size="11.5" fill="#047857">③ 命中 offset 10738 —— 总代价：一次内存二分 + 一次 4KB 顺序读 ≈ 常数时间</text>
+
+      <rect x="40" y="228" width="760" height="50" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="56" y="248" font-size="11.5" fill="#9f1239" font-weight="700">如果每条消息都建索引：</text>
+      <text x="56" y="267" font-size="11.5" fill="#3b4252">1GB 日志 / 每条 1KB = 100 万条 × 8B = 8MB 索引，内存翻倍，且微小的索引读变成随机 IO</text>
+    </svg>
+    <figcaption>稀疏索引是典型的 trade-off：<b>用「一次 4KB 顺序扫」换「100 万条索引」</b>。索引只索引「段」，不索引「条」。</figcaption>
+  </figure>
+
+  <div class="good">
+    <b>这里有个容易漏的细节</b>
+    索引文件用 <code class="inl">mmap</code>（<code class="inl">MappedByteBuffer</code>）加载，日志文件用 <code class="inl">sendfile</code>。<strong>两者故意选了不同的机制</strong>：索引小（10MB/GB）且随机访问，mmap 让内核替你管页；日志大（1GB/段）且顺序读，mmap 会踩大量 page fault 与脏页回写，反而不如 sendfile。
+  </div>
+
+  <h3>顺序写到底快多少</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg">
+      <text x="40" y="26" font-size="12" font-weight="700" fill="#3b4252">单盘写入吞吐（同一坐标系，线性比例）</text>
+
+      <text x="60" y="66" font-size="11.5" fill="#3b4252">顺序写 HDD</text>
+      <rect x="170" y="48" width="500" height="30" rx="4" fill="#bfe0f5" stroke="#0369a1"/>
+      <text x="686" y="68" font-size="11.5" font-weight="700" fill="#0c4a6e">≈ 600 MB/s</text>
+
+      <text x="60" y="120" font-size="11.5" fill="#3b4252">随机写 SSD</text>
+      <rect x="170" y="102" width="42" height="30" rx="4" fill="#fcdfc9" stroke="#b45309"/>
+      <text x="226" y="122" font-size="11.5" font-weight="700" fill="#92400e">≈ 50 MB/s（含写放大）</text>
+
+      <text x="60" y="174" font-size="11.5" fill="#3b4252">随机写 HDD</text>
+      <rect x="170" y="156" width="2" height="30" fill="#be123c"/>
+      <text x="186" y="176" font-size="11.5" font-weight="700" fill="#9f1239">≈ 0.1 MB/s ← 磁头每次寻道 8–10ms</text>
+
+      <line x1="170" y1="200" x2="700" y2="200" stroke="#8b93a5" stroke-width="1.2"/>
+      <text x="170" y="218" font-size="10.5" fill="#5d6675">0</text>
+      <text x="690" y="218" font-size="10.5" fill="#5d6675">600 MB/s</text>
+
+      <rect x="40" y="228" width="800" height="1" fill="none"/>
+      <text x="40" y="240" font-size="11.5" fill="#9f1239" font-weight="700">顺序写 : 随机写（HDD）≈ 6000 : 1 —— 这就是 Kafka 宁可牺牲全局有序，也要保住单文件追加的原因</text>
+    </svg>
+    <figcaption>机械盘磁头寻道 + 旋转延迟约 8–10ms，随机写封顶 100 次/秒。SSD 上差距缩到 10–30 倍，但写放大和垃圾回收仍然让顺序写显著更快。</figcaption>
+  </figure>
+
+  <div class="good">
+    <b>加分点</b>
+    不要只说「顺序写快」。补一句：「所以 Kafka 宁可让每个分区独占文件、也不做全局有序——<strong>全局有序 = 单分区 = 放弃并行</strong>，这是 Kafka 明确的取舍。」这一句能把它和「背过八股」区分开。
+  </div>
+
+  <h3>为什么不用 JVM 堆做缓存</h3>
+  <table>
+    <tr><th style="width:34%">方案</th><th>问题</th></tr>
+    <tr><td>堆内缓存（自己写 LRU）</td><td>① 几十 GB 对象让 GC 停顿从 ms 变秒；② 数据要<strong>从页缓存再拷一次到堆</strong>（多一次 CPU 拷贝）；③ 进程重启缓存全丢</td></tr>
+    <tr><td>OS page cache（Kafka 的选择）</td><td>① 内核管理，内存紧张时自动淘汰冷数据；② 与零拷贝天然衔接（数据本来就在内核态）；③ broker 重启后<strong>缓存还在</strong></td></tr>
+  </table>
+  <p>所以 Kafka 官方建议：<strong>别给 broker 太大堆（6–8GB 够），把剩下的内存全留给页缓存</strong>。调优点在 <code class="inl">num.io.threads</code> / <code class="inl">num.network.threads</code>，不在 <code class="inl">-Xmx</code>。</p>
+</section>
+
+<!-- ============ L2 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>传输层 · 4 次拷贝怎么变成 2 次</em></div>
+  <h2>零拷贝：本质是「我不需要看这份数据」</h2>
+
+<pre><span class="c">// 传统方式：4 次拷贝 + 4 次上下文切换</span>
+FileInputStream fis = <span class="k">new</span> FileInputStream(<span class="s">"00000000000000000000.log"</span>);
+<span class="k">byte</span>[] buf = <span class="k">new</span> <span class="k">byte</span>[8192];
+<span class="k">int</span> len;
+<span class="k">while</span> ((len = fis.read(buf)) &gt; 0) {
+    socket.getOutputStream().write(buf, 0, len);   <span class="c">// 数据只是路过，用户态从没看它</span>
+}</pre>
+
+  <figure>
+    <svg viewBox="0 0 900 350" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m4" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <text x="80" y="26" font-size="12.5" font-weight="700" fill="#9f1239">A · read + write：4 次拷贝</text>
+      <rect x="80" y="36" width="200" height="36" rx="6" fill="#eef1f7" stroke="#c7ccd8"/>
+      <text x="180" y="59" font-size="11.5" text-anchor="middle" fill="#3b4252">磁盘</text>
+      <line x1="180" y1="74" x2="180" y2="96" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m4)"/>
+      <text x="194" y="90" font-size="10.5" fill="#be123c">① DMA</text>
+
+      <rect x="80" y="98" width="200" height="36" rx="6" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="180" y="121" font-size="11.5" text-anchor="middle" fill="#0c4a6e">page cache（内核）</text>
+      <line x1="180" y1="136" x2="180" y2="158" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m4)"/>
+      <text x="194" y="152" font-size="10.5" fill="#be123c">② CPU 拷贝</text>
+
+      <rect x="80" y="160" width="200" height="36" rx="6" fill="#fdeef0" stroke="#be123c"/>
+      <text x="180" y="183" font-size="11.5" text-anchor="middle" fill="#9f1239">用户缓冲区 byte[]</text>
+      <line x1="180" y1="198" x2="180" y2="220" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m4)"/>
+      <text x="194" y="214" font-size="10.5" fill="#be123c">③ CPU 拷贝</text>
+
+      <rect x="80" y="222" width="200" height="36" rx="6" fill="#fdeef0" stroke="#be123c"/>
+      <text x="180" y="245" font-size="11.5" text-anchor="middle" fill="#9f1239">socket buffer</text>
+      <line x1="180" y1="260" x2="180" y2="282" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m4)"/>
+      <text x="194" y="276" font-size="10.5" fill="#be123c">④ DMA</text>
+
+      <rect x="80" y="284" width="200" height="34" rx="6" fill="#eef1f7" stroke="#c7ccd8"/>
+      <text x="180" y="306" font-size="11.5" text-anchor="middle" fill="#3b4252">网卡</text>
+
+      <text x="80" y="338" font-size="11" fill="#9f1239" font-weight="700">1 次 CPU 拷贝 = 数据在内核态与用户态之间来回搬</text>
+
+      <text x="480" y="26" font-size="12.5" font-weight="700" fill="#047857">B · sendfile：2 次 DMA，0 次 CPU</text>
+      <rect x="480" y="36" width="190" height="36" rx="6" fill="#eef1f7" stroke="#c7ccd8"/>
+      <text x="575" y="59" font-size="11.5" text-anchor="middle" fill="#3b4252">磁盘</text>
+      <line x1="575" y1="74" x2="575" y2="96" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m4)"/>
+      <text x="589" y="90" font-size="10.5" fill="#047857">① DMA</text>
+
+      <rect x="480" y="98" width="190" height="36" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <text x="575" y="121" font-size="11.5" text-anchor="middle" fill="#065f46">page cache（内核）</text>
+
+      <line x1="575" y1="136" x2="575" y2="158" stroke="#8b93a5" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#m4)"/>
+      <text x="589" y="152" font-size="10" fill="#5d6675">② 只传描述符（约 16B）</text>
+
+      <rect x="480" y="160" width="190" height="36" rx="6" fill="#f8f9fc" stroke="#c7ccd8" stroke-dasharray="4 3"/>
+      <text x="575" y="183" font-size="11" text-anchor="middle" fill="#5d6675">socket buffer（仅描述符）</text>
+
+      <path d="M672,116 L740,116 L740,301 L676,301" fill="none" stroke="#047857" stroke-width="1.8" marker-end="url(#m4)"/>
+      <text x="752" y="196" font-size="10.5" fill="#047857" font-weight="700">③ DMA gather</text>
+      <text x="752" y="212" font-size="10.5" fill="#047857">页缓存 → 网卡</text>
+      <text x="752" y="228" font-size="10.5" fill="#5d6675">完全不经 CPU</text>
+
+      <rect x="480" y="284" width="190" height="34" rx="6" fill="#eef1f7" stroke="#c7ccd8"/>
+      <text x="575" y="306" font-size="11.5" text-anchor="middle" fill="#3b4252">网卡</text>
+
+      <text x="480" y="338" font-size="11" fill="#047857" font-weight="700">Java 入口：FileChannel.transferTo()</text>
+    </svg>
+    <figcaption>传统路径 4 次拷贝（2 DMA + 2 CPU）、4 次上下文切换；sendfile 2 次拷贝（2 DMA + <b>0 CPU</b>）、2 次上下文切换。</figcaption>
+  </figure>
+
+<pre><span class="c">// Linux 2.4+ 的 sendfile，Java 通过 transferTo 暴露</span>
+FileChannel ch = <span class="k">new</span> RandomAccessFile(<span class="s">"00000000000000000000.log"</span>, <span class="s">"r"</span>).getChannel();
+<span class="k">long</span> pos = 0, size = ch.size();
+<span class="k">while</span> (pos &lt; size) {
+    pos += ch.transferTo(pos, size - pos, socketChannel);   <span class="c">// 零 CPU 拷贝</span>
+}</pre>
+
+  <h3>零拷贝什么时候会失效（这题最能筛人）</h3>
+  <table>
+    <tr><th style="width:30%">场景</th><th>为什么失效</th></tr>
+    <tr><td>开启 <strong>SSL/TLS</strong></td><td>数据要加密，必须进用户态处理，内核没法代劳</td></tr>
+    <tr><td>broker 端<strong>解压/格式转换</strong></td><td>消息格式降级（down-conversion）时必须解压后重新组织</td></tr>
+    <tr><td>消费端<strong>滞后太多</strong></td><td>数据已被页缓存淘汰，得从磁盘读回来——退化成普通读（但仍是顺序读）</td></tr>
+    <tr><td>用 <code>mmap</code> 读日志</td><td>Kafka 只用 mmap 读<strong>索引文件</strong>（小、随机访问），日志用 sendfile。mmap 大文件会踩 page fault 与脏页回写</td></tr>
+  </table>
+  <div class="oneline">
+    <b>一句话收口</b>
+    零拷贝的前提是<strong>「我不需要看这份数据」</strong>。Kafka 的 broker 恰好不需要看消息体，所以能吃满这个红利；一旦你要加密或改写，红利立刻收回。
+  </div>
+</section>
+
+<!-- ============ L3 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>可靠性 · acks / ISR / LEO / HW</em></div>
+  <h2>四个水位概念，一张图说清</h2>
+
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m5" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+      <text x="40" y="24" font-size="12" font-weight="700" fill="#3b4252">Partition-0 · 三副本（RF=3）</text>
+
+      <text x="40" y="62" font-size="11.5" fill="#0c4a6e">Leader</text>
+      <rect x="130" y="46" width="640" height="26" rx="4" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="782" y="64" font-size="11" font-weight="700" fill="#0c4a6e">LEO=105</text>
+
+      <text x="40" y="108" font-size="11.5" fill="#065f46">Follower-1</text>
+      <rect x="130" y="92" width="640" height="26" rx="4" fill="#eaf7f0" stroke="#047857"/>
+      <text x="782" y="110" font-size="11" font-weight="700" fill="#065f46">LEO=105</text>
+
+      <text x="40" y="154" font-size="11.5" fill="#92400e">Follower-2</text>
+      <rect x="130" y="138" width="608" height="26" rx="4" fill="#fff5e6" stroke="#b45309"/>
+      <rect x="738" y="138" width="32" height="26" rx="0" fill="#fdeef0" stroke="#be123c" stroke-dasharray="3 2"/>
+      <text x="782" y="156" font-size="11" font-weight="700" fill="#92400e">LEO=98</text>
+
+      <line x1="738" y1="36" x2="738" y2="196" stroke="#be123c" stroke-width="1.8" stroke-dasharray="5 3"/>
+      <text x="734" y="224" font-size="11.5" font-weight="700" fill="#9f1239">HW = min(ISR 的 LEO) = 98</text>
+      <text x="734" y="242" font-size="10.5" fill="#5d6675">← 消费者可见边界</text>
+
+      <rect x="738" y="36" width="32" height="26" rx="0" fill="#f8f9fc" stroke="#c7ccd8" stroke-dasharray="3 2"/>
+      <text x="640" y="36" font-size="10.5" fill="#9f1239">offset 99–105 对消费者不可见</text>
+
+      <line x1="130" y1="196" x2="770" y2="196" stroke="#8b93a5" stroke-width="1.2"/>
+      <text x="130" y="212" font-size="10" fill="#5d6675">0</text>
+      <text x="748" y="212" font-size="10" fill="#5d6675">105</text>
+
+      <rect x="40" y="252" width="800" height="42" rx="8" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="56" y="270" font-size="10.8" fill="#3b4252"><tspan font-weight="700">LEO</tspan> 每个副本自己的写入进度　　<tspan font-weight="700">HW</tspan> ISR 中最小的 LEO，消费者可见边界</text>
+      <text x="56" y="288" font-size="10.8" fill="#3b4252"><tspan font-weight="700">ISR</tspan> 落后 leader 不超过 replica.lag.time.max.ms(30s) 的副本　　<tspan font-weight="700">LSO</tspan> 事务场景用，read_committed 可见到 LSO</text>
+    </svg>
+    <figcaption>消费者只能读到 98，不是因为 99–105 没写进去，而是因为<b>它们还没被所有 ISR 确认</b>——万一 leader 现在挂了，新 leader 可能只有 98 条。</figcaption>
+  </figure>
+
+  <p><strong>为什么用「延迟可见」换「不倒退」？</strong> 如果让消费者看到 105，而 leader 此刻宕机、Follower-2 上位，消费者的已读位置就会从 105 倒退回 98——在业务看来这是消息凭空消失。HW 就是为了消灭这种「倒退」。</p>
+
+  <h3>acks 三档到底差在哪</h3>
+
+<pre>Properties props = <span class="k">new</span> Properties();
+props.put(<span class="s">"acks"</span>, <span class="s">"all"</span>);                        <span class="c">// 0 / 1 / all(-1)</span>
+props.put(<span class="s">"retries"</span>, Integer.MAX_VALUE);
+props.put(<span class="s">"enable.idempotence"</span>, <span class="s">"true"</span>);          <span class="c">// PID + sequence，防重且保序</span>
+props.put(<span class="s">"max.in.flight.requests.per.connection"</span>, <span class="s">"5"</span>); <span class="c">// 开幂等时 ≤5 仍保序</span>
+props.put(<span class="s">"delivery.timeout.ms"</span>, <span class="s">"120000"</span>);     <span class="c">// 含重试的总预算</span>
+props.put(<span class="s">"compression.type"</span>, <span class="s">"lz4"</span>);
+props.put(<span class="s">"linger.ms"</span>, <span class="s">"5"</span>);                      <span class="c">// 攒批，用 5ms 延迟换吞吐</span>
+props.put(<span class="s">"batch.size"</span>, <span class="s">"16384"</span>);</pre>
+
+  <table>
+    <tr><th style="width:12%">acks</th><th style="width:34%">谁确认</th><th>丢失风险</th></tr>
+    <tr><td><code>0</code></td><td>谁都不确认，发出去就算成功</td><td>网络抖动 / broker 宕机全丢，<strong>吞吐最高</strong></td></tr>
+    <tr><td><code>1</code></td><td>leader 写入本地即返回</td><td>leader 落盘后、follower 同步前宕机 → <strong>丢</strong></td></tr>
+    <tr><td><code>all</code></td><td>ISR 全部写入才返回</td><td>大概率不丢，但<strong>仍不保证刷盘</strong></td></tr>
+  </table>
+
+  <h3>acks=all 为什么还不是「绝对不丢」</h3>
+  <div class="trap">
+    <b>三个坑，缺一不可</b>
+    <ol style="margin:8px 0 0">
+      <li><strong>all 只保证写进 ISR 的页缓存，不 fsync。</strong>Kafka 几乎从不主动刷盘（<code class="inl">log.flush.interval.messages</code> 默认极大），靠多副本冗余代替单机持久化。三副本同机架同时断电 → 丢。</li>
+      <li><strong>ISR 可能只剩 leader 一个。</strong>若 <code class="inl">min.insync.replicas=1</code>（默认值），<code class="inl">acks=all</code> 直接退化成 <code class="inl">acks=1</code>。</li>
+      <li><strong><code class="inl">unclean.leader.election=true</code></strong> 会让落后很多的副本当选 leader，数据立刻缺失。</li>
+    </ol>
+  </div>
+
+<pre><span class="c"># 可靠三件套，必须同时配，单拎任何一条都没有意义</span>
+acks=all
+min.insync.replicas=2                        <span class="c"># ISR 不足 2 → NotEnoughReplicasException，宁可失败</span>
+unclean.leader.election.enable=false         <span class="c"># 宁可分区不可用，也不接受数据缺失</span>
+replication.factor=3</pre>
+
+  <p>把代价算清楚：<strong>RF=3 + min.insync=2 → 允许挂 1 个 broker 仍可写；挂 2 个 → 分区不可写</strong>。这就是「可用性 vs 一致性」的真金白银，面试时报这个数字最有说服力。</p>
+
+  <h3>生产端也会丢：那些「没发出去」的消息</h3>
+
+<pre><span class="c">// ✗ 错误示范：fire-and-forget，异常被吞</span>
+producer.send(<span class="k">new</span> ProducerRecord&lt;&gt;(<span class="s">"order-created"</span>, orderId, json));
+
+<span class="c">// ✓ 正确：拿回调，失败要有兜底</span>
+producer.send(record, (metadata, ex) -&gt; {
+    <span class="k">if</span> (ex != <span class="k">null</span>) {
+        failureRepo.save(orderId, json, ex.getMessage());   <span class="c">// 落失败表</span>
+        alert.warn(<span class="s">"send failed: "</span> + orderId, ex);        <span class="c">// 报警 + 定时重投</span>
+    }
+});</pre>
+
+  <div class="warn">
+    <b>两个隐形丢失点</b>
+    ① <code class="inl">linger.ms</code> 攒批期间进程被 kill → 缓冲区里的整批没发出去；② <code class="inl">delivery.timeout.ms</code> 到点直接判失败 → 你已经重试到超时，消息彻底放弃。这两个坑只有在「本地消息表 + 对账」体系下才能兜住。
+  </div>
+</section>
+
+<!-- ============ L4 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b3">L4</span><em>消费端 · 重复 / 乱序 / 积压</em></div>
+  <h2>位移提交决定语义</h2>
+
+<pre><span class="c">// 默认：auto.commit=true，每 5s 提交一次「已 poll 到的最大位移」</span>
+poll → 处理 A,B,C → [5s 到点自动提交 offset=3] → 处理 D 时崩溃
+                                                    ↓
+                              重启从 3 开始 → A,B,C 全部重投
+
+<span class="c">// 手动提交（先处理，后提交）= at-least-once：可能重复</span>
+poll → 处理 A,B,C → commitSync(offset=3) → 崩在 commit 之前？
+                                                    ↓
+                                          A,B,C 全部重投 → 业务必须幂等
+
+<span class="c">// 手动提交（先提交，后处理）= at-most-once：可能丢，除非丢消息无所谓</span></pre>
+
+  <h3>rebalance：重复消费最大的制造机</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 280" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m6" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+        <marker id="m6r" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#be123c"/>
+        </marker>
+      </defs>
+      <text x="40" y="24" font-size="12" font-weight="700" fill="#3b4252">Consumer Group: order-svc（3 消费者 / 3 分区）</text>
+
+      <rect x="50" y="36" width="140" height="40" rx="8" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="120" y="61" font-size="12" text-anchor="middle" font-weight="700" fill="#0c4a6e">C1</text>
+
+      <rect x="230" y="36" width="140" height="40" rx="8" fill="#fdeef0" stroke="#be123c" stroke-dasharray="4 3"/>
+      <text x="300" y="55" font-size="12" text-anchor="middle" fill="#9f1239">C2 ✗</text>
+      <text x="300" y="70" font-size="9.5" text-anchor="middle" fill="#be123c">poll 超时被踢出</text>
+
+      <rect x="410" y="36" width="140" height="40" rx="8" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="480" y="61" font-size="12" text-anchor="middle" font-weight="700" fill="#0c4a6e">C3</text>
+
+      <line x1="120" y1="76" x2="120" y2="94" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m6)"/>
+      <line x1="300" y1="76" x2="200" y2="94" stroke="#be123c" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#m6r)"/>
+      <line x1="480" y1="76" x2="480" y2="94" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m6)"/>
+
+      <rect x="60" y="96" width="120" height="34" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <text x="120" y="118" font-size="11" text-anchor="middle" fill="#065f46">P0</text>
+
+      <rect x="140" y="140" width="120" height="34" rx="6" fill="#fdeef0" stroke="#be123c"/>
+      <text x="200" y="162" font-size="11" text-anchor="middle" font-weight="700" fill="#9f1239">P1 → 转给 C1</text>
+
+      <rect x="420" y="96" width="120" height="34" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <text x="480" y="118" font-size="11" text-anchor="middle" fill="#065f46">P2</text>
+
+      <rect x="600" y="34" width="266" height="146" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="616" y="54" font-size="11" font-weight="700" fill="#3b4252">rebalance 四个常见触发源</text>
+      <text x="616" y="74" font-size="10.5" fill="#3b4252">① 消费者加入 / 离开（发布、扩容）</text>
+      <text x="616" y="93" font-size="10.5" fill="#9f1239">② max.poll.interval.ms 超时（最常见）</text>
+      <text x="616" y="112" font-size="10.5" fill="#3b4252">③ session.timeout.ms 内无心跳</text>
+      <text x="616" y="130" font-size="10.5" fill="#5d6675">　 （Full GC 停顿 / 网络分区）</text>
+      <text x="616" y="149" font-size="10.5" fill="#3b4252">④ 订阅 topic 的分区数变化</text>
+      <text x="616" y="170" font-size="10.5" fill="#5d6675">默认 session=45s / heartbeat=3s</text>
+
+      <rect x="50" y="212" width="816" height="52" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="68" y="234" font-size="11.5" font-weight="700" fill="#9f1239">P1 上「已处理但未提交」的位移，会原样重投给 C1</text>
+      <text x="68" y="253" font-size="11.5" fill="#3b4252">→ 重复消费。而 C2 被踢的原因是单批处理超过 5 分钟，不是消息真的坏了</text>
+    </svg>
+    <figcaption><b>rebalance 不是故障，是常态</b>。每一次扩缩容、每一次发版都会触发它，所以幂等是消费端的必选项而不是加分项。</figcaption>
+  </figure>
+
+<pre><span class="c">// 两个必答的调优</span>
+props.put(<span class="s">"max.poll.records"</span>, <span class="s">"100"</span>);        <span class="c">// 默认 500，处理慢就调小</span>
+props.put(<span class="s">"max.poll.interval.ms"</span>, <span class="s">"600000"</span>); <span class="c">// 长任务要放大，否则等着被踢</span>
+props.put(<span class="s">"partition.assignment.strategy"</span>,
+    <span class="s">"org.apache.kafka.clients.consumer.CooperativeStickyAssignor"</span>); <span class="c">// 增量式，不全量停顿</span></pre>
+
+  <h3>幂等的三种工程写法</h3>
+
+<pre><span class="c">// 写法一：唯一键去重表（最通用）—— 去重记录与业务变更必须同一个本地事务</span>
+<span class="an">@Transactional</span>
+<span class="k">public void</span> onOrderPaid(OrderPaidEvent e) {
+    <span class="k">try</span> {
+        dedupMapper.insert(e.getEventId());        <span class="c">// UNIQUE KEY uk_event(event_id)</span>
+    } <span class="k">catch</span> (DuplicateKeyException dup) {
+        log.warn(<span class="s">"重复消息，丢弃: {}"</span>, e.getEventId());
+        <span class="k">return</span>;
+    }
+    orderMapper.updateStatus(e.getOrderId(), PAID);
+}
+
+<span class="c">// 写法二：状态机 CAS（天然幂等，最适合订单 / 支付）</span>
+<span class="c">// UPDATE orders SET status='PAID' WHERE id=? AND status='UNPAID'</span>
+<span class="k">int</span> affected = orderMapper.casStatus(orderId, UNPAID, PAID);
+<span class="k">if</span> (affected == 0) <span class="k">return</span>;   <span class="c">// 已处理过，或状态不允许</span>
+
+<span class="c">// 写法三：版本号乐观锁（适合累加类）</span>
+<span class="c">// UPDATE account SET balance = balance + ?, version = version + 1</span>
+<span class="c">//  WHERE id = ? AND version = ?</span></pre>
+
+  <div class="good">
+    <b>面试话术</b>
+    「Kafka 只能保证 at-least-once，所以幂等不是可选项，是必选项。我们用的是<strong>状态机 CAS + 事件 ID 去重表双保险</strong>——状态机挡住业务重复，去重表挡住同一条消息被不同消费路径重复处理。」
+  </div>
+
+  <h3>顺序性：三个条件缺一不可</h3>
+
+<pre><span class="c">// 生产端：同 key 同分区</span>
+partition = murmur2(key) % numPartitions;      <span class="c">// orderId 相同 → 必进同一分区</span>
+
+<span class="c">// 消费端：不能随便丢线程池</span>
+executor.submit(() -&gt; handle(record));                          <span class="c">// ✗ 乱序</span>
+
+<span class="k">int</span> idx = Math.floorMod(record.key().hashCode(), workers.length);
+workers[idx].submit(() -&gt; handle(record));                      <span class="c">// ✓ 按 key 路由到固定线程</span></pre>
+
+  <p><strong>代价必须主动说</strong>：保序 = 热点 key 全压一个分区 = 该分区成为吞吐瓶颈。所以只有<strong>强顺序需求</strong>（同一订单的状态流转）才保序，日志、埋点这类千万别保序。</p>
+
+  <h3>积压了怎么办（数字要能报）</h3>
+
+<pre>积压 2000 万条，单条处理 5ms，当前 4 个消费者（4 分区）
+
+现有吞吐 = 4 / 0.005 = 800 条/s
+清空耗时 = 20,000,000 / 800 ≈ 25,000s ≈ 7 小时      ← 业务等不起
+
+方案 A：加消费者？分区只有 4 个 → 第 5 个消费者空转，无效
+方案 B：扩分区（4 → 12）→ 旧数据不会重分布！只解决「不再恶化」
+方案 C（真实做法）：临时把积压转发到 12 分区新 topic，起 12 个消费者
+        20,000,000 / (12 / 0.005) ≈ 8,333s ≈ 2.3 小时
+方案 D：能降级就降级（积分先不入账，事后批量补）</pre>
+</section>
+
+<!-- ============ L5 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L5</span><em>分布式事务 · 五种方案的适用边界</em></div>
+  <h2>问题的本质：没有统一的锁和日志</h2>
+
+<pre>本地事务：ACID —— 一个数据库，靠 undo/redo + 行锁，DB 自己就能保证
+分布式事务：跨库 / 跨服务 —— 没有统一锁，只能靠「协议」逼近一致性
+
+CAP：分区必然发生 → 只能在 C 与 A 之间选一个
+BASE：Basically Available + Soft state + Eventually consistent
+      → 分布式事务的工程答案，几乎都是「最终一致」</pre>
+
+  <h3>2PC / XA：理论最优雅，实践最难受</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 350" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m7" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 z" fill="#5d6675"/>
+        </marker>
+      </defs>
+      <rect x="110" y="14" width="140" height="38" rx="7" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="180" y="39" font-size="12" text-anchor="middle" font-weight="700" fill="#5b21b6">协调者 TC</text>
+
+      <rect x="370" y="14" width="140" height="38" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="440" y="39" font-size="12" text-anchor="middle" font-weight="700" fill="#0c4a6e">参与者 A</text>
+
+      <rect x="630" y="14" width="140" height="38" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="700" y="39" font-size="12" text-anchor="middle" font-weight="700" fill="#0c4a6e">参与者 B</text>
+
+      <line x1="180" y1="52" x2="180" y2="330" stroke="#c7ccd8" stroke-width="1.2" stroke-dasharray="4 4"/>
+      <line x1="440" y1="52" x2="440" y2="330" stroke="#c7ccd8" stroke-width="1.2" stroke-dasharray="4 4"/>
+      <line x1="700" y1="52" x2="700" y2="330" stroke="#c7ccd8" stroke-width="1.2" stroke-dasharray="4 4"/>
+
+      <rect x="30" y="62" width="60" height="24" rx="5" fill="#eef4fb" stroke="#bcdcf2"/>
+      <text x="60" y="79" font-size="10.5" text-anchor="middle" fill="#0c4a6e">阶段一</text>
+
+      <line x1="180" y1="88" x2="436" y2="88" stroke="#5d6675" stroke-width="1.4" marker-end="url(#m7)"/>
+      <text x="308" y="82" font-size="10.5" text-anchor="middle" fill="#3b4252">① prepare</text>
+      <line x1="180" y1="112" x2="696" y2="112" stroke="#5d6675" stroke-width="1.4" marker-end="url(#m7)"/>
+      <text x="560" y="106" font-size="10.5" text-anchor="middle" fill="#3b4252">① prepare</text>
+
+      <line x1="436" y1="140" x2="184" y2="140" stroke="#047857" stroke-width="1.4" marker-end="url(#m7)"/>
+      <text x="308" y="134" font-size="10.5" text-anchor="middle" fill="#047857">② ready（锁已持有）</text>
+      <line x1="696" y1="164" x2="184" y2="164" stroke="#047857" stroke-width="1.4" marker-end="url(#m7)"/>
+      <text x="440" y="158" font-size="10.5" text-anchor="middle" fill="#047857">② ready（锁已持有）</text>
+
+      <line x1="30" y1="184" x2="870" y2="184" stroke="#e3e7ef" stroke-width="1"/>
+      <line x1="182" y1="202" x2="436" y2="202" stroke="#5d6675" stroke-width="1.4" marker-end="url(#m7)"/>
+      <text x="308" y="196" font-size="10.5" text-anchor="middle" fill="#3b4252">③ commit</text>
+      <line x1="182" y1="228" x2="696" y2="228" stroke="#5d6675" stroke-width="1.4" marker-end="url(#m7)"/>
+      <text x="440" y="222" font-size="10.5" text-anchor="middle" fill="#3b4252">③ commit</text>
+
+      <line x1="436" y1="256" x2="184" y2="256" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m7)"/>
+      <text x="308" y="250" font-size="10.5" text-anchor="middle" fill="#5d6675">ack（释放锁）</text>
+      <line x1="696" y1="282" x2="184" y2="282" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m7)"/>
+      <text x="440" y="276" font-size="10.5" text-anchor="middle" fill="#5d6675">ack（释放锁）</text>
+
+      <path d="M790,88 L790,256" stroke="#be123c" stroke-width="2"/>
+      <path d="M784,88 L796,88 M784,256 L796,256" stroke="#be123c" stroke-width="2"/>
+      <text x="806" y="166" font-size="10.5" fill="#9f1239" font-weight="700">锁持有区间</text>
+      <text x="806" y="182" font-size="10" fill="#9f1239">全程阻塞</text>
+
+      <text x="30" y="316" font-size="10.5" fill="#9f1239">协调者在 ③ 之前挂掉 → 参与者停在 in-doubt 状态，只能人工介入</text>
+      <text x="30" y="334" font-size="10.5" fill="#5d6675">MySQL XA 下，行锁从 prepare 一直持有到 commit —— 高并发下并发度断崖式下跌</text>
+    </svg>
+    <figcaption>XA 在<b>同构数据库、短事务、低并发</b>场景能用（银行内部跨库转账）；互联网高并发订单链路基本不用。</figcaption>
+  </figure>
+
+  <h3>TCC：把锁下沉到业务，代价是三个坑</h3>
+
+<pre>Try     ：检查 + 预留资源（不真正扣减）
+          库存：available - 1, frozen + 1
+Confirm ：真正扣减，只用 Try 预留的部分，必须幂等
+          库存：frozen - 1
+Cancel  ：释放预留，必须幂等，且能处理「空回滚」
+          库存：available + 1, frozen - 1</pre>
+
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m8" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <text x="30" y="30" font-size="11.5" font-weight="700" fill="#9f1239">① 空回滚</text>
+      <rect x="140" y="12" width="170" height="36" rx="6" fill="#fff5e6" stroke="#b45309"/>
+      <text x="225" y="35" font-size="11" text-anchor="middle" fill="#92400e">Try 超时，未真正到达</text>
+      <line x1="312" y1="30" x2="336" y2="30" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m8)"/>
+      <rect x="338" y="12" width="150" height="36" rx="6" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="413" y="35" font-size="11" text-anchor="middle" fill="#0c4a6e">Cancel 先到</text>
+      <line x1="490" y1="30" x2="514" y2="30" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m8)"/>
+      <rect x="516" y="12" width="316" height="36" rx="6" fill="#fdeef0" stroke="#be123c"/>
+      <text x="674" y="35" font-size="11" text-anchor="middle" fill="#9f1239">找不到预留记录 → 不能报错，要返回成功</text>
+
+      <text x="30" y="98" font-size="11.5" font-weight="700" fill="#9f1239">② 悬挂</text>
+      <rect x="140" y="80" width="170" height="36" rx="6" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="225" y="103" font-size="11" text-anchor="middle" fill="#0c4a6e">Cancel 已执行完</text>
+      <line x1="312" y1="98" x2="336" y2="98" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m8)"/>
+      <rect x="338" y="80" width="150" height="36" rx="6" fill="#fff5e6" stroke="#b45309"/>
+      <text x="413" y="103" font-size="11" text-anchor="middle" fill="#92400e">Try 迟到了</text>
+      <line x1="490" y1="98" x2="514" y2="98" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m8)"/>
+      <rect x="516" y="80" width="316" height="36" rx="6" fill="#fdeef0" stroke="#be123c"/>
+      <text x="674" y="103" font-size="11" text-anchor="middle" fill="#9f1239">资源被永久冻结 → 必须拒绝这次 Try</text>
+
+      <text x="30" y="166" font-size="11.5" font-weight="700" fill="#9f1239">③ 幂等</text>
+      <rect x="140" y="148" width="170" height="36" rx="6" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="225" y="171" font-size="11" text-anchor="middle" fill="#0c4a6e">Confirm / Cancel 重试</text>
+      <line x1="312" y1="166" x2="336" y2="166" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m8)"/>
+      <rect x="338" y="148" width="150" height="36" rx="6" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="413" y="171" font-size="11" text-anchor="middle" fill="#0c4a6e">重复执行 N 次</text>
+      <line x1="490" y1="166" x2="514" y2="166" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m8)"/>
+      <rect x="516" y="148" width="316" height="36" rx="6" fill="#fdeef0" stroke="#be123c"/>
+      <text x="674" y="171" font-size="11" text-anchor="middle" fill="#9f1239">结果必须一致（重复扣款 / 重复回滚都是事故）</text>
+
+      <rect x="30" y="206" width="838" height="82" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="48" y="228" font-size="11.5" font-weight="700" fill="#065f46">统一解法：事务控制表（xid + branch_id 唯一键，状态机 TRYING / CONFIRMED / CANCELLED）</text>
+      <text x="48" y="250" font-size="11" fill="#3b4252">· Try 先插 TRYING 记录 → 插不进去且状态是 CANCELLED ⇒ 这是悬挂的 Try，直接拒绝</text>
+      <text x="48" y="270" font-size="11" fill="#3b4252">· Cancel 先插 CANCELLED 占位 → 记录不存在也要插，把「坑」占住，空回滚才不会重复加库存</text>
+    </svg>
+    <figcaption>三个坑的根因是同一个：<b>TCC 的三个方法走的是不同的网络路径，到达顺序不可控</b>。控制表就是把「不可控的顺序」变成「可判断的状态」。</figcaption>
+  </figure>
+
+<pre><span class="an">@Transactional</span>
+<span class="k">public boolean</span> tryFreeze(String xid, Long skuId, <span class="k">int</span> n) {
+    <span class="c">// ① 先插控制记录（唯一键 xid + branchId 防悬挂）</span>
+    <span class="k">int</span> inserted = txControlMapper.insertIfAbsent(xid, BRANCH_STOCK, <span class="s">"TRYING"</span>);
+    <span class="k">if</span> (inserted == 0) {
+        String st = txControlMapper.status(xid, BRANCH_STOCK);
+        <span class="k">if</span> (<span class="s">"CANCELLED"</span>.equals(st)) <span class="k">return false</span>;  <span class="c">// 悬挂的 Try，拒绝</span>
+        <span class="k">return true</span>;                                <span class="c">// 已 TRYING，幂等返回</span>
+    }
+    <span class="c">// ② 再冻结库存（CAS 带条件，防超卖）</span>
+    <span class="k">if</span> (stockMapper.freeze(skuId, n) == 0)         <span class="c">// WHERE available &gt;= n</span>
+        <span class="k">throw new</span> BizException(<span class="s">"库存不足"</span>);
+    <span class="k">return true</span>;
+}
+
+<span class="an">@Transactional</span>
+<span class="k">public boolean</span> cancelFreeze(String xid, Long skuId, <span class="k">int</span> n) {
+    <span class="c">// 空回滚：Try 从没来过，也要插一条 CANCELLED 把坑占住</span>
+    <span class="k">int</span> inserted = txControlMapper.insertIfAbsent(xid, BRANCH_STOCK, <span class="s">"CANCELLED"</span>);
+    <span class="k">if</span> (inserted == 0) {
+        String st = txControlMapper.status(xid, BRANCH_STOCK);
+        <span class="k">if</span> (<span class="s">"CANCELLED"</span>.equals(st)) <span class="k">return true</span>;   <span class="c">// 幂等</span>
+        <span class="k">if</span> (<span class="s">"TRYING"</span>.equals(st)) {
+            stockMapper.unfreeze(skuId, n);
+            txControlMapper.updateStatus(xid, BRANCH_STOCK, <span class="s">"CANCELLED"</span>);
+        }
+    }
+    <span class="k">return true</span>;
+}</pre>
+
+  <div class="warn">
+    <b>用的人话总结</b>
+    TCC 的复杂度全在「一张控制表 + 三个异常」。优点是<strong>不锁数据库行、性能好</strong>；缺点是<strong>侵入性极强</strong>，每个参与方都得写三个方法加一套状态机。所以它适合<strong>核心资金链路</strong>（库存、余额），不适合全站铺开。
+  </div>
+
+  <h3>SAGA：长流程的编排，牺牲隔离性</h3>
+
+<pre>订单 ──▶ 库存 ──▶ 支付 ──▶ 积分
+  C1      C2       C3       C4      （每步都是本地事务）
+  ▲       ▲        ▲        ▲
+补偿1 ◀─ 补偿2 ◀─ 补偿3 ◀─ 补偿4     （失败则逆序补偿）
+
+优点：无锁、长事务友好、跨异构系统
+缺点：没有隔离性 —— 中间状态对外可见（脏读）
+      补偿本身也可能失败 → 必须有对账 + 人工兜底</pre>
+
+  <p><strong>补隔离性的做法是「语义锁」</strong>：订单表加 <code class="inl">status=PAYING</code>，对外查询时过滤掉中间态，用业务手段模拟「读已提交」。</p>
+
+  <h3>本地消息表：最土但最可靠</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 270" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m9" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <rect x="26" y="60" width="120" height="60" rx="8" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="86" y="86" font-size="11.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">业务服务</text>
+      <text x="86" y="103" font-size="10" text-anchor="middle" fill="#5d6675">createOrder()</text>
+
+      <line x1="148" y1="90" x2="176" y2="90" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#m9)"/>
+      <text x="162" y="82" font-size="10" text-anchor="middle" fill="#be123c">①</text>
+
+      <rect x="178" y="44" width="250" height="92" rx="8" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="303" y="64" font-size="11" text-anchor="middle" font-weight="700" fill="#5b21b6">同一个本地事务（ACID）</text>
+      <rect x="192" y="72" width="106" height="46" rx="5" fill="#fff" stroke="#a78bfa"/>
+      <text x="245" y="92" font-size="10.5" text-anchor="middle" fill="#5b21b6">orders</text>
+      <text x="245" y="108" font-size="9.5" text-anchor="middle" fill="#5d6675">业务表</text>
+      <rect x="308" y="72" width="108" height="46" rx="5" fill="#fff" stroke="#a78bfa"/>
+      <text x="362" y="92" font-size="10.5" text-anchor="middle" fill="#5b21b6">mq_outbox</text>
+      <text x="362" y="108" font-size="9.5" text-anchor="middle" fill="#5d6675">PENDING</text>
+
+      <line x1="430" y1="90" x2="486" y2="90" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#m9)"/>
+      <text x="458" y="82" font-size="10" text-anchor="middle" fill="#be123c">②</text>
+
+      <rect x="488" y="58" width="150" height="64" rx="8" fill="#fff5e6" stroke="#b45309"/>
+      <text x="563" y="82" font-size="11" text-anchor="middle" font-weight="700" fill="#92400e">投递线程</text>
+      <text x="563" y="99" font-size="10" text-anchor="middle" fill="#5d6675">扫 PENDING → send</text>
+      <text x="563" y="114" font-size="10" text-anchor="middle" fill="#5d6675">成功则置 SENT</text>
+
+      <line x1="640" y1="90" x2="678" y2="90" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#m9)"/>
+      <text x="659" y="82" font-size="10" text-anchor="middle" fill="#be123c">③</text>
+
+      <rect x="680" y="58" width="90" height="64" rx="8" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="725" y="86" font-size="11.5" text-anchor="middle" font-weight="700" fill="#5b21b6">MQ</text>
+      <text x="725" y="104" font-size="10" text-anchor="middle" fill="#5d6675">at-least-once</text>
+
+      <line x1="725" y1="124" x2="725" y2="152" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#m9)"/>
+      <text x="737" y="142" font-size="10" fill="#be123c">④</text>
+
+      <rect x="640" y="154" width="170" height="52" rx="8" fill="#eaf7f0" stroke="#047857"/>
+      <text x="725" y="176" font-size="11" text-anchor="middle" font-weight="700" fill="#065f46">下游服务</text>
+      <text x="725" y="193" font-size="10" text-anchor="middle" fill="#5d6675">唯一键幂等消费</text>
+
+      <rect x="430" y="154" width="180" height="52" rx="8" fill="#f8f9fc" stroke="#c7ccd8" stroke-dasharray="4 3"/>
+      <text x="520" y="176" font-size="11" text-anchor="middle" font-weight="700" fill="#3b4252">对账任务</text>
+      <text x="520" y="193" font-size="10" text-anchor="middle" fill="#5d6675">SENT 超时未确认 → 查下游</text>
+      <line x1="430" y1="180" x2="404" y2="180" stroke="#8b93a5" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#m9)"/>
+
+      <rect x="26" y="134" width="120" height="52" rx="8" fill="#fdeef0" stroke="#be123c"/>
+      <text x="86" y="156" font-size="10.5" text-anchor="middle" font-weight="700" fill="#9f1239">两者同库</text>
+      <text x="86" y="172" font-size="10" text-anchor="middle" fill="#9f1239">要么都成功</text>
+      <line x1="86" y1="134" x2="86" y2="124" stroke="#be123c" stroke-width="1.2" stroke-dasharray="3 2"/>
+
+      <text x="26" y="240" font-size="11" fill="#3b4252">为什么它能成立：<tspan font-weight="700">「业务写入」和「消息记录」在同一个本地事务里</tspan> —— 这正是 2PC 跨不过去的原子性，被一个库「作弊」绕过去了。</text>
+      <text x="26" y="258" font-size="11" fill="#5d6675">代价：DB 多一次写、轮询延迟（秒级）、消息表要定期清理。</text>
+    </svg>
+    <figcaption>本地消息表的核心不是「表」，是<b>「同一个本地事务」</b>这五个字。谁跟你聊 outbox 却不提同库同事务，谁就没真做过。</figcaption>
+  </figure>
+
+  <h3>RocketMQ 事务消息：把消息表搬进 MQ</h3>
+
+<pre>① 发半消息（half message）→ broker 存起来，消费者不可见
+② 执行本地事务
+③ 按结果 commit / rollback 半消息
+   └─ 若 ② 之后进程挂了 → broker 定时回查（默认最多 15 次，指数退避）
+      生产者实现 checkLocalTransaction()：查库返回 COMMIT / ROLLBACK / UNKNOWN
+
+好处：省掉「消息表 + 投递线程」
+坏处：绑定 RocketMQ，且回查接口必须幂等</pre>
+
+  <h3>五种方案横向对比（面试直接背这张表）</h3>
+  <table>
+    <tr><th style="width:15%">方案</th><th style="width:11%">一致性</th><th style="width:13%">性能</th><th style="width:11%">侵入性</th><th style="width:22%">适用场景</th><th>一句话记忆</th></tr>
+    <tr><td><strong>2PC / XA</strong></td><td>强一致</td><td>差（锁到 commit）</td><td>低（数据库层）</td><td>同构库、短事务、低并发</td><td>锁太久，协调者一挂全挂</td></tr>
+    <tr><td><strong>TCC</strong></td><td>最终一致</td><td>好（无行锁）</td><td><strong>高</strong>（三个方法）</td><td>资金、库存等核心链路</td><td>三个坑：空回滚、悬挂、幂等</td></tr>
+    <tr><td><strong>SAGA</strong></td><td>最终一致</td><td>好</td><td>中（正向 + 补偿）</td><td>长流程、跨异构系统</td><td>无隔离性，靠语义锁补</td></tr>
+    <tr><td><strong>本地消息表</strong></td><td>最终一致</td><td>中（多一次写 + 轮询）</td><td>中</td><td>已有 MQ、要求可靠</td><td>同库同事务，土但稳</td></tr>
+    <tr><td><strong>事务消息</strong></td><td>最终一致</td><td>中</td><td>低（仅生产者）</td><td>用 RocketMQ 的场景</td><td>消息表内置 + 回查兜底</td></tr>
+    <tr><td><strong>最大努力通知</strong></td><td>最终一致</td><td>好</td><td>低</td><td>对接外部（支付回调）</td><td>通知 + 重试 + 主动查询对账</td></tr>
+  </table>
+
+  <h3>Seata AT：给不想改代码的人</h3>
+
+<pre><span class="an">@GlobalTransactional</span>(timeoutMills = 30000)
+<span class="k">public void</span> createOrder(...) {
+    orderService.insert(...);      <span class="c">// 本地事务，自动生成 undo_log</span>
+    stockService.deduct(...);      <span class="c">// 远程分支事务</span>
+    <span class="c">// 任一步抛异常 → TC 通知所有分支按 undo_log 反向补偿</span>
+}</pre>
+
+  <p>原理：<strong>一阶段直接提交本地事务</strong>（所以不锁行），同时把「修改前镜像」写进 <code class="inl">undo_log</code>；全局回滚时用前镜像反向补偿。为保证「回滚时数据没被别人改过」，提交前要抢<strong>全局锁</strong>。</p>
+
+  <div class="trap">
+    <b>两个必答问题</b>
+    ① <strong>AT 的脏读</strong>：一阶段已提交，别人能读到未回滚的中间态（默认读未提交）。解法 <code class="inl">@GlobalLock</code> + <code class="inl">SELECT ... FOR UPDATE</code>，让查询也抢全局锁。<br>
+    ② <strong>AT 的性能损耗</strong>：每条 SQL 多一次前镜像查询 + 一次 undo_log 写入 + 回滚时锁校验，实测约 <strong>10–20%</strong>。
+  </div>
+</section>
+
+<!-- ============ L6 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L6</span><em>速查 · 表格与生命周期</em></div>
+  <h2>可靠性三段的检查清单</h2>
+
+  <table>
+    <tr><th style="width:12%">环节</th><th style="width:46%">保证手段</th><th>最常见的遗漏点</th></tr>
+    <tr><td>生产</td><td><code>acks=all</code> + 回调兜底 + 失败落表重投</td><td>回调里没处理异常；<code>linger.ms</code> 期间进程被杀</td></tr>
+    <tr><td>存储</td><td><code>RF=3</code> + <code>min.insync.replicas=2</code> + <code>unclean.leader.election=false</code></td><td>三副本同机架；<code>acks=all</code> 但 <code>min.insync=1</code></td></tr>
+    <tr><td>消费</td><td>处理完再 <code>commitSync</code> + 业务幂等 + 死信队列</td><td><code>auto.commit=true</code>；异常被 catch 吞掉仍提交</td></tr>
+  </table>
+
+  <h2 style="margin-top:26px">关键参数速查</h2>
+  <table>
+    <tr><th style="width:34%">参数</th><th style="width:18%">默认值</th><th>调优方向</th></tr>
+    <tr><td><code>acks</code></td><td><code>all</code>（3.x）</td><td>可靠性优先保持 all</td></tr>
+    <tr><td><code>min.insync.replicas</code></td><td><code>1</code></td><td>生产环境设 2</td></tr>
+    <tr><td><code>replica.lag.time.max.ms</code></td><td><code>30000</code></td><td>越小 ISR 越敏感，越容易收缩</td></tr>
+    <tr><td><code>max.poll.records</code></td><td><code>500</code></td><td>处理慢就调到 100</td></tr>
+    <tr><td><code>max.poll.interval.ms</code></td><td><code>300000</code></td><td>批处理长任务要调大</td></tr>
+    <tr><td><code>session.timeout.ms</code></td><td><code>45000</code></td><td>与 <code>heartbeat.interval.ms</code> 保持 3:1</td></tr>
+    <tr><td><code>segment.bytes</code></td><td><code>1073741824</code></td><td>1GB 段，影响日志清理粒度</td></tr>
+    <tr><td><code>index.interval.bytes</code></td><td><code>4096</code></td><td>稀疏索引密度</td></tr>
+  </table>
+
+  <h2 style="margin-top:26px">一条消息的完整生命周期（口述版）</h2>
+<pre>Producer 攒批(linger 5ms) → 压缩(lz4) → 按 key hash 选分区 → 发到 leader
+  → leader 追加到 .log 末尾（顺序写 + 页缓存）
+  → ISR follower 主动 fetch 拉取同步（注意：是 pull，不是 push）
+  → 全部 ISR 写入后推进 HW，向 producer 返回 ack
+  → Consumer fetch(offset) → 命中页缓存 → sendfile 零拷贝到网卡
+  → 处理完 commitSync → 位移写回 __consumer_offsets 内部 topic</pre>
+</section>
+
+<!-- ============ L6 Q&A ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b3">L6</span><em>高频问答 14 条</em></div>
+  <h2>面试真的会问这些</h2>
+
+  <div class="qa"><div class="qq">为什么用 MQ？</div>
+    <p>解耦、异步、削峰。但要立刻补代价：一致性变弱、链路变长、顺序性丢失。成熟的答法是<strong>先说收益，再主动说「所以我们引入了幂等和补偿」</strong>——面试官听到后半句，才知道你不是在背三个词。</p></div>
+
+  <div class="qa"><div class="qq">Kafka 为什么快？</div>
+    <p>四点：① 顺序写（600MB/s vs 随机 0.1MB/s）；② 零拷贝 sendfile（4 次拷贝 → 2 次，<strong>0 次 CPU 拷贝</strong>）；③ 攒批 + 压缩（batch.size 16KB，lz4/zstd）；④ 依赖 OS page cache 而非 JVM 堆，无 GC 压力。</p></div>
+
+  <div class="qa"><div class="qq">零拷贝的原理？</div>
+    <p><code class="inl">read()</code> 把数据从内核 page cache 拷到用户缓冲区，<code class="inl">write()</code> 再从用户缓冲区拷到 socket buffer。sendfile 让内核直接 DMA gather 到网卡，只把描述符放进 socket buffer。Java 入口是 <code class="inl">FileChannel.transferTo()</code>。</p></div>
+
+  <div class="qa"><div class="qq">零拷贝什么情况下失效？</div>
+    <p>SSL/TLS 加密、broker 端需要解压或消息格式转换、消费端落后导致页缓存失效（退化成磁盘读）。<strong>本质是「只要需要看数据内容，就必须进用户态」</strong>。</p></div>
+
+  <div class="qa"><div class="qq">acks=all 就绝对不丢吗？</div>
+    <p>不是。① all 只保证写进 ISR 的内存，不 fsync（靠副本冗余代替）；② <code class="inl">min.insync.replicas=1</code> 时 all 退化为 1；③ <code class="inl">unclean.leader.election=true</code> 会选到落后副本。<strong>三件套必须同配</strong>。</p></div>
+
+  <div class="qa"><div class="qq">ISR 是怎么维护的？</div>
+    <p>leader 记录每个 follower 最后一次 fetch 的时间，超过 <code class="inl">replica.lag.time.max.ms</code>（默认 30s）没追上就踢出 ISR；追上来了再加回来。注意方向：<strong>follower 主动 pull，不是 leader push</strong>。</p></div>
+
+  <div class="qa"><div class="qq">HW 和 LEO 的区别？</div>
+    <p>LEO 是每个副本自己的写入进度；HW = ISR 中最小的 LEO，是<strong>消费者可见的边界</strong>。消费者只能读到 HW，因为超出部分还没被所有 ISR 确认，leader 一挂就会丢。</p></div>
+
+  <div class="qa"><div class="qq">怎么保证消息不重复消费？</div>
+    <p>不可能完全杜绝（at-least-once 的必然），只能业务幂等：① 唯一键去重表；② 状态机 CAS（<code class="inl">WHERE status='UNPAID'</code>）；③ 版本号乐观锁。<strong>推荐状态机 + 去重表双保险</strong>：状态机管业务幂等，去重表管消息级幂等。</p></div>
+
+  <div class="qa"><div class="qq">重复消费的来源有哪些？</div>
+    <p>① <code class="inl">auto.commit</code> 按时间提交，崩在提交与处理之间；② rebalance 导致未提交位移重投；③ 生产端 <code class="inl">retries&gt;0</code> 且未开幂等，broker 存了两份；④ 消费成功但 <code class="inl">commitSync</code> 超时后重试。</p></div>
+
+  <div class="qa"><div class="qq">怎么保证顺序？</div>
+    <p>三条件：生产端同 key 同分区、分区内有序、同分区只被一个消费者消费。消费端<strong>不能随便丢线程池</strong>，要按 key hash 路由到固定线程。代价是热点 key 压单分区。</p></div>
+
+  <div class="qa"><div class="qq">消息积压怎么处理？</div>
+    <p>先算：积压量 ÷ 现有吞吐 = 清空耗时。加消费者受分区数限制；扩分区对<strong>已有积压无效</strong>（旧数据不重分布）。真实做法是临时转发到多分区新 topic 并行消费，或降级。</p></div>
+
+  <div class="qa"><div class="qq">2PC 有什么问题？</div>
+    <p>同步阻塞（锁持有到 commit）、协调者单点（in-doubt 事务要人工介入）、阶段二部分失败导致不一致、不适合跨服务长事务。</p></div>
+
+  <div class="qa"><div class="qq">TCC 的空回滚和悬挂是什么？</div>
+    <p>空回滚：Try 没到（超时但未失败），Cancel 先到，找不到预留记录。悬挂：Cancel 执行完后，迟到的 Try 才到，资源被永久冻结。<strong>解法都是事务控制表</strong>：Cancel 时插一条 CANCELLED 占位，Try 时先查状态，发现 CANCELLED 就拒绝。</p></div>
+
+  <div class="qa"><div class="qq">本地消息表 vs 事务消息 vs 最大努力通知？</div>
+    <p>本地消息表：业务与消息同库同事务，靠轮询投递，最通用。事务消息：消息表内置在 MQ（RocketMQ 半消息 + 回查），少一张表但绑定 MQ。最大努力通知：通知 + 指数退避重试 + 主动查询对账，用于<strong>外部系统</strong>（支付回调），因为对方不可控。</p></div>
+</section>
+
+<!-- ============ L7 模拟面试 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L7</span><em>三道模拟面试题</em></div>
+  <h2>照着念会被听出来，照着做才是你的</h2>
+
+  <div class="q">
+    <h4><span>题一</span>订单支付成功后要扣库存、加积分、发通知，怎么保证不丢不重？</h4>
+    <p><strong>考察点</strong>：MQ 可靠性三段 + 幂等 + 分布式事务选型。</p>
+
+    <div class="lab">参考答案骨架</div>
+    <ol>
+      <li><strong>不要把三件事塞进一个事务。</strong>支付成功是<em>事实</em>，必须落库；库存和积分是<em>派生动作</em>，走 MQ 异步。</li>
+      <li><strong>生产端</strong>：支付回调里用本地事务写「支付流水 + outbox 消息」，提交后由投递线程发 MQ。这就是本地消息表——比「先 send 再写库」可靠一个量级。</li>
+      <li><strong>存储端</strong>：<code class="inl">acks=all</code> + <code class="inl">RF=3</code> + <code class="inl">min.insync.replicas=2</code> + <code class="inl">unclean.leader.election=false</code>。</li>
+      <li><strong>消费端</strong>：<code class="inl">enable.auto.commit=false</code>，处理完 <code class="inl">commitSync</code>；用 <code class="inl">eventId</code> 唯一键去重 + 状态机 CAS。</li>
+      <li><strong>顺序</strong>：同一 <code class="inl">orderId</code> 作 key，保证扣库存和加积分看到同一个订单状态序列。</li>
+      <li><strong>兜底</strong>：对账任务扫「支付成功但库存未扣」，补偿重投；超 N 次进死信队列人工处理。</li>
+    </ol>
+
+    <div class="lab g">满分线</div>
+    <p>主动指出「<strong>支付回调本身就是 at-least-once</strong>（第三方会重推），所以幂等要从入口就做，不能只在消费端做」。这一句说明你想过整条链路，而不是只背了 Kafka 那一段。</p>
+
+    <div class="lab r">扣分点</div>
+    <p>上来就答「用 Seata AT 包住三个服务」——跨服务长事务用 AT 会长时间持有全局锁，高峰直接雪崩。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题二</span>线上告警：订单消息积压 2000 万，消费者组每 3 分钟 rebalance 一次，怎么办？</h4>
+    <p><strong>考察点</strong>：真实排障顺序 + rebalance 根因定位。</p>
+
+    <div class="lab">参考答案骨架</div>
+    <ol>
+      <li><strong>先止血</strong>：确认是否刚发版（新版本 <code class="inl">max.poll.records</code> 没调，单批处理超过 <code class="inl">max.poll.interval.ms</code>）。是就回滚。</li>
+      <li><strong>定位 rebalance 根因</strong>：捞 <code class="inl">Attempt to heartbeat failed</code> / <code class="inl">member was removed</code>。三个方向：① 处理超时被踢（最常见）；② Full GC 停顿超过 <code class="inl">session.timeout.ms</code>；③ 消费者频繁重启（OOM / 滚动发布）。</li>
+      <li><strong>立刻调参</strong>：<code class="inl">max.poll.records</code> 500→100，<code class="inl">max.poll.interval.ms</code> 放大，切 <code class="inl">CooperativeStickyAssignor</code> 减少全量停顿。</li>
+      <li><strong>处理积压</strong>：算清空耗时；扩分区对旧数据无效，临时起转发消费者把积压搬到 12 分区新 topic 并行处理；通知类消费先降级。</li>
+      <li><strong>防复发</strong>：LAG 监控（<code class="inl">kafka-consumer-groups.sh --describe</code>）、单批耗时打点、消费者 GC 告警。</li>
+    </ol>
+
+    <div class="lab g">满分线</div>
+    <p>说出「<strong>rebalance 期间分区会被重复分配，所以这次的重复消息量会非常大，我要同时准备好幂等去重，不然下游会被打穿</strong>」——把「排障」升级成「排障 + 副作用控制」，这是 SRE 视角。</p>
+
+    <div class="lab r">扣分点</div>
+    <p>直接说「加机器扩容消费者」而不看分区数（多出来的消费者全程空转）；或者说「扩分区就能解决积压」（旧数据不重分布）。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题三</span>设计一个「不丢、不重、不乱序」的订单事件管道，说清每一层的取舍。</h4>
+    <p><strong>考察点</strong>：综合设计 + 知道「三全」在物理上不可能，必须分层妥协。</p>
+
+    <div class="lab">参考答案骨架</div>
+    <table>
+      <tr><th style="width:12%">层</th><th style="width:48%">做法</th><th>取舍</th></tr>
+      <tr><td>生产</td><td>本地消息表（业务与消息同事务）+ 幂等 producer</td><td>多一次 DB 写，换「绝不丢」</td></tr>
+      <tr><td>传输</td><td><code>acks=all</code> + RF=3 + <code>min.insync=2</code></td><td>可用性：挂 2 个 broker 就不可写</td></tr>
+      <tr><td>分区</td><td>按 <code>orderId</code> 分区，单分区单消费者</td><td>吞吐受单分区限制，热点订单排队</td></tr>
+      <tr><td>消费</td><td>处理完再提交 + 状态机 CAS + 去重表</td><td>允许重复投递，用幂等消化</td></tr>
+      <tr><td>兜底</td><td>对账任务 + 死信队列 + 人工工单</td><td>用复杂度换最终确定性</td></tr>
+    </table>
+
+    <div class="lab g">满分线</div>
+    <p>最后这句收口：「<strong>所谓『不重』，工程上从来不是『消息不重复』，而是『重复了也不产生副作用』。所以我在架构图里不会写 exactly-once 这个词，我写的是『幂等消费 + 对账』</strong>。」</p>
+
+    <div class="lab r">扣分点</div>
+    <p>拍胸脯说「我用 Kafka 事务 + read_committed 实现了 exactly-once」——那只在「consume-transform-produce 到 Kafka」这个闭环内成立，一旦落到 MySQL 或调外部接口，事务边界就断了。</p>
+  </div>
+
+  <h3>答题节奏建议</h3>
+  <ul class="check">
+    <li><b>先给结论，再展开。</b>第一句就落在「我认为核心矛盾是 X」，别从「什么是 MQ」开始铺垫。</li>
+    <li><b>每讲一个方案，主动补一句它的副作用。</b>这是区分「背过」和「做过」最快的方式，也是本期全程在做的事。</li>
+    <li><b>能报数字就报数字。</b>600MB/s、30s、4KB、16KB、10–20%、800 条/s——数字是可信度的锚。</li>
+    <li><b>不确定就说不确定，但给出验证方法。</b>「这个我没实测过，但按 <code>UnderReplicatedPartitions</code> 指标应该能验证」远胜于硬编一个数。</li>
+    <li><b>把问题拉回业务。</b>被问「为什么不用事务消息」时，结尾补一句「所以我们的订单链路选的是本地消息表，因为已经有 MySQL 了」——立刻从八股变成经验。</li>
+  </ul>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">收口</span><em>六句话带走</em></div>
+  <ol>
+    <li><strong>MQ 只给 at-least-once</strong>，exactly-once 是业务用幂等造的幻觉——这一句能贯穿整场面试。</li>
+    <li><strong>顺序写 600MB/s vs 随机 0.1MB/s</strong>，差约 6000 倍，这是 Kafka 所有设计的原点。</li>
+    <li><strong>零拷贝的前提是「不看数据」</strong>，SSL 一开、格式一换，红利立刻收回。</li>
+    <li><strong>可靠性三件套必须同配</strong>，<code class="inl">acks=all</code> 单拎出来没有任何意义。</li>
+    <li><strong>rebalance 是重复消费的头号制造机</strong>，<code class="inl">max.poll.interval.ms</code> 是最常被忽略的参数。</li>
+    <li><strong>分布式事务没有银弹</strong>：核心资金用 TCC，长流程用 SAGA，通用场景用本地消息表，对外用最大努力通知。</li>
+  </ol>
+</section>
+
+<footer>
+  第 07 期 · 消息队列与分布式事务 · 共 8 层 / 11 图 / 14 问答 / 3 模拟题<br>
+  下期预告：Spring Cloud 与微服务治理 —— 注册发现的 AP/CP 取舍（Nacos vs Eureka vs ZK）、OpenFeign 与负载均衡、熔断降级（Sentinel 滑动窗口 vs 令牌桶）、网关限流、TraceId 跨线程丢失、灰度与流量染色
+</footer>
+
+</div>
+</body>
+</html>

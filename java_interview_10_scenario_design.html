@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 10 · 大厂场景设计题：秒杀 / 订单超时 / 分布式 ID / 短链 / Feed</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:28px; line-height:1.34; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:780px}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.7px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #bcdcf2}
+  .check li b{color:#075985}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">每 2 小时 · Java 面试深挖 · 第 10 期</div>
+  <h1>场景设计题<span class="arrow">→</span>秒杀<span class="arrow">→</span>超时关闭<span class="arrow">→</span>分布式 ID<span class="arrow">→</span>短链 · Feed</h1>
+  <p class="sub">前九期把 HashMap、GC、锁、Spring、MySQL、Redis、MQ、微服务、排查一个个拆开看了。这一期反过来——面试官扔给你一句「设计个秒杀系统」，看你能不能把那些零件<strong>按正确的顺序串起来，并且在每个框上标一个数字</strong>。场景题的分水岭不是「你知不知道 Redis 能扣库存」，而是「你知道这个 key 落在单个分片上、单分片上限 10 万 QPS、所以闸门必须开在它前面」。</p>
+  <div class="meta">
+    <div><strong>9</strong>层递进</div>
+    <div><strong>11</strong>张原理图</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span>01 HashMap</span><span>02 JVM/GC</span><span>03 并发</span>
+  <span>04 Spring</span><span>05 MySQL</span><span>06 Redis</span>
+  <span>07 MQ · 事务</span><span>08 微服务</span><span>09 线上排查</span>
+  <span class="on">10 场景设计</span>
+</div>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>方法论 · 场景题考的是顺序，不是名词</em></div>
+  <h2>先说数字，再说架构</h2>
+
+  <p>场景设计题有个残酷的评分标准：<strong>你画了十个框，一个数字都没有，等于零分。</strong>
+  因为「加 Redis」「上 MQ」「分库分表」这三句话，任何一个看过两篇公众号的人都会说。
+  面试官真正在测的是：你知不知道自己刚才提的那个组件，<em>它的天花板在哪</em>，以及<em>你为什么把它放在这一层而不是上一层</em>。</p>
+
+  <p>所以答题顺序永远是这四步，一步都不能跳：</p>
+
+  <h3>① 先问约束，别急着画图</h3>
+  <p>开口第一句不是「我用 Redis 扣库存」，而是「我先确认几个前提」。四个必问项：
+  峰值 QPS 多少、数据量多大、能容忍多少不一致、要扛几级降级。
+  这四个问题的答案会直接改掉你的架构——要求强一致就别想异步下单，要求 99.99% 可用就别把库存放单点 MySQL。</p>
+
+  <div class="oneline">
+    <b>面试官在听的信号</b>
+    你一上来问约束，他就知道你在真实项目里被需求坑过；你一上来就画架构图，他就知道你把八股文背熟了但没落地过。
+  </div>
+
+  <h3>② 把 QPS 换算成机器数</h3>
+  <p>这一步是分水岭。给你 10 万 QPS，你必须知道这大概等于几台机器、几个连接、多少带宽。
+  下面这张表请背下来，它是所有场景题的换算汇率：</p>
+
+  <table>
+    <tr><th>组件 / 资源</th><th>单机（单实例）量级</th><th>卡在哪</th></tr>
+    <tr><td>Tomcat 业务接口</td><td>2 000 ~ 5 000 QPS</td><td>线程池 200 × RT 20ms ≈ 1 万理论上限，实际打七折</td></tr>
+    <tr><td>Nginx 反向代理</td><td>3 万 ~ 5 万 QPS</td><td>纯转发，CPU 与连接数</td></tr>
+    <tr><td>Redis 单实例（单分片）</td><td>8 万 ~ 10 万 QPS</td><td>单线程，一条命令约 100ns 计算 + 网络 RTT</td></tr>
+    <tr><td>MySQL 单机写入</td><td>3 000 ~ 5 000 TPS</td><td>行锁 + redo fsync；同主键热点更低</td></tr>
+    <tr><td>MySQL 单机读取（命中索引）</td><td>1 万 ~ 2 万 QPS</td><td>连接数与 buffer pool</td></tr>
+    <tr><td>Kafka 单分区</td><td>10 万条/s 量级</td><td>顺序写 + 零拷贝；分区数决定并行度</td></tr>
+    <tr><td>SSD 随机 IOPS</td><td>5 万</td><td>机械盘只有 200</td></tr>
+  </table>
+
+  <p>有了汇率，10 万 QPS 就不再是个抽象数字：<strong>它等于 Redis 的一个完整单分片，或者 20 台 Tomcat，或者 30 台 MySQL。</strong>
+  所以你的第一反应应该是「这活儿不能直接打 MySQL」，而不是「我加个索引试试」。</p>
+
+  <h3>③ 找最短的那块板，而不是最多的那块</h3>
+  <p>链路里每一跳都有天花板，系统的吞吐等于<em>最窄那一跳</em>。
+  秒杀链路的典型瓶颈顺序是：DB 写入（3 千）&lt; Redis 单 key（10 万）&lt; 网关（5 万/台）&lt; CDN（百万级）。
+  所以正确的做法不是「每层都优化」，而是<strong>把请求在到达最窄那跳之前就砍掉 99%</strong>——这就是「闸门」思想的全部。</p>
+
+  <h3>④ 每层都要能降级，且降级后业务还能走</h3>
+  <p>面试官最爱追问的那句「如果 Redis 挂了怎么办」，本质是在问你的降级预案。
+  合格的答案是分层的：Redis 挂 → 降级到「本地库存 + MQ 排队」或「直接返回售罄」；
+  MQ 挂 → 同步落库但限流到 DB 能承受的 3 000 TPS；
+  DB 挂 → 全站只读，写请求进排队页。每一层都得有 Plan B，且 Plan B 不能依赖挂掉的那层。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="场景题答题四步骨架">
+      <defs>
+        <marker id="a0" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#b6bdcb"/>
+        </marker>
+      </defs>
+      <text x="24" y="28" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">场景题四步：约束 → 换算 → 找瓶颈 → 给降级</text>
+
+      <rect x="24" y="46" width="200" height="80" rx="10" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="40" y="70" font-size="12" font-weight="800" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif">① 问约束</text>
+      <text x="40" y="90" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">QPS / 数据量 / 一致性</text>
+      <text x="40" y="106" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">可用性等级 / 预算</text>
+
+      <rect x="252" y="46" width="200" height="80" rx="10" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="268" y="70" font-size="12" font-weight="800" fill="#5b21b6" font-family="-apple-system,PingFang SC,sans-serif">② 换算成机器</text>
+      <text x="268" y="90" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">10 万 QPS = ? 台</text>
+      <text x="268" y="106" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">用单机天花板去反推</text>
+
+      <rect x="480" y="46" width="200" height="80" rx="10" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="496" y="70" font-size="12" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">③ 找最窄一跳</text>
+      <text x="496" y="90" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">系统吞吐 = min(每跳)</text>
+      <text x="496" y="106" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">在它前面砍掉 99%</text>
+
+      <rect x="708" y="46" width="168" height="80" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="724" y="70" font-size="12" font-weight="800" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">④ 逐层降级</text>
+      <text x="724" y="90" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">每层都有 Plan B</text>
+      <text x="724" y="106" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">且不依赖挂掉那层</text>
+
+      <line x1="224" y1="86" x2="248" y2="86" stroke="#b6bdcb" stroke-width="1.4" marker-end="url(#a0)"/>
+      <line x1="452" y1="86" x2="476" y2="86" stroke="#b6bdcb" stroke-width="1.4" marker-end="url(#a0)"/>
+      <line x1="680" y1="86" x2="704" y2="86" stroke="#b6bdcb" stroke-width="1.4" marker-end="url(#a0)"/>
+
+      <rect x="24" y="148" width="852" height="210" rx="12" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="42" y="172" font-size="11.5" font-weight="800" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif" letter-spacing="1">同一个 10 万 QPS，四种说法的高下之分</text>
+
+      <rect x="42" y="186" width="404" height="66" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="58" y="206" font-size="11" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">✗ 不及格</text>
+      <text x="58" y="224" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">「加 Redis 缓存，上 MQ 削峰，分库分表」</text>
+      <text x="58" y="240" font-size="10.4" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">三个名词，零个数字，任何人都能说</text>
+
+      <rect x="466" y="186" width="404" height="66" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="482" y="206" font-size="11" font-weight="700" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">△ 及格</text>
+      <text x="482" y="224" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">「10 万 QPS 打 MySQL 要 30 台，所以前面加缓存」</text>
+      <text x="482" y="240" font-size="10.4" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">有数字了，但没说是哪台机器扛不住</text>
+
+      <rect x="42" y="264" width="404" height="80" rx="8" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="58" y="284" font-size="11" font-weight="700" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">✓ 良好</text>
+      <text x="58" y="302" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">「库存 key 落单分片，单分片 10 万，所以</text>
+      <text x="58" y="318" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">必须在网关先砍到 10 万以下再进 Redis」</text>
+      <text x="58" y="334" font-size="10.4" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">知道约束在哪，且顺序可推导</text>
+
+      <rect x="466" y="264" width="404" height="80" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="482" y="284" font-size="11" font-weight="700" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif">★ 优秀</text>
+      <text x="482" y="302" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">「…同时我留了降级：Redis 挂则降级到本地</text>
+      <text x="482" y="318" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">库存 + MQ 排队，代价是最多少卖 3%，</text>
+      <text x="482" y="334" font-size="10.4" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">因为超卖比少卖严重一个数量级」</text>
+    </svg>
+    <figcaption><b>图 1</b>　同一道题的四档回答。差别不在知识量，在于<strong>每个结论背后有没有一个可算的数</strong>。</figcaption>
+  </figure>
+
+  <div class="trap"><b>最常见的失分点</b><br>
+  被问到「怎么保证不超卖」时，答「用 Redis 的 DECR，它是原子的」。
+  这句话本身没错，但它只回答了 30%。剩下 70% 是：Redis 扣成功但下单失败怎么回滚、消息重复消费怎么幂等、Redis 与 DB 的差值谁来对账。
+  <strong>面试官问「怎么保证」的时候，他要的是异常路径，不是正常路径。</strong></div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>秒杀 · 四个闸门，把 30 万请求砍到 1 万</em></div>
+  <h2>漏斗思想：不是让系统变快，是让系统少干活</h2>
+
+  <p>先固定一个具体场景，后面所有数字都基于它：<strong>1 万件商品，0 点开抢，100 万人同时在线，峰值持续 10 秒。</strong>
+  于是峰值 QPS = 100 万 / 10 秒 = <strong>10 万 QPS</strong>。目标：只让 1 万个请求真正写进数据库。</p>
+
+  <p>如果这 10 万 QPS 直接打到 MySQL，按单机 3 000 TPS 算需要 34 台，而且全落在同一行库存上——
+  行锁会让它们串行排队，实际吞吐比 3 000 还低，大概率是「全体超时 + 库存卖成负数」。
+  所以秒杀的全部设计目标只有一句话：<em>把 10 万 QPS 在到达 DB 之前削成 1 000 TPS</em>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="秒杀四道闸门漏斗图">
+      <defs>
+        <marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa2b1"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">四道闸门：100 万 → 30 万 → 10 万 → 1 万 → 1 万</text>
+
+      <!-- stage1 -->
+      <rect x="24" y="42" width="600" height="52" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="40" y="64" font-size="12" font-weight="800" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif">① 页面静态化 + CDN</text>
+      <text x="40" y="82" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">HTML 化，库存与倒计时由 JS 异步拉；1MB 页面 × 100 万 = 1TB 流量只走 CDN</text>
+      <text x="644" y="64" font-size="16" font-weight="800" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif">100 万</text>
+      <text x="644" y="82" font-size="10.2" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">曝光量</text>
+
+      <rect x="24" y="110" width="490" height="52" rx="8" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="40" y="132" font-size="12" font-weight="800" fill="#5b21b6" font-family="-apple-system,PingFang SC,sans-serif">② 前端闸门</text>
+      <text x="40" y="150" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">按钮置灰防连点 · 答题/滑块 · URL 带一次性 token（挡脚本直刷接口）</text>
+      <text x="534" y="132" font-size="16" font-weight="800" fill="#5b21b6" font-family="-apple-system,PingFang SC,sans-serif">30 万</text>
+      <text x="534" y="150" font-size="10.2" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">真实点击</text>
+
+      <rect x="24" y="178" width="380" height="52" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="40" y="200" font-size="12" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">③ 网关令牌桶限流</text>
+      <text x="40" y="218" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">放行速率 = 库存 × 3 = 3 万/秒，余量留给失败重试</text>
+      <text x="424" y="200" font-size="16" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">10 万</text>
+      <text x="424" y="218" font-size="10.2" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">进到后端</text>
+
+      <rect x="24" y="246" width="270" height="52" rx="8" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="40" y="268" font-size="12" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">④ Redis Lua 预扣</text>
+      <text x="40" y="286" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">原子「查+判+减」，库存不足直接返回</text>
+      <text x="314" y="268" font-size="16" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">1 万</text>
+      <text x="314" y="286" font-size="10.2" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">拿到资格</text>
+
+      <rect x="24" y="314" width="270" height="52" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="40" y="336" font-size="12" font-weight="800" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">⑤ MQ 异步下单</text>
+      <text x="40" y="354" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">同步链路 200ms → 20ms，用户立刻看到结果</text>
+      <text x="314" y="336" font-size="16" font-weight="800" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">1 万</text>
+      <text x="314" y="354" font-size="10.2" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">DB 写入 = 1 000 TPS</text>
+
+      <!-- funnel guides -->
+      <line x1="300" y1="94" x2="300" y2="108" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a1)"/>
+      <line x1="250" y1="162" x2="250" y2="176" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a1)"/>
+      <line x1="190" y1="230" x2="190" y2="244" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a1)"/>
+      <line x1="150" y1="298" x2="150" y2="312" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a1)"/>
+
+      <!-- right commentary -->
+      <rect x="640" y="110" width="236" height="256" rx="10" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="656" y="134" font-size="11" font-weight="800" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif" letter-spacing="0.8">每跳的天花板</text>
+      <text x="656" y="158" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">CDN　　　　百万级 QPS</text>
+      <text x="656" y="180" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">网关　　　5 万/台 × 4 台</text>
+      <text x="656" y="202" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">Redis　　　10 万（单分片）</text>
+      <text x="656" y="224" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">Kafka　　　10 万/分区</text>
+      <text x="656" y="246" font-size="10.4" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">MySQL　　 3 000 TPS ← 最窄</text>
+      <line x1="656" y1="262" x2="860" y2="262" stroke="#e3e7ef" stroke-width="1"/>
+      <text x="656" y="284" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">结论：闸门必须开在 MySQL</text>
+      <text x="656" y="302" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">之前，而不是给它加索引。</text>
+      <text x="656" y="328" font-size="10.4" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">1 000 TPS 只用了单机 1/3</text>
+      <text x="656" y="346" font-size="10.4" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">能力 → 不需要分库分表</text>
+
+      <rect x="24" y="384" width="852" height="70" rx="10" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="42" y="406" font-size="11" font-weight="800" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif" letter-spacing="0.8">一句话总结</text>
+      <text x="42" y="426" font-size="11" fill="#2c333f" font-family="-apple-system,PingFang SC,sans-serif">秒杀不是「让 10 万 QPS 变快」，而是「让 9.9 万个请求在碰到数据库之前就被拒绝」，代价是 99% 的用户看到「已售罄」。</text>
+      <text x="42" y="444" font-size="10.4" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">这也是为什么秒杀页面必须能静态化：只要详情页还依赖后端渲染，第一步就输了。</text>
+    </svg>
+    <figcaption><b>图 2</b>　漏斗每一级都标了数字。<strong>最后一级 1 000 TPS 才是这张图存在的理由</strong>——它证明你不需要分库分表。</figcaption>
+  </figure>
+
+  <h3>闸门一：页面静态化，这一刀砍掉 99%</h3>
+  <p>100 万人要看详情页，如果每人都回源渲染一次模板 + 查一次 DB，那么「还没开抢，系统已经挂了」。
+  做法是把商品详情整页生成静态 HTML 推到 CDN，页面里的倒计时和库存由浏览器在活动前 1 秒异步拉一个极轻的接口。
+  这样 1MB 的页面 × 100 万次 = 1TB 流量全落在 CDN，源站只在缓存失效时被访问。</p>
+  <div class="warn"><b>坑</b><br>
+  静态页里千万别内嵌实时库存。一旦页面包含动态数据，缓存时间就得压到秒级，CDN 命中率会从 99% 掉到 20%，等于闸门白装。</div>
+
+  <h3>闸门二：前端与限流，挡掉脚本和手抖</h3>
+  <p>三个动作几乎零成本，但效果立竿见影：按钮点击后立刻置灰（挡重复提交）、活动前答题或滑块（挡脚本，人类答题要 3 秒，正好把尖峰摊平）、
+  请求 URL 带一次性 token（脚本拿不到 token，就没法直接刷接口）。这一层通常能砍掉 60%~70%。</p>
+  <p>网关侧用令牌桶把放行速率钉死在 <code class="inl">库存 × 3</code>——3 倍余量是给「扣减失败要重试」留的。
+  放行 10 万，实际成功 1 万，剩下 9 万在 Redis 那一层被快速拒绝，单次耗时不到 1ms，不占线程。</p>
+
+  <h3>闸门三：Redis 预扣减，非原子是万恶之源</h3>
+  <p>很多人写的是两行：</p>
+  <pre>// ✗ 错：GET 和 DECR 之间有空隙，两个线程可能同时看到 stock=1
+Integer stock = redis.get("seckill:stock:" + skuId);
+if (stock > 0) {
+    redis.decr("seckill:stock:" + skuId);
+}</pre>
+  <p>这两行在 10 万 QPS 下必然超卖。原因很简单：<strong>Redis 单条命令原子，不代表两条命令原子。</strong>
+  正确写法是把「取值 → 判断 → 扣减 → 记录用户」塞进一个 Lua 脚本，Redis 执行脚本期间不会插入其他命令：</p>
+  <pre>-- seckill.lua：KEYS[1]=库存  KEYS[2]=已购用户集合  ARGV[1]=用户ID  ARGV[2]=限购数
+local stock = tonumber(redis.call('get', KEYS[1]))
+if stock == nil or stock &lt;= 0 then
+    return -1                                  -- 售罄
+end
+if redis.call('sismember', KEYS[2], ARGV[1]) == 1 then
+    return -2                                  -- 已买过，限购
+end
+redis.call('decr', KEYS[1])
+redis.call('sadd', KEYS[2], ARGV[1])
+return stock - 1                               -- 剩余库存</pre>
+  <p>为什么非得是 Lua 而不是 <code class="inl">DECR</code>？因为 <code class="inl">DECR</code> 只保证「减法原子」，
+  它允许库存从 1 减到 0 再减到 -1；你的 Java 代码发现 -1 时已经晚了，那一单已经卖出去了。
+  <strong>「判断」和「扣减」必须住在同一个原子单元里</strong>，这是所有库存类问题的第一性原理。</p>
+
+  <div class="trap"><b>还有一层坑：单 key 上限</b><br>
+  库存 key 天然只能落在一个分片上（你要对同一个 key 做原子减），所以它吃不到集群的水平扩展。
+  单分片 10 万 QPS 就是硬顶。这也是为什么闸门必须开在 Redis 之前——不是 Redis 慢，是它没法再拆了。</div>
+
+  <h3>闸门四：MQ 削峰，把同步变异步</h3>
+  <p>Redis 扣减成功后，不要在原地创建订单（那要写 DB、调风控、发短信，200ms 起步）。
+  只往 MQ 扔一条消息就返回「排队中」，RT 从 200ms 降到 20ms，用户体感完全不同，DB 也能按自己的节奏消费。
+  <strong>代价是「扣减成功 ≠ 下单成功」</strong>，这个缺口由下一节的补偿机制填。</p>
+
+  <table>
+    <tr><th>闸门</th><th>手段</th><th>砍掉</th><th>成本</th></tr>
+    <tr><td>① CDN</td><td>详情页静态化</td><td>99% 页面流量</td><td>缓存一致性，改价要刷新</td></tr>
+    <tr><td>② 前端</td><td>置灰 / 答题 / 一次性 token</td><td>60%~70%</td><td>用户体验略降</td></tr>
+    <tr><td>③ 网关</td><td>令牌桶 <code>库存×3</code></td><td>到后端只剩 1/3</td><td>要多部署网关</td></tr>
+    <tr><td>④ Redis</td><td>Lua 原子预扣</td><td>99%（库存不足即拒）</td><td>与 DB 有差值，要对账</td></tr>
+    <tr><td>⑤ MQ</td><td>异步下单</td><td>不砍量，只削峰</td><td>最终一致，需幂等</td></tr>
+  </table>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>秒杀正确性 · 超卖的三种成因与三层兜底</em></div>
+  <h2>「Redis 扣了」和「订单成了」之间，藏着一个黑洞</h2>
+
+  <p>上一节收尾留了个缺口：Redis 说「你抢到了」，但订单最终没生成。这个区间里所有异常都会变成脏数据。
+  面试官问「怎么保证不超卖」，本质是在问<strong>你怎么处理这个区间</strong>。</p>
+
+  <h3>先把三种超卖分开，它们的解法完全不同</h3>
+  <table>
+    <tr><th>成因</th><th>现场表现</th><th>解法</th></tr>
+    <tr><td>① Redis 层「查-判-减」不原子</td><td>库存 100 卖了 130</td><td>Lua 脚本把三步合成一次执行</td></tr>
+    <tr><td>② DB 层扣减没有条件判断</td><td>Redis 剩余与 DB 已售对不上，且库存为负</td><td><code>update ... where stock &gt;= 1</code> 看影响行数</td></tr>
+    <tr><td>③ 消息重复消费</td><td>同一用户两笔订单，库存少卖（不是超卖）</td><td>唯一索引 + 幂等表</td></tr>
+  </table>
+
+  <p>注意 ③ 造成的其实是<strong>少卖</strong>，不是超卖——但它对用户来说更可恨：明明抢到了却提示重复下单，库存还少了。
+  所以「幂等」在秒杀里不是锦上添花，是正确性要求。</p>
+
+  <h3>DB 侧永远保留最后一道判断</h3>
+  <pre>-- 关键在 where：把「够不够」的判断交给数据库的行锁，而不是 Java 里的 if
+UPDATE seckill_stock
+   SET stock = stock - 1, version = version + 1
+ WHERE sku_id = #{skuId}
+   AND stock &gt;= 1;
+
+-- 返回 0 行 = 扣减失败，说明 Redis 与 DB 已经不一致，必须回补 Redis
+-- 注意：不要写 stock = stock - 1 而漏掉 where，那是教科书级事故</pre>
+
+  <p>有人会问：既然 MySQL 这一句就能防超卖，那还要 Redis 干嘛？
+  因为 10 万 QPS 打这一句，每行都要抢同一把行锁，实际吞吐掉到几百 TPS，全部超时。
+  <strong>Redis 是性能闸门，MySQL 是正确性兜底，两者职责不能互换。</strong></p>
+
+  <h3>三层兜底：从「几乎不会错」到「错了能修」</h3>
+  <figure>
+    <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="秒杀三层兜底结构">
+      <defs>
+        <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa2b1"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">三层兜底：Lua 拦 99.99%，DB 拦剩下的，对账兜最后那一单</text>
+
+      <rect x="24" y="44" width="852" height="86" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="42" y="66" font-size="11.5" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">第 1 层 · Redis Lua（性能层，挡 99.99%）</text>
+      <text x="42" y="88" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">get + 判空 + 判限购 + decr + sadd 全在一个脚本里，脚本执行期间 Redis 不处理其他命令</text>
+      <text x="42" y="110" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">返回 -1 售罄 / -2 重复购买 / &gt;=0 剩余库存　→　单次耗时 &lt; 1ms，1 万 QPS 只占单分片 10%</text>
+
+      <rect x="24" y="146" width="852" height="86" rx="10" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="42" y="168" font-size="11.5" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">第 2 层 · DB 条件更新（正确性层，挡剩下的）</text>
+      <text x="42" y="190" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">update ... where stock &gt;= 1 → 影响行数 0 说明 Redis 状态已漂移</text>
+      <text x="42" y="212" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">处理：incr 回补 Redis + 记录一条「回补日志」+ 给用户返回「抢购失败，已退款」</text>
+
+      <rect x="24" y="248" width="852" height="86" rx="10" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="42" y="270" font-size="11.5" font-weight="800" fill="#5b21b6" font-family="-apple-system,PingFang SC,sans-serif">第 3 层 · 对账任务（数据层，兜最后那一单）</text>
+      <text x="42" y="292" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">每 5 分钟跑一次：Redis 剩余 + DB 已售 == 总库存 ？</text>
+      <text x="42" y="314" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">差值 &gt; 0 → 少卖，Redis 补回；差值 &lt; 0 → 超卖，触发人工介入 + 自动退款</text>
+
+      <line x1="450" y1="130" x2="450" y2="144" stroke="#9aa2b1" stroke-width="1.3" marker-end="url(#a2)"/>
+      <line x1="450" y1="232" x2="450" y2="246" stroke="#9aa2b1" stroke-width="1.3" marker-end="url(#a2)"/>
+
+      <text x="24" y="370" font-size="11" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">设计原则：宁可少卖，不可超卖。</text>
+      <text x="196" y="370" font-size="11" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">少卖只是损失一笔订单（可补货），超卖要面对客诉、赔付、监管三件事，严重一个数量级。</text>
+    </svg>
+    <figcaption><b>图 3</b>　三层结构。<strong>对账任务不是「以防万一」，它是分布式扣减的必要组件</strong>——只要存在两个存储，就必然存在漂移。</figcaption>
+  </figure>
+
+  <div class="good"><b>面试可以直接说的一句</b><br>
+  「我的原则是宁可少卖不可超卖。所以 Lua 层保证 99.99% 不超，DB 条件更新保证兜底不超，对账任务负责把少卖的那部分补回来。
+  三者职责不同：前两个是预防，第三个是修复，缺一个都不完整。」</div>
+
+  <h3>幂等：消息重投时不能变成两笔订单</h3>
+  <pre>CREATE TABLE t_seckill_order (
+  id          BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id     BIGINT      NOT NULL,
+  sku_id      BIGINT      NOT NULL,
+  activity_id BIGINT      NOT NULL,
+  status      TINYINT     NOT NULL DEFAULT 0,
+  UNIQUE KEY uk_user_sku (activity_id, sku_id, user_id)   -- 幂等的物理保证
+);</pre>
+  <p>不要用「先 select 再 insert」做幂等——<strong>select 和 insert 之间就是并发窗口</strong>，
+  两个重复消息可以同时查到「不存在」。唯一索引是数据库级别的互斥，重复插入直接抛 <code class="inl">DuplicateKeyException</code>，
+  捕获后当成功处理即可。这是最简单也最可靠的幂等方案。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>订单超时关闭 · 五种方案的真实天花板</em></div>
+  <h2>「30 分钟不付就关单」——一句话能引出五个坑</h2>
+
+  <p>这是场景题里出现频率最高的一道，因为它的正确解和直觉解差得很远。直觉解是「定时任务扫表」，
+  网上的标准解是「RabbitMQ 死信队列」，而真实生产里最常见的组合是<strong>延时消息 + 扫表兜底 + 查询时惰性判定</strong>，三件套。</p>
+
+  <p>先把量级定下来：日均 10 万单，30 分钟窗口。<strong>平均每秒只需要处理 1.16 单</strong>。
+  这个数字很关键——它说明「性能」根本不是这道题的考点，<strong>考点是可靠性和准时性</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="五种超时关闭方案的时间轴对比">
+      <defs>
+        <marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa2b1"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">同一张订单的 30 分钟，五条不同的触发路径</text>
+
+      <!-- axis -->
+      <line x1="190" y1="52" x2="830" y2="52" stroke="#e3e7ef" stroke-width="1.2"/>
+      <text x="190" y="44" font-size="10" text-anchor="middle" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">0</text>
+      <text x="350" y="44" font-size="10" text-anchor="middle" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">10min</text>
+      <text x="510" y="44" font-size="10" text-anchor="middle" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">20min</text>
+      <text x="670" y="44" font-size="10" text-anchor="middle" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">30min</text>
+      <text x="830" y="44" font-size="10" text-anchor="middle" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">40min</text>
+
+      <!-- lane 1 -->
+      <text x="24" y="82" font-size="11" font-weight="700" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">① 扫表</text>
+      <line x1="190" y1="78" x2="830" y2="78" stroke="#f1f3f8" stroke-width="14"/>
+      <line x1="190" y1="78" x2="670" y2="78" stroke="#f4dcc2" stroke-width="2" stroke-dasharray="4 3"/>
+      <rect x="660" y="70" width="30" height="16" rx="4" fill="#b45309"/>
+      <text x="675" y="82" font-size="9.5" text-anchor="middle" fill="#fff" font-family="-apple-system,PingFang SC,sans-serif">±5m</text>
+      <text x="196" y="98" font-size="9.8" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">5 分钟一轮，误差 = 扫描周期，实现最简单</text>
+
+      <!-- lane 2 -->
+      <text x="24" y="130" font-size="11" font-weight="700" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">② 延时消息</text>
+      <line x1="190" y1="126" x2="830" y2="126" stroke="#f1f3f8" stroke-width="14"/>
+      <line x1="190" y1="126" x2="670" y2="126" stroke="#cceddc" stroke-width="2"/>
+      <circle cx="670" cy="126" r="7" fill="#047857"/>
+      <text x="682" y="130" font-size="9.5" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">准时</text>
+      <text x="196" y="146" font-size="9.8" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">RocketMQ 4.x 只支持 18 个固定级别，30m 恰好在内；5.x 支持任意时刻</text>
+
+      <!-- lane 3 -->
+      <text x="24" y="178" font-size="11" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">③ Redis 过期</text>
+      <line x1="190" y1="174" x2="830" y2="174" stroke="#f1f3f8" stroke-width="14"/>
+      <line x1="190" y1="174" x2="700" y2="174" stroke="#f5ccd4" stroke-width="2" stroke-dasharray="2 4"/>
+      <text x="710" y="178" font-size="9.5" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">不准 ±数分钟</text>
+      <text x="196" y="194" font-size="9.8" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">惰性删除 + 每 100ms 抽查，事件走 pub/sub，不持久化、不重试</text>
+
+      <!-- lane 4 -->
+      <text x="24" y="226" font-size="11" font-weight="700" fill="#5b21b6" font-family="-apple-system,PingFang SC,sans-serif">④ 时间轮</text>
+      <line x1="190" y1="222" x2="830" y2="222" stroke="#f1f3f8" stroke-width="14"/>
+      <line x1="190" y1="222" x2="670" y2="222" stroke="#ddd6fe" stroke-width="2"/>
+      <circle cx="670" cy="222" r="7" fill="#5b21b6"/>
+      <text x="682" y="226" font-size="9.5" fill="#5b21b6" font-family="-apple-system,PingFang SC,sans-serif">毫秒级</text>
+      <text x="196" y="242" font-size="9.8" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">O(1) 插入，纯内存；进程重启任务全丢，只适合单机有归属的场景</text>
+
+      <!-- lane 5 -->
+      <text x="24" y="274" font-size="11" font-weight="700" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">⑤ CDC 订阅</text>
+      <line x1="190" y1="270" x2="830" y2="270" stroke="#f1f3f8" stroke-width="14"/>
+      <line x1="190" y1="270" x2="670" y2="270" stroke="#bcdcf2" stroke-width="2"/>
+      <circle cx="670" cy="270" r="7" fill="#0369a1"/>
+      <text x="682" y="274" font-size="9.5" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">准，但要自建</text>
+      <text x="196" y="290" font-size="9.8" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">canal 监听 binlog，插入即注册延时任务；多一套中间件要维护</text>
+
+      <rect x="24" y="308" width="852" height="72" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="42" y="330" font-size="11" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">真实答案不是选一个，而是三层叠起来</text>
+      <text x="42" y="350" font-size="10.6" fill="#2c333f" font-family="-apple-system,PingFang SC,sans-serif">延时消息负责「准时」（99% 的订单走这条路）　+　扫表补偿负责「漏网的」（消息丢了也一定会关）</text>
+      <text x="42" y="370" font-size="10.6" fill="#2c333f" font-family="-apple-system,PingFang SC,sans-serif">+　查询时惰性判定负责「用户视角的正确性」（哪怕两个任务都没跑，用户点进去看到的也是已关闭）</text>
+    </svg>
+    <figcaption><b>图 4</b>　五条路都画到 30 分钟那一刻。<strong>差别不在「能不能关」，在「晚了多久」和「丢了怎么办」</strong>。</figcaption>
+  </figure>
+
+  <h3>方案一：扫表——朴素但永不失效</h3>
+  <pre>-- 索引：(status, create_time)  注意顺序，status 是等值、create_time 是范围
+SELECT id, user_id FROM t_order
+ WHERE status = 0
+   AND create_time &lt; DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+ ORDER BY id                       -- 用主键游标，别用 limit offset 深翻页
+ LIMIT 500;</pre>
+  <p>10 万单/天 = 每秒 1.16 单，5 分钟扫一轮只需处理 350 单，对 DB 毫无压力。
+  它的价值不在于快，在于<strong>它是唯一一个「只要 DB 还在，就一定会执行」的方案</strong>——所以它永远留作兜底。</p>
+  <div class="trap"><b>两个必须避开的写法</b><br>
+  ① <code class="inl">limit 100000, 500</code> 这种深分页，MySQL 要扫 10 万行才吐出 500 行，越扫越慢；
+  ② 扫出来直接在一个事务里循环 update 500 条，长事务会卡住主从同步。<strong>正确做法是主键游标 + 每批 100 条小事务。</strong></div>
+
+  <h3>方案二：延时消息——准时，但会丢</h3>
+  <p>RocketMQ 4.x 有 18 个固定延时级别：1s / 5s / 10s / 30s / 1m / 2m / 3m / 4m / 5m / 6m / 7m / 8m / 9m / 10m / 20m / 30m / 1h / 2h。
+  <strong>恰好有 30m</strong>，所以这道题用 4.x 也能答。但你要是被问「45 分钟不付关单」就只能上 5.x 的定时消息（任意时间戳）。</p>
+  <p>RabbitMQ 的路子更坑：TTL + 死信队列。它的队列<strong>只检查队头消息是否过期</strong>，
+  如果队头是一条 2 小时的消息，后面那条 30 分钟的即使过期了也不会被投递——这叫队头阻塞。
+  绕法是给每个延时级别建一个队列，但那等于自己实现了一遍 RocketMQ 的延时级别。</p>
+  <pre>// 发送延时消息：注意「发送成功」≠「消息一定会被消费」
+Message msg = MessageBuilder.withPayload(orderId)
+        .setHeader(DELAY_LEVEL, 16)      // 16 = 30 分钟
+        .build();
+rocketMQTemplate.syncSend("order-timeout-topic", msg);
+
+// 消费端必须做两件事
+// 1) 幂等：同一条消息可能重投
+// 2) 二次校验：消息可能延迟很久才到，必须重新查一次状态和时间
+if (order.getStatus() != WAIT_PAY) return;                    // 已支付，直接丢弃
+if (order.getCreateTime().plusMinutes(30).isAfter(now())) {    // 还没到时间，重新投递
+    resend(orderId, remainSeconds());
+    return;
+}
+closeOrder(orderId);</pre>
+
+  <h3>方案三：Redis 过期事件——看着优雅，实际不可靠</h3>
+  <p>两个致命点。<strong>第一，过期不是准时的。</strong>Redis 用「惰性删除 + 定期删除」：
+  每次访问才检查是否过期，后台每 100ms 随机抽查 20 个 key，抽不到的 key 会一直存活。
+  <strong>第二，事件走 pub/sub，不持久化、不重试。</strong>订阅端重启那几秒的事件就永久丢了，没有任何补偿机制。</p>
+  <p>所以它只适合「丢一两单无所谓」的场景（比如清缓存），绝不适合关单——关单丢一单就是用户投诉。</p>
+
+  <h3>方案四：时间轮——O(1) 插入的精巧结构</h3>
+  <p>Netty 的 <code class="inl">HashedWheelTimer</code> 就是它。核心是一个环形数组，指针每 tick 走一格，
+  走到哪格就把那格上的任务链表全执行。插入时按 <code class="inl">(delay / tickDuration) % wheelSize</code> 算落槽，<strong>O(1)</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="时间轮结构示意">
+      <defs>
+        <marker id="a4" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#be123c"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">时间轮：8 个槽 × 每槽 1 秒 → 一圈 8 秒，多圈靠 round 计数</text>
+
+      <!-- wheel -->
+      <circle cx="210" cy="212" r="128" fill="none" stroke="#e3e7ef" stroke-width="1"/>
+      <circle cx="210" cy="212" r="86" fill="#fbfcfe" stroke="#e3e7ef" stroke-width="1"/>
+
+      <rect x="292" y="194" width="36" height="36" rx="6" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="310" y="217" font-size="10" text-anchor="middle" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">0</text>
+      <rect x="261" y="268" width="36" height="36" rx="6" fill="#fff" stroke="#e3e7ef"/>
+      <text x="279" y="291" font-size="10" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">1</text>
+      <rect x="192" y="296" width="36" height="36" rx="6" fill="#fff" stroke="#e3e7ef"/>
+      <text x="210" y="319" font-size="10" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">2</text>
+      <rect x="123" y="268" width="36" height="36" rx="6" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="141" y="291" font-size="10" text-anchor="middle" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">3</text>
+      <rect x="92" y="194" width="36" height="36" rx="6" fill="#fff" stroke="#e3e7ef"/>
+      <text x="110" y="217" font-size="10" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">4</text>
+      <rect x="123" y="120" width="36" height="36" rx="6" fill="#fff" stroke="#e3e7ef"/>
+      <text x="141" y="143" font-size="10" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">5</text>
+      <rect x="192" y="92" width="36" height="36" rx="6" fill="#fff" stroke="#e3e7ef"/>
+      <text x="210" y="115" font-size="10" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">6</text>
+      <rect x="261" y="120" width="36" height="36" rx="6" fill="#fff" stroke="#e3e7ef"/>
+      <text x="279" y="143" font-size="10" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">7</text>
+
+      <circle cx="210" cy="212" r="5" fill="#be123c"/>
+      <line x1="214" y1="212" x2="286" y2="212" stroke="#be123c" stroke-width="1.6" marker-end="url(#a4)"/>
+      <text x="210" y="200" font-size="9.5" text-anchor="middle" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">tick</text>
+
+      <!-- task chains -->
+      <rect x="330" y="182" width="66" height="14" rx="7" fill="#be123c" opacity="0.18"/>
+      <rect x="338" y="206" width="66" height="14" rx="7" fill="#be123c" opacity="0.28"/>
+      <text x="404" y="194" font-size="9.5" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">槽 0：链表</text>
+      <text x="404" y="217" font-size="9.5" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">同槽任务按链表挂</text>
+
+      <rect x="40" y="268" width="70" height="14" rx="7" fill="#be123c" opacity="0.18"/>
+      <text x="18" y="300" font-size="9.5" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">槽 3</text>
+
+      <!-- right panel -->
+      <rect x="520" y="60" width="356" height="290" rx="10" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="538" y="84" font-size="11" font-weight="800" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif" letter-spacing="0.8">落槽计算</text>
+      <text x="538" y="108" font-size="10.8" fill="#2c333f" font-family="-apple-system,PingFang SC,sans-serif">slot = (delayMs / tickMs + currentTick) % 8</text>
+      <text x="538" y="126" font-size="10.8" fill="#2c333f" font-family="-apple-system,PingFang SC,sans-serif">round = (delayMs / tickMs) / 8</text>
+
+      <text x="538" y="156" font-size="11" font-weight="800" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif" letter-spacing="0.8">为什么比「最小堆」好</text>
+      <text x="538" y="178" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">最小堆插入 O(log n)，n = 100 万单时约 20 次比较</text>
+      <text x="538" y="196" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">时间轮插入 O(1)，只做一次取模 + 挂链表</text>
+
+      <text x="538" y="226" font-size="11" font-weight="800" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif" letter-spacing="0.8">它的致命短板</text>
+      <text x="538" y="248" font-size="10.6" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">任务在 JVM 堆里，重启 = 全丢，没有持久化</text>
+      <text x="538" y="266" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">→ 只能当「加速器」，必须有扫表兜底</text>
+
+      <line x1="538" y1="282" x2="858" y2="282" stroke="#e3e7ef" stroke-width="1"/>
+      <text x="538" y="304" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">适用：单机内大量短延时任务</text>
+      <text x="538" y="322" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">（连接空闲检测、请求超时、重试退避）</text>
+      <text x="538" y="340" font-size="10.6" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">Netty / Dubbo / Redisson 内部都在用</text>
+    </svg>
+    <figcaption><b>图 5</b>　时间轮的取舍很清楚：<strong>插入是 O(1)，代价是「不持久」</strong>。它省的是 CPU，不是可靠性。</figcaption>
+  </figure>
+
+  <h3>方案五：CDC——把「下单」这个事实变成「延时任务」</h3>
+  <p>canal 订阅 MySQL binlog，看到 <code class="inl">t_order</code> 的 INSERT 就注册一个 30 分钟后的任务。
+  好处是业务代码零侵入（不用在创建订单的地方加一行发消息的代码），坏处是多一套中间件、多一条链路、多一个可能挂的地方。
+  中大型公司会这么做，小团队不值当。</p>
+
+  <h3>最后一块拼图：惰性判定，用户视角的最终正确性</h3>
+  <p>前面五个方案都在赌「任务会执行」。但分布式系统的第一定律是<strong>「任何异步任务都可能没执行」</strong>。
+  所以真正的正确性不能靠任务，要靠<strong>读的时候顺手纠正</strong>：用户点开订单详情，发现状态是待支付且已超时，就地把它改成已取消。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="订单状态机与惰性关闭">
+      <defs>
+        <marker id="a5" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa2b1"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">状态机：所有关闭动作都必须带 status = 0 这个条件</text>
+
+      <rect x="40" y="70" width="150" height="52" rx="10" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="115" y="94" font-size="11.5" font-weight="800" text-anchor="middle" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif">待支付 0</text>
+      <text x="115" y="111" font-size="9.8" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">create_time</text>
+
+      <rect x="380" y="70" width="150" height="52" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="455" y="94" font-size="11.5" font-weight="800" text-anchor="middle" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">已支付 1</text>
+      <text x="455" y="111" font-size="9.8" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">pay_time</text>
+
+      <rect x="380" y="190" width="150" height="52" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="455" y="214" font-size="11.5" font-weight="800" text-anchor="middle" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">已取消 2</text>
+      <text x="455" y="231" font-size="9.8" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">close_time</text>
+
+      <line x1="190" y1="88" x2="376" y2="88" stroke="#9aa2b1" stroke-width="1.4" marker-end="url(#a5)"/>
+      <text x="283" y="80" font-size="10" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">支付回调</text>
+
+      <line x1="190" y1="104" x2="376" y2="208" stroke="#9aa2b1" stroke-width="1.4" marker-end="url(#a5)"/>
+      <text x="272" y="168" font-size="10" text-anchor="middle" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">超时 / 用户取消</text>
+
+      <rect x="600" y="60" width="276" height="182" rx="10" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="618" y="84" font-size="11" font-weight="800" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">为什么必须有 status = 0</text>
+      <text x="618" y="106" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">用户在第 29:59 付款，延时消息在</text>
+      <text x="618" y="123" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">30:01 到达。若无条件更新：</text>
+      <text x="618" y="143" font-size="10.4" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">「已支付」会被改写成「已取消」</text>
+      <text x="618" y="170" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">写法：</text>
+      <text x="618" y="188" font-size="10.2" fill="#2c333f" font-family="ui-monospace,Consolas,monospace">UPDATE t_order SET status=2</text>
+      <text x="618" y="204" font-size="10.2" fill="#2c333f" font-family="ui-monospace,Consolas,monospace"> WHERE id=? AND status=0</text>
+      <text x="618" y="226" font-size="10.2" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">影响 0 行 = 已被支付，安全丢弃</text>
+
+      <rect x="40" y="258" width="836" height="30" rx="8" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="56" y="278" font-size="10.6" fill="#5b21b6" font-family="-apple-system,PingFang SC,sans-serif">惰性判定：查详情时若 status=0 且 now &gt; create_time+30m，当场执行同一条 update 再返回 —— 任务全挂也不会让用户看到「可以支付」的僵尸单。</text>
+    </svg>
+    <figcaption><b>图 6</b>　<strong>乐观锁条件更新是分布式状态机的通用写法</strong>，不只用在关单：支付回调、退款、发货，凡是有并发状态迁移的地方都要带旧状态。</figcaption>
+  </figure>
+
+  <table>
+    <tr><th>方案</th><th>准时性</th><th>可靠性</th><th>侵入性</th><th>适用</th></tr>
+    <tr><td>扫表</td><td>差（=周期）</td><td><strong>高</strong>（DB 在就跑）</td><td>低</td><td>兜底必备</td></tr>
+    <tr><td>延时消息</td><td>好</td><td>中（会丢，需重试+幂等）</td><td>低</td><td>主路径</td></tr>
+    <tr><td>Redis 过期</td><td><strong>差</strong></td><td><strong>低</strong>（事件不持久）</td><td>低</td><td>不建议关单</td></tr>
+    <tr><td>时间轮</td><td>极好</td><td>低（重启丢）</td><td>中</td><td>单机短延时</td></tr>
+    <tr><td>CDC</td><td>好</td><td>中高</td><td>无侵入</td><td>中大型团队</td></tr>
+  </table>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>分布式 ID · 五种发号器的取舍账</em></div>
+  <h2>「ID 而已，UUID 不行吗」——不行，B+ 树会哭</h2>
+
+  <p>分库分表之后，自增主键就撞了。这是所有分布式 ID 方案的起点。但选型不只看「唯一」，
+  要看四个指标：<strong>唯一性、趋势递增、发号性能、信息安全性</strong>（不要暴露业务量）。四个指标里能同时满足三个的都不多。</p>
+
+  <h3>方案一：UUID——唯一性满分，其余全不及格</h3>
+  <p>128 位，本地生成零网络开销，每秒百万级无压力。但它是<strong>完全随机</strong>的。
+  InnoDB 的主键是聚簇索引，数据按主键顺序物理存放。随机主键意味着每次插入都可能落在 B+ 树的中间某个页，
+  页满就分裂、移动一半数据 —— 这叫<strong>页分裂</strong>，写入性能直接砍半，还会产生大量碎片。</p>
+  <p>另外 36 字符的字符串主键（含横线）塞进每个二级索引的叶子节点，索引体积膨胀 4 倍以上。
+  <strong>结论：UUID 只适合做「请求追踪 ID」「幂等 token」，不适合做主键。</strong></p>
+
+  <h3>方案二：雪花算法——64 位里的四个分段</h3>
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="雪花算法 64 位布局">
+      <text x="24" y="26" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">Snowflake：1 + 41 + 10 + 12 = 64 bit，一个 long 装得下</text>
+
+      <rect x="24" y="48" width="44" height="48" rx="6" fill="#f3f5f9" stroke="#d8dde8"/>
+      <text x="46" y="70" font-size="10" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">符号</text>
+      <text x="46" y="86" font-size="10" text-anchor="middle" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">1</text>
+
+      <rect x="72" y="48" width="392" height="48" rx="6" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="268" y="70" font-size="10.5" text-anchor="middle" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif">时间戳（毫秒级）</text>
+      <text x="268" y="86" font-size="10.5" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">41 bit</text>
+
+      <rect x="468" y="48" width="172" height="48" rx="6" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="554" y="70" font-size="10.5" text-anchor="middle" fill="#5b21b6" font-family="-apple-system,PingFang SC,sans-serif">机器号</text>
+      <text x="554" y="86" font-size="10.5" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">10 bit</text>
+
+      <rect x="644" y="48" width="220" height="48" rx="6" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="754" y="70" font-size="10.5" text-anchor="middle" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">毫秒内序列</text>
+      <text x="754" y="86" font-size="10.5" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">12 bit</text>
+
+      <text x="46" y="118" font-size="9.8" text-anchor="middle" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">恒为 0</text>
+      <text x="268" y="118" font-size="10" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">2^41 ms ≈ 69.7 年</text>
+      <text x="554" y="118" font-size="10" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">2^10 = 1024 台</text>
+      <text x="754" y="118" font-size="10" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">2^12 = 4096 / ms</text>
+
+      <line x1="24" y1="136" x2="864" y2="136" stroke="#e3e7ef" stroke-width="1"/>
+
+      <text x="24" y="162" font-size="11" font-weight="800" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">单机上限</text>
+      <text x="96" y="162" font-size="11" fill="#2c333f" font-family="-apple-system,PingFang SC,sans-serif">4096 × 1000 = 409.6 万 / 秒，远超任何单机业务需要</text>
+
+      <text x="24" y="188" font-size="11" font-weight="800" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">机器号怎么来</text>
+      <text x="120" y="188" font-size="11" fill="#2c333f" font-family="-apple-system,PingFang SC,sans-serif">ZK 顺序节点 / MySQL 自增行 / Redis INCR / 配置中心下发 —— 关键是「全局唯一且稳定」</text>
+
+      <text x="24" y="214" font-size="11" font-weight="800" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">唯一硬伤</text>
+      <text x="96" y="214" font-size="11" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">时钟回拨：NTP 校时把机器时间往回拨，同一毫秒会被重复发号</text>
+
+      <rect x="24" y="230" width="852" height="56" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="250" font-size="10.6" fill="#2c333f" font-family="-apple-system,PingFang SC,sans-serif">① 小回拨（&lt; 5ms）：线程 sleep 等时间追上　② 大回拨（&gt; 5ms）：直接抛异常拒绝服务，等人工介入</text>
+      <text x="42" y="270" font-size="10.6" fill="#2c333f" font-family="-apple-system,PingFang SC,sans-serif">③ 美团 Leaf 的做法：借位——平时 10 位机器 + 12 位序列；回拨时从序列位「借」一位当「时间戳扩展位」，可容忍一次回拨</text>
+    </svg>
+    <figcaption><b>图 7</b>　位图是雪花算法的全部。<strong>面试时能把 69.7 年、1024 台、409.6 万/秒这三个数说出来，就已经赢了八成候选人</strong>。</figcaption>
+  </figure>
+
+  <pre>public synchronized long nextId() {
+    long now = System.currentTimeMillis();
+    if (now &lt; lastTimestamp) {
+        long offset = lastTimestamp - now;
+        if (offset &lt;= 5) {                       // 小幅回拨：等一下
+            sleep(offset + 1);
+            now = System.currentTimeMillis();
+        } else {
+            throw new IllegalStateException("时钟回拨 " + offset + "ms");  // 大幅回拨：拒绝
+        }
+    }
+    if (now == lastTimestamp) {
+        sequence = (sequence + 1) &amp; 4095;        // 4095 = 2^12 - 1
+        if (sequence == 0) now = waitNextMillis(lastTimestamp);   // 本毫秒用满，借下一秒
+    } else {
+        sequence = 0;
+    }
+    lastTimestamp = now;
+    return ((now - EPOCH) &lt;&lt; 22)                // 41 位时间戳左移 22 位
+         | (workerId &lt;&lt; 12)                      // 10 位机器左移 12 位
+         | sequence;                             // 12 位序列
+}</pre>
+
+  <div class="warn"><b>注意 &amp;&amp; 与 &lt;&lt; 的坑</b><br>
+  <code class="inl">sequence == 4096</code> 时如果不处理，会溢出污染机器号那 10 位，理论上有概率生成重复 ID。
+  必须用 <code class="inl">&amp; 4095</code> 掩码把高位截掉。<strong>雪花算法的正确性全靠位运算边界，写错一位就是线上事故。</strong></div>
+
+  <h3>方案三：号段模式——用「批发」把 QPS 打下来</h3>
+  <p>思路很朴素：不要每次都问 DB 要一个 ID，一次要 1000 个放在内存里慢慢发。DB 压力直接降到 1/1000。</p>
+  <pre>-- 一次「进货」1000 个号
+UPDATE leaf_alloc
+   SET max_id = max_id + step, update_time = NOW()
+ WHERE biz_tag = 'order';
+SELECT max_id FROM leaf_alloc WHERE biz_tag = 'order';</pre>
+  <p>单个 buffer 有个问题：号发完的那一刻才去 DB 取，那一次请求要吃 5~10ms 的 DB 延迟，QPS 高的时候会出现周期性抖动。
+  解法是<strong>双 buffer</strong>：当前号段消耗到 10% 时，异步去取下一段，用户完全无感。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="号段双 buffer 切换">
+      <defs>
+        <marker id="a6" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa2b1"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">双 buffer：消耗到 10% 就异步预取，切段时用户无感</text>
+
+      <rect x="24" y="48" width="520" height="76" rx="9" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="40" y="70" font-size="11" font-weight="800" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif">buffer A（当前发放）</text>
+      <text x="40" y="90" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">1000 ~ 1999　已发 100 个 → 消耗 10%</text>
+      <rect x="40" y="100" width="440" height="10" rx="5" fill="#dbeafe"/>
+      <rect x="40" y="100" width="44" height="10" rx="5" fill="#0369a1"/>
+      <text x="490" y="110" font-size="9.6" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">cursor</text>
+
+      <rect x="24" y="140" width="520" height="76" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="40" y="162" font-size="11" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">buffer B（已就绪）</text>
+      <text x="40" y="182" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">2000 ~ 2999　不用等，直接切</text>
+      <rect x="40" y="192" width="440" height="10" rx="5" fill="#cceddc"/>
+      <text x="490" y="202" font-size="9.6" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">full</text>
+
+      <rect x="600" y="48" width="276" height="168" rx="10" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="618" y="72" font-size="11" font-weight="800" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">step 该设多大</text>
+      <text x="618" y="94" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">step ÷ 峰值 QPS = 一个号段能撑几秒</text>
+      <text x="618" y="116" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">QPS 1000、step 1000 → 只撑 1 秒</text>
+      <text x="618" y="138" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">QPS 1000、step 10000 → 撑 10 秒</text>
+      <line x1="618" y1="152" x2="858" y2="152" stroke="#e3e7ef" stroke-width="1"/>
+      <text x="618" y="174" font-size="10.4" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">经验值：撑 5~15 分钟，太短则</text>
+      <text x="618" y="192" font-size="10.4" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">DB 压力回升，太长则重启浪费号</text>
+      <text x="618" y="210" font-size="10.4" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">Leaf 还能按上段消耗速率动态调</text>
+
+      <line x1="544" y1="86" x2="596" y2="86" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a6)"/>
+      <line x1="544" y1="178" x2="596" y2="178" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a6)"/>
+
+      <rect x="24" y="238" width="852" height="46" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="42" y="266" font-size="10.6" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">代价：重启会浪费未用完的号段（ID 出现空洞）—— 业务上完全可接受，因为 ID 只需要唯一和递增，不需要连续。</text>
+    </svg>
+    <figcaption><b>图 8</b>　双 buffer 解决的是「切段抖动」。<strong>「ID 有空洞」不是 bug，是号段模式的固有特性</strong>，面试时主动说出来是加分项。</figcaption>
+  </figure>
+
+  <h3>方案四、五：Redis INCR 与 DB 自增</h3>
+  <p><strong>Redis INCR</strong>：单分片 10 万 QPS，够用。同样可以「批发」——<code class="inl">INCRBY id:order 1000</code> 一次拿一段，
+  把 10 万 QPS 提升到「100 万 ID/s」。缺点是要考虑持久化：Redis 挂了重启，如果没开 AOF 会从头开始发号，直接撞车。</p>
+  <p><strong>DB 自增</strong>：最原始，单机几千 TPS。多库时用 <code class="inl">auto_increment_increment=N</code>（步长 = 库数）+
+  <code class="inl">auto_increment_offset</code>（起始偏移 = 库序号）做交错，ID 全局唯一但不连续，且扩容时要改配置，很痛。</p>
+
+  <table>
+    <tr><th>方案</th><th>性能</th><th>趋势递增</th><th>依赖</th><th>典型场景</th></tr>
+    <tr><td>UUID</td><td>本地，百万级</td><td><strong>否</strong>（页分裂）</td><td>无</td><td>traceId、幂等 token</td></tr>
+    <tr><td>雪花</td><td>本地，409 万/s</td><td>是</td><td>机器号分配</td><td>订单号、消息 ID（主流）</td></tr>
+    <tr><td>号段</td><td>DB 1/1000 压力</td><td>是</td><td>DB</td><td>超大规模、要连续段</td></tr>
+    <tr><td>Redis INCR</td><td>10 万（可批发到百万）</td><td>是</td><td>Redis 持久化</td><td>中小规模、有 Redis 集群</td></tr>
+    <tr><td>DB 自增</td><td>几千</td><td>是</td><td>DB 单点</td><td>单库、量小</td></tr>
+  </table>
+
+  <div class="good"><b>选型口诀</b><br>
+  中小规模 + 已有 Redis → <strong>Redis INCRBY 批发</strong>；大规模 + 要趋势递增 → <strong>雪花</strong>（配 ZK 发机器号）；
+  要严格递增且能接受 DB 依赖 → <strong>号段双 buffer</strong>；做追踪/幂等 → <strong>UUID</strong>。
+  <strong>永远不要用 UUID 做主键。</strong></div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L5</span><em>短链系统 · 一个 6 位字符串背后的四件事</em></div>
+  <h2>6 位 base62 = 568 亿，这个数决定了整道题</h2>
+
+  <p>短链的题面很短：「把长 URL 变成 <code class="inl">http://t.cn/A6f3kQ2</code> 这样的短链接」。
+  它其实在考四件不相干的事：<strong>怎么发号、怎么编码、跳转用 301 还是 302、热点怎么扛</strong>。</p>
+
+  <h3>编码：为什么是 62 进制</h3>
+  <p>字符集 <code class="inl">a-z A-Z 0-9</code> 共 62 个。<strong>62<sup>6</sup> = 568 亿</strong>，<strong>62<sup>7</sup> = 3.5 万亿</strong>。
+  按每天新增 100 万条算，6 位够用 1 500 年——所以「长度不够」从来不是问题，问题是编号从哪来。</p>
+  <pre>private static final String BASE62 =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+public static String encode(long id) {
+    StringBuilder sb = new StringBuilder();
+    while (id &gt; 0) {
+        sb.append(BASE62.charAt((int) (id % 62)));   // 取低位
+        id /= 62;
+    }
+    return sb.reverse().toString();                  // 别忘 reverse
+}</pre>
+  <p>注意：用「全局自增 ID → base62」这条路，<strong>天然不冲突</strong>，因为 ID 唯一所以编码唯一。
+  另一条路是「对 URL 做 MD5 → 取前 6 位」，冲突要额外处理（重试加盐、或维护冲突表），而且同一个 URL 得到同一个短链（这有时是优点）。</p>
+
+  <h3>跳转：302 而不是 301，因为你要统计</h3>
+  <p>301 是永久重定向，<strong>浏览器会把它缓存下来</strong>，第二次点击根本不经过你的服务器——点击统计就没了，短链也就废了。
+  302 是临时重定向，每次都回源，你才能埋点、做风控、做灰度。<strong>代价是多一次请求，但短链的价值就在这一次请求里。</strong></p>
+
+  <figure>
+    <svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="短链生成与跳转链路">
+      <defs>
+        <marker id="a7" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa2b1"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">两条链路：写（生成）与读（跳转），读的量是写的 1000 倍</text>
+
+      <rect x="24" y="44" width="410" height="118" rx="10" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="40" y="66" font-size="11" font-weight="800" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif">写链路 · 生成短链</text>
+      <rect x="40" y="78" width="88" height="30" rx="6" fill="#fff" stroke="#bcdcf2"/>
+      <text x="84" y="97" font-size="9.8" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">长 URL</text>
+      <rect x="148" y="78" width="88" height="30" rx="6" fill="#fff" stroke="#bcdcf2"/>
+      <text x="192" y="97" font-size="9.8" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">发号器</text>
+      <rect x="256" y="78" width="88" height="30" rx="6" fill="#fff" stroke="#bcdcf2"/>
+      <text x="300" y="97" font-size="9.8" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">base62</text>
+      <rect x="356" y="78" width="62" height="30" rx="6" fill="#0369a1"/>
+      <text x="387" y="97" font-size="9.8" text-anchor="middle" fill="#fff" font-family="-apple-system,PingFang SC,sans-serif">写库</text>
+      <line x1="128" y1="93" x2="144" y2="93" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a7)"/>
+      <line x1="236" y1="93" x2="252" y2="93" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a7)"/>
+      <line x1="344" y1="93" x2="352" y2="93" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a7)"/>
+      <text x="40" y="130" font-size="9.8" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">ID → base62 天然不冲突；MD5 取前 6 位要处理冲突</text>
+      <text x="40" y="148" font-size="9.8" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">写入量小（每天百万级），不需要特殊优化</text>
+
+      <rect x="466" y="44" width="410" height="118" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="482" y="66" font-size="11" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">读链路 · 跳转（QPS 高 3 个数量级）</text>
+      <rect x="482" y="78" width="80" height="30" rx="6" fill="#fff" stroke="#cceddc"/>
+      <text x="522" y="97" font-size="9.8" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">浏览器</text>
+      <rect x="582" y="78" width="80" height="30" rx="6" fill="#fff" stroke="#cceddc"/>
+      <text x="622" y="97" font-size="9.8" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">Redis</text>
+      <rect x="682" y="78" width="80" height="30" rx="6" fill="#fff" stroke="#cceddc"/>
+      <text x="722" y="97" font-size="9.8" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">MySQL</text>
+      <rect x="782" y="78" width="80" height="30" rx="6" fill="#047857"/>
+      <text x="822" y="97" font-size="9.8" text-anchor="middle" fill="#fff" font-family="-apple-system,PingFang SC,sans-serif">302</text>
+      <line x1="562" y1="93" x2="578" y2="93" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a7)"/>
+      <line x1="662" y1="93" x2="678" y2="93" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a7)"/>
+      <line x1="762" y1="93" x2="778" y2="93" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a7)"/>
+      <text x="482" y="130" font-size="9.8" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">缓存命中 99%，未命中才回表（缓存穿透用布隆过滤挡）</text>
+      <text x="482" y="148" font-size="9.8" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">用 302 才能每次回源埋点；301 被浏览器缓存，统计全丢</text>
+
+      <rect x="24" y="180" width="852" height="62" rx="10" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="42" y="202" font-size="11" font-weight="800" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">数字账本</text>
+      <text x="42" y="222" font-size="10.6" fill="#2c363f" font-family="-apple-system,PingFang SC,sans-serif">62^6 = 568 亿（6 位够 1500 年）　62^7 = 3.5 万亿　每天 100 万条 → 一条 8 字节 ID + URL 平均 200B ≈ 200GB/年</text>
+
+      <rect x="24" y="254" width="852" height="58" rx="10" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="42" y="276" font-size="11" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">热点问题</text>
+      <text x="112" y="276" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">大 V 发一条短链，1 分钟 100 万点击 → 同一个 key 打满单分片，必须加本地缓存（Caffeine）二级</text>
+      <text x="42" y="296" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">本地缓存 5 秒过期即可，短链映射几乎不变；写时删本地缓存不现实，靠短 TTL 容忍</text>
+    </svg>
+    <figcaption><b>图 9</b>　读写完全不对称：<strong>写每天百万级，读每秒数万</strong>。所以优化重心全在读链路的缓存命中率上。</figcaption>
+  </figure>
+
+  <h3>防穿透：布隆过滤器先挡一道</h3>
+  <p>恶意请求随机拼 6 位码，99.99% 是不存在的短链。这类请求会全部穿透到 MySQL，一个脚本就能打死你的库。
+  布隆过滤器用极小的内存回答「这个 key 一定不存在 / 可能存在」。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="布隆过滤器位数组">
+      <text x="24" y="26" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">布隆过滤器：k 个哈希落在 m 位上，全是 1 才「可能存在」</text>
+
+      <text x="24" y="58" font-size="10.5" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">输入 url_a  →  h1=2, h2=6, h3=11</text>
+      <text x="24" y="76" font-size="10.5" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">输入 url_b  →  h1=4, h2=6, h3=13</text>
+
+      <rect x="24" y="92" width="850" height="44" rx="6" fill="#f3f5f9" stroke="#d8dde8"/>
+      <line x1="74" y1="92" x2="74" y2="136" stroke="#e3e7ef"/>
+      <line x1="124" y1="92" x2="124" y2="136" stroke="#e3e7ef"/>
+      <line x1="174" y1="92" x2="174" y2="136" stroke="#e3e7ef"/>
+      <line x1="224" y1="92" x2="224" y2="136" stroke="#e3e7ef"/>
+      <line x1="274" y1="92" x2="274" y2="136" stroke="#e3e7ef"/>
+      <line x1="324" y1="92" x2="324" y2="136" stroke="#e3e7ef"/>
+      <line x1="374" y1="92" x2="374" y2="136" stroke="#e3e7ef"/>
+      <line x1="424" y1="92" x2="424" y2="136" stroke="#e3e7ef"/>
+      <line x1="474" y1="92" x2="474" y2="136" stroke="#e3e7ef"/>
+      <line x1="524" y1="92" x2="524" y2="136" stroke="#e3e7ef"/>
+      <line x1="574" y1="92" x2="574" y2="136" stroke="#e3e7ef"/>
+      <line x1="624" y1="92" x2="624" y2="136" stroke="#e3e7ef"/>
+      <line x1="674" y1="92" x2="674" y2="136" stroke="#e3e7ef"/>
+      <line x1="724" y1="92" x2="724" y2="136" stroke="#e3e7ef"/>
+      <line x1="774" y1="92" x2="774" y2="136" stroke="#e3e7ef"/>
+      <line x1="824" y1="92" x2="824" y2="136" stroke="#e3e7ef"/>
+
+      <text x="49" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">0</text>
+      <text x="99" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">0</text>
+      <text x="149" y="120" font-size="11" text-anchor="middle" fill="#0369a1" font-weight="800" font-family="ui-monospace,Consolas,monospace">1</text>
+      <text x="199" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">0</text>
+      <text x="249" y="120" font-size="11" text-anchor="middle" fill="#0369a1" font-weight="800" font-family="ui-monospace,Consolas,monospace">1</text>
+      <text x="299" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">0</text>
+      <text x="349" y="120" font-size="11" text-anchor="middle" fill="#0369a1" font-weight="800" font-family="ui-monospace,Consolas,monospace">1</text>
+      <text x="399" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">0</text>
+      <text x="449" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">0</text>
+      <text x="499" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">0</text>
+      <text x="549" y="120" font-size="11" text-anchor="middle" fill="#0369a1" font-weight="800" font-family="ui-monospace,Consolas,monospace">1</text>
+      <text x="599" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">0</text>
+      <text x="649" y="120" font-size="11" text-anchor="middle" fill="#0369a1" font-weight="800" font-family="ui-monospace,Consolas,monospace">1</text>
+      <text x="699" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">0</text>
+      <text x="749" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">…</text>
+      <text x="799" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">…</text>
+      <text x="849" y="120" font-size="11" text-anchor="middle" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">…</text>
+
+      <text x="24" y="154" font-size="9.6" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">位下标 → 0    1    2    3    4    5    6    7    8    9   10   11   12   13</text>
+
+      <rect x="24" y="170" width="414" height="62" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="42" y="192" font-size="10.6" font-weight="700" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">查询 url_a：2/6/11 全为 1 → 可能存在</text>
+      <text x="42" y="212" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">查询 url_c：2/6/11 中有 0 → <tspan font-weight="700" fill="#be123c">一定不存在</tspan>，直接拒</text>
+
+      <rect x="462" y="170" width="414" height="62" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="480" y="192" font-size="10.6" font-weight="700" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">1 亿 URL、1% 误判 → 9.6 bit/个</text>
+      <text x="480" y="212" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">约 120MB 内存 → 单机轻松装下，挡住 99% 无效请求</text>
+    </svg>
+    <figcaption><b>图 10</b>　布隆过滤器只会「误判存在」，不会「漏判不存在」——<strong>这个单向错误特性正好匹配防穿透的需求</strong>。</figcaption>
+  </figure>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L6</span><em>Feed 流 · 推拉之间隔着一道除法</em></div>
+  <h2>「关注的人发微博，我刷到」——这句话的代价是写放大</h2>
+
+  <p>Feed 流（朋友圈、微博关注流、抖音关注页）的设计只有一个核心矛盾：
+  <strong>发布时写，还是阅读时算？</strong>前者叫推（写扩散），后者叫拉（读扩散）。两者都有致命场景。</p>
+
+  <h3>推模式：发布时把内容塞进每个粉丝的收件箱</h3>
+  <p>好处是读极快——刷的时候只查自己的收件箱，一次查询按时间倒序就完事。
+  代价是<strong>写放大</strong>：一个 10 万粉丝的博主发一条，要写 10 万行。</p>
+  <p>算一下明星：5000 万粉丝，发一条微博 = <strong>5000 万次写入</strong>。
+  按单机 3 000 TPS 算需要 1.6 万台机器同时写 10 秒。这显然不可行——所以纯推模式在大 V 面前直接崩掉。</p>
+
+  <h3>拉模式：阅读时聚合所有关注的人</h3>
+  <p>发布只写一行，成本极低。但读的时候要查「我关注的 N 个人各自的最新内容」再归并排序。
+  关注 1000 人就是 1000 次查询 + 一次 1000 路归并，RT 直接上百毫秒。刷一次 100ms，用户就滑走了。</p>
+
+  <h3>推拉结合：用粉丝数做分界线</h3>
+  <p>分界线通常设在 10 万粉丝。<strong>小于 10 万 → 推</strong>（写 10 万行还能接受）；<strong>大于 10 万 → 拉</strong>（只写自己的发件箱，粉丝读的时候现场合并）。
+  一个用户刷 Feed 时，读的是「自己的收件箱」+「他关注的那几个大 V 的发件箱」，两段结果归并一次。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Feed 推拉结合模型">
+      <defs>
+        <marker id="a8" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa2b1"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">同一条微博，两种投递：粉丝数 10 万就是分界线</text>
+
+      <!-- push -->
+      <rect x="24" y="44" width="414" height="150" rx="10" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="42" y="66" font-size="11" font-weight="800" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif">推 · 普通作者（8 万粉丝）</text>
+      <rect x="42" y="78" width="100" height="30" rx="6" fill="#fff" stroke="#bcdcf2"/>
+      <text x="92" y="97" font-size="9.8" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">发布微博</text>
+      <text x="42" y="130" font-size="10" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">异步 fanout：写 8 万行收件箱</text>
+      <text x="42" y="150" font-size="10" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">耗时约 8 万 / 3 000 TPS ≈ 27 秒（后台跑）</text>
+      <text x="42" y="172" font-size="10" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">读：只查自己收件箱 → 1 次查询，5ms</text>
+
+      <rect x="230" y="78" width="190" height="96" rx="6" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="242" y="96" font-size="9.6" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">t_inbox（按 user_id 分片）</text>
+      <text x="242" y="114" font-size="9" fill="#8b93a5" font-family="ui-monospace,Consolas,monospace">user_id | feed_id | time</text>
+      <text x="242" y="132" font-size="9" fill="#8b93a5" font-family="ui-monospace,Consolas,monospace">1001 | 90001 | 12:00</text>
+      <text x="242" y="148" font-size="9" fill="#8b93a5" font-family="ui-monospace,Consolas,monospace">1002 | 90001 | 12:00</text>
+      <text x="242" y="164" font-size="9" fill="#8b93a5" font-family="ui-monospace,Consolas,monospace">… 8 万行</text>
+
+      <!-- pull -->
+      <rect x="462" y="44" width="414" height="150" rx="10" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="480" y="66" font-size="11" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">拉 · 大 V（5 000 万粉丝）</text>
+      <rect x="480" y="78" width="100" height="30" rx="6" fill="#fff" stroke="#f4dcc2"/>
+      <text x="530" y="97" font-size="9.8" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">发布微博</text>
+      <text x="480" y="130" font-size="10" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">只写 1 行发件箱，绝不做 fanout</text>
+      <text x="480" y="150" font-size="10" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">否则 5 000 万行 = 1.6 万台机器写 10 秒</text>
+      <text x="480" y="172" font-size="10" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">读：粉丝现场来拉，多一次查询</text>
+
+      <rect x="668" y="78" width="190" height="96" rx="6" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="680" y="96" font-size="9.6" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">t_outbox（按 author_id）</text>
+      <text x="680" y="114" font-size="9" fill="#8b93a5" font-family="ui-monospace,Consolas,monospace">author_id | feed_id | time</text>
+      <text x="680" y="132" font-size="9" fill="#8b93a5" font-family="ui-monospace,Consolas,monospace">8001 | 90002 | 12:05</text>
+      <text x="680" y="148" font-size="9" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">只有 1 行</text>
+
+      <line x1="142" y1="93" x2="226" y2="93" stroke="#9aa2b1" stroke-width="1.3" marker-end="url(#a8)"/>
+      <line x1="580" y1="93" x2="664" y2="93" stroke="#9aa2b1" stroke-width="1.3" marker-end="url(#a8)"/>
+
+      <!-- read merge -->
+      <rect x="24" y="212" width="852" height="120" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="42" y="234" font-size="11" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">读的时候：两段结果归并一次</text>
+
+      <rect x="42" y="246" width="220" height="44" rx="7" fill="#fff" stroke="#cceddc"/>
+      <text x="152" y="264" font-size="9.8" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">自己收件箱（推来的）</text>
+      <text x="152" y="281" font-size="9.4" text-anchor="middle" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">按时间倒序，取前 20 条</text>
+
+      <rect x="286" y="246" width="240" height="44" rx="7" fill="#fff" stroke="#f4dcc2"/>
+      <text x="406" y="264" font-size="9.8" text-anchor="middle" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">关注的大 V 发件箱（拉来的）</text>
+      <text x="406" y="281" font-size="9.4" text-anchor="middle" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">通常只有几十个，各取前 20 条</text>
+
+      <rect x="550" y="246" width="130" height="44" rx="7" fill="#fff" stroke="#bcdcf2"/>
+      <text x="615" y="264" font-size="9.8" text-anchor="middle" fill="#075985" font-family="-apple-system,PingFang SC,sans-serif">归并排序</text>
+      <text x="615" y="281" font-size="9.4" text-anchor="middle" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">k 路归并取前 20</text>
+
+      <rect x="704" y="246" width="152" height="44" rx="7" fill="#047857"/>
+      <text x="780" y="264" font-size="9.8" text-anchor="middle" fill="#fff" font-family="-apple-system,PingFang SC,sans-serif">返回 Feed 列表</text>
+      <text x="780" y="281" font-size="9.4" text-anchor="middle" fill="#d1fae5" font-family="-apple-system,PingFang SC,sans-serif">20 条 / 6ms</text>
+
+      <line x1="262" y1="268" x2="282" y2="268" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a8)"/>
+      <line x1="526" y1="268" x2="546" y2="268" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a8)"/>
+      <line x1="680" y1="268" x2="700" y2="268" stroke="#9aa2b1" stroke-width="1.2" marker-end="url(#a8)"/>
+
+      <text x="42" y="318" font-size="10.4" fill="#2c333f" font-family="-apple-system,PingFang SC,sans-serif">热点大 V 关注数很多时（比如关注 200 个明星），拉取段会退化 → 给大 V 发件箱加本地缓存，或对「超大 V」再降级为「只拉最近 3 条」。</text>
+
+      <rect x="24" y="344" width="852" height="62" rx="10" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="42" y="366" font-size="11" font-weight="800" fill="#5b21b6" font-family="-apple-system,PingFang SC,sans-serif">翻页必须用游标，不能用 offset</text>
+      <text x="42" y="386" font-size="10.6" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">WHERE (create_time, feed_id) &lt; (#{lastTime}, #{lastId}) ORDER BY create_time DESC, feed_id DESC LIMIT 20</text>
+      <text x="42" y="402" font-size="10.2" fill="#8b93a5" font-family="-apple-system,PingFang SC,sans-serif">原因：翻页期间有新内容插入，offset 会导致「重复项」和「漏项」——这是 Feed 最容易被抓的细节。</text>
+    </svg>
+    <figcaption><b>图 11</b>　推拉的本质是<strong>把写成本转成读成本</strong>。分界线定在粉丝数 10 万，是因为 10 万行还能在后台异步写完。</figcaption>
+  </figure>
+
+  <div class="oneline">
+    <b>一句话回答模板</b>
+    普通用户走推（写扩散，读快），大 V 走拉（读扩散，写快），用户刷 Feed 时把「自己收件箱」和「关注的大 V 发件箱」做 k 路归并。
+    分界线按粉丝数定，10 万是个经验值——本质是「一次 fanout 的写入量还能被异步消化」的上限。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L7</span><em>速查 · 十二句话把五道题串起来</em></div>
+  <h2>面试前扫一遍</h2>
+
+  <ul class="check">
+    <li><b>① 场景题先问约束，别先画图。</b>QPS / 数据量 / 一致性等级 / 降级预算，四个问题决定架构长什么样。</li>
+    <li><b>② 记住换算汇率：</b>Tomcat 3 000 QPS、Redis 单分片 10 万、MySQL 写 3 000 TPS、Kafka 单分区 10 万条/s。有汇率才能把 QPS 翻成机器数。</li>
+    <li><b>③ 系统吞吐 = 最窄那一跳。</b>秒杀里最窄的是 MySQL 的 3 000 TPS，所以四道闸门全部开在它前面。</li>
+    <li><b>④ 秒杀不是变快，是让 99% 的请求提前被拒。</b>CDN 砍 99%，前端砍 60%，网关砍到 1/3，Redis 砍到库存数。</li>
+    <li><b>⑤ 「GET 再 DECR」必超卖。</b>Redis 单条命令原子 ≠ 两条命令原子。判断和扣减必须住在同一个 Lua 里。</li>
+    <li><b>⑥ 库存 key 只能落单分片，单分片 10 万就是硬顶。</b>这是闸门必须前置的真正原因，不是「Redis 慢」。</li>
+    <li><b>⑦ 防超卖三层：Lua 拦 99.99%、DB 条件更新兜底、对账任务修差值。</b>原则是宁可少卖，不可超卖。</li>
+    <li><b>⑧ 幂等靠唯一索引，不靠 select-then-insert。</b>后者在并发下必然穿透。</li>
+    <li><b>⑨ 订单超时关闭的量级是每秒 1.16 单。</b>所以考点是可靠性不是性能——延时消息 + 扫表兜底 + 惰性判定，三件套。</li>
+    <li><b>⑩ Redis 过期事件不能用来关单。</b>过期不准时（惰性+定期删除），事件走 pub/sub 不持久、不重试。</li>
+    <li><b>⑪ 关单必须带 status = 0。</b>否则 29:59 付款的用户会被 30:01 的消息改成已取消。</li>
+    <li><b>⑫ 雪花三个数：69.7 年 / 1 024 台 / 409.6 万每秒。</b>号段双 buffer 在 10% 时预取，代价是重启浪费号段；短链 62^6 = 568 亿；Feed 分界线 10 万粉丝；布隆 1 亿 URL 约 120MB。</li>
+  </ul>
+
+  <h3>十四条高频问答</h3>
+
+  <div class="qa">
+    <div class="qq">秒杀为什么不用分布式锁扣库存？</div>
+    <p>能扣，但没必要且更慢。分布式锁（Redisson）一次加锁解锁至少两次 RTT + 看门狗续期，QPS 上不去；
+    而且它保证的是「串行」，而你要的是「原子地判断并扣减」——Lua 天然做到，还省了锁的获取开销。
+    <strong>锁是为了保护临界区，Lua 是把临界区本身变成一个原子操作</strong>，后者更彻底。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">Redis 扣了库存，但下单失败，库存怎么办？</div>
+    <p>回补。消费者落库失败（DB 扣减影响行数 0、或者抛异常）时，执行 <code class="inl">INCR</code> 把 Redis 库存加回去，
+    同时写一条回补日志。注意两点：① 回补要幂等（用消息 ID 去重），② 不能无限重试，重试 3 次仍失败就进死信队列人工处理，
+    否则 Redis 库存被反复加回会造成超卖。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">库存预热到 Redis，活动结束后 Redis 和 DB 对不上怎么办？</div>
+    <p>这是必然的，不是异常。做法是活动结束跑一次全量对账：<strong>DB 已售 + Redis 剩余 应该等于总库存</strong>。
+    差值 > 0 说明少卖（Redis 少扣了），把剩余补回去重新上架；差值 < 0 说明超卖，触发退款 + 告警。
+    对账任务的输出应该是「一份可审计的差异清单」，而不是「自动修正一切」——超卖涉及钱，必须有人看。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">延迟消息和定时扫表，为什么两个都要？</div>
+    <p>它们的失效模式不重叠。延迟消息可能因为 Broker 抖动、消费端重启、消费失败进死信而丢；
+    扫表可能因为任务没调度、机器挂了而漏。**两者同时失效的概率极低**，这叫「无关失效路径互补」。
+    工程上的可靠性不是靠一个组件做到 99.99%，而是靠两个 99% 的组件串联做到 99.99%。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">订单超时关闭，为什么不能直接 delete 掉？</div>
+    <p>三个原因：① 用户可能已经付款（钱在路上），删除后无法对账；② 需要审计和客服查询；
+    ③ 库存要回补、优惠券要退回，这些都需要订单作为凭据。
+    <strong>软删除 + 状态迁移是订单类数据的标准做法</strong>，任何「物理删除订单」的设计都是重大缺陷。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">雪花算法机器号怎么分配？容器环境怎么办？</div>
+    <p>三种做法：① ZK 创建顺序临时节点，节点序号就是机器号（最经典）；② MySQL 一行自增 + 唯一索引占位；
+    ③ 配置中心按 Pod 名分配。容器环境最大的坑是 <strong>Pod 重启后 IP 变了但机器号要复用</strong>——
+    所以要用「Pod 名/StatefulSet 序号」而不是 IP 做 key，并且在 Pod 下线时释放机器号，否则 1 024 个号很快会用完。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">号段模式重启后 ID 出现空洞，业务能接受吗？</div>
+    <p>能。ID 的语义只有两个：唯一、趋势递增。连续性是额外的、业务几乎从不依赖的性质。
+    唯一要注意的是「不要用 ID 的差值做统计」——早期有团队用「今天最大 ID - 昨天最大 ID」估算订单量，号段模式下这个数完全失真。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">短链为什么用 302 不用 301？什么时候该用 301？</div>
+    <p>302 每次回源，能统计、能风控、能改目标地址；301 被浏览器缓存，第二次点击不经过服务器，统计丢失但<strong>更快、更省服务器</strong>。
+    所以：需要数据 → 302；纯跳转、追求性能、目标地址永不变（比如 CDN 域名迁移）→ 301。
+    短链业务 99% 需要数据，所以用 302。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">布隆过滤器删不掉元素，短链要支持删除怎么办？</div>
+    <p>三个办法：① 用<strong>计数布隆</strong>（每位改成计数器，删除时减一，代价是内存涨 4 倍）；
+    ② 用<strong>分层布隆</strong>（Cuckoo Filter 支持删除，误判率更低）；
+    ③ 最省事：<strong>不删</strong>——短链过期后保留映射，只是返回 410，布隆里的位留着不影响正确性（最多多一点误判）。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">Feed 流为什么要按 user_id 分片收件箱？</div>
+    <p>因为读的模式是「按用户查自己的时间线」，分片键必须是 user_id，这样一次查询只落一个分片。
+    如果按 feed_id 分片，读一个人 20 条 Feed 要广播到所有分片再归并，直接退化成拉模式。
+    <strong>分片键永远跟着「最主要的查询条件」走</strong>，这条原则比分片算法重要得多。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">推模式下，博主删微博怎么办？要删 8 万行吗？</div>
+    <p>不要。三种做法：① 收件箱只存 feed_id，读的时候批量查内容表，内容删了自然查不到（<strong>最常用</strong>，因为收件箱行很小）；
+    ② 异步删除，允许短时间不一致；③ 读时做一次内容存在性过滤。第一种最优——<strong>收件箱只做索引，不做内容存储</strong>，
+    这同时也避免了「博主改一条微博要更新 8 万行」的问题。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">如果让你设计「附近的人」，和秒杀最大的区别是什么？</div>
+    <p>秒杀是「写热点」（同一行库存），附近的人是「读热点 + 空间索引」。前者靠削峰和原子扣减，
+    后者靠 GeoHash / Redis GEO 把二维距离降成一维前缀匹配，再加「网格缓存」。
+    <strong>场景题的第一步永远是判断「热点在写还是在读」</strong>，这两种热点的解法几乎是相反的。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">所有方案都要限流，限流阈值怎么定？</div>
+    <p>不是拍脑袋，是从下游容量反推。公式：<code class="inl">阈值 = 下游单机容量 × 实例数 × 安全系数(0.7)</code>。
+    比如 4 台网关、每台 5 万，那总量限 14 万；再往下 Redis 单分片 10 万，就限 7 万。
+    <strong>每层限流阈值必须小于下一层的总容量</strong>，否则限流形同虚设——这叫做「容量逐层收敛」。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">面试官问「你这个方案有什么问题」，怎么答？</div>
+    <p>千万不要说「没有问题」。主动说出两个真实缺陷 + 一个监控手段，比硬撑强十倍。
+    比如秒杀：「Redis 单分片是硬顶，库存超过单分片容量只能拆成多个子库存（分桶），代价是要处理跨桶的余量回收；
+    另外对账是分钟级的，极端情况下会有几分钟的数据不一致，我们用告警 + 人工介入兜住。」</p>
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L8</span><em>模拟面试 · 三道题，自己先答一遍再看</em></div>
+  <h2>掐表：每题 8 分钟</h2>
+
+  <div class="q">
+    <h4><span>Q1</span>1 万件商品，100 万人 0 点开抢。设计这个秒杀系统，并说明你怎么保证不超卖。</h4>
+    <div class="lab">考察点</div>
+    <p>容量换算能力（能不能把 10 万 QPS 翻成机器数）、闸门顺序（能不能说清为什么开在 MySQL 前面）、
+    异常路径（Redis 扣了但没下单怎么办）。</p>
+    <div class="lab g">参考答案骨架</div>
+    <p><strong>第一步给数字：</strong>100 万人 / 10 秒峰值 = 10 万 QPS；1 万件商品 → 目标是把 DB 写入压到 1 000 TPS（10 秒内写完 1 万单）。
+    MySQL 单机 3 000 TPS，所以<strong>不需要分库分表</strong>——这句话本身就是加分项。</p>
+    <p><strong>第二步给四道闸门：</strong>CDN 静态化（99% 页面流量不出源站）→ 前端置灰 + 答题 + 一次性 token（砍 60%）→
+    网关令牌桶按 <code class="inl">库存 × 3</code> 放行（10 万）→ Redis Lua 原子预扣（剩 1 万）→ MQ 异步下单（1 000 TPS 落库）。</p>
+    <p><strong>第三步讲正确性：</strong>Lua 里 get + 判空 + 判限购 + decr + sadd 一次执行；DB 层保留
+    <code class="inl">where stock &gt;= 1</code> 兜底，影响 0 行就回补 Redis；唯一索引 <code class="inl">(activity_id, sku_id, user_id)</code> 保证幂等；
+    每 5 分钟对账一次修差值。<strong>原则是宁可少卖不可超卖。</strong></p>
+    <div class="lab r">容易被追问</div>
+    <p>「Redis 单 key 会不会成为瓶颈？」→ 会，单分片 10 万。库存超过单分片能力时拆成 N 个子库存（分桶），
+    用户按 hash 落到某个桶，桶空了再从别的桶「借」，代价是借的过程要加锁或走 Lua 二次尝试。</p>
+    <p>「网关被绕过了怎么办？」→ 一次性 token 由服务端签发并校验，且 token 与用户绑定、有效期 60 秒，脚本拿不到有效 token。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>Q2</span>订单创建后 30 分钟未支付要自动关闭。给出你的方案，并说明消息丢了怎么办。</h4>
+    <div class="lab">考察点</div>
+    <p>五方案取舍（能不能说出 Redis 过期为什么不行）、乐观锁（status = 0）、兜底思维（三件套）。</p>
+    <div class="lab g">参考答案骨架</div>
+    <p><strong>先给量级：</strong>日均 10 万单 = 每秒 1.16 单。所以这不是性能题，是可靠性题——主动说这句，面试官会立刻提高评价。</p>
+    <p><strong>主路径：</strong>下单成功后发 RocketMQ 延时消息（4.x 的 16 级 = 30 分钟；5.x 用任意时刻）。消费端先校验状态再关单。</p>
+    <p><strong>兜底：</strong>每 5 分钟扫一次 <code class="inl">status=0 and create_time &lt; now()-30m</code>，主键游标分批，每批 100 条小事务。
+    这是唯一「只要 DB 活着就一定执行」的方案。</p>
+    <p><strong>用户视角：</strong>查详情时惰性判定，超时就地执行同一条 update 再返回。哪怕两个任务都挂了，用户也看不到「可以支付」的僵尸单。</p>
+    <p><strong>关键细节：</strong><code class="inl">update t_order set status=2 where id=? and status=0</code>。不带 status 条件，
+    29:59 付款的用户会被 30:01 的消息改成已取消，这是最典型的线上事故。</p>
+    <div class="lab r">容易被追问</div>
+    <p>「为什么不用 Redis 过期监听？」→ 过期不准时（惰性删除 + 每 100ms 抽查 20 个 key），事件走 pub/sub 不持久化、不重试，
+    订阅端重启那几秒的事件永久丢失。只适合清缓存，不适合关单。</p>
+    <p>「关单要回补库存和优惠券，怎么保证一致？」→ 关单、回补库存、退券三个动作放在一个本地事务里（同一个库），
+    跨库的部分用本地消息表 + 定时补偿。<strong>不要用 TCC，这个场景不值得。</strong></p>
+  </div>
+
+  <div class="q">
+    <h4><span>Q3</span>设计微博关注流：我关注了 500 人，其中 3 个是粉丝上千万的明星。打开 App 要 100ms 内出 20 条。</h4>
+    <div class="lab">考察点</div>
+    <p>推拉选型（能不能用数字论证纯推不可行）、分片键（为什么按 user_id）、翻页（游标 vs offset）、
+    以及最容易被忽略的「收件箱只存 ID 不存内容」。</p>
+    <div class="lab g">参考答案骨架</div>
+    <p><strong>算写放大：</strong>普通作者 8 万粉丝 → 一条微博写 8 万行，后台异步 27 秒可接受；
+    明星 5 000 万粉丝 → 5 000 万行，按 3 000 TPS 要 1.6 万台机器写 10 秒。<strong>纯推在大 V 面前直接不成立。</strong></p>
+    <p><strong>推拉结合：</strong>粉丝数 &lt; 10 万走推（异步 fanout 写收件箱），&gt; 10 万走拉（只写发件箱）。
+    读时取「自己收件箱前 20」+「关注的 3 个大 V 发件箱各前 20」，k 路归并取前 20。</p>
+    <p><strong>存储：</strong>收件箱 <code class="inl">(user_id, feed_id, author_id, create_time)</code>，按 user_id 分片（一次查询落一个分片），
+    只存 feed_id 不存内容——内容单独按 feed_id 查，这样删微博不用删 8 万行。</p>
+    <p><strong>翻页：</strong>游标 <code class="inl">(create_time, feed_id) &lt; (?, ?)</code>，不用 offset。
+    offset 在有新内容插入时会重复或漏项。</p>
+    <div class="lab r">容易被追问</div>
+    <p>「关注 500 人里 200 个都是大 V 呢？」→ 拉取段退化成 200 次查询。解法：① 给大 V 发件箱加本地缓存（Caffeine，TTL 5 秒）；
+    ② 只拉「最近 3 条」，因为一个人的时间线里大 V 的内容占比本来就低；③ 极端情况下降级为「只返回收件箱内容 + 提示下拉刷新」。</p>
+    <p>「feed_id 用什么？」→ 雪花。收件箱写入量大（写扩散），需要趋势递增且本地生成，雪花最合适；
+    UUID 会让收件箱表的主键随机化，页分裂严重。</p>
+  </div>
+
+  <div class="good"><b>下期预告 · 设计模式与代码品味</b><br>
+  策略模式怎么替掉 if-else 又不变成「类爆炸」、模板方法在框架里的真实用法、责任链与过滤器链的区别、
+  单例的五种写法与为什么枚举最好、以及面试官最爱问的那句「你项目里用过什么设计模式」该怎么答才不像背课文。</div>
+
+  <footer>
+    Java 面试深挖 · 第 10 期 · 大厂场景设计题<br>
+    配套纯文本版：<code class="inl">java_interview_10_scenario_design.md</code> ｜ 已同步至腾讯文档
+  </footer>
+</section>
+
+</div>
+<script>
+(function(){
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  var RE = /(\/\/[^\n]*|(?:^|\s)--[^\n]*|(?:^|\s)#[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|\b(public|private|protected|static|final|void|class|interface|new|return|if|else|for|while|do|try|catch|finally|throw|throws|synchronized|volatile|transient|extends|implements|int|long|byte|short|boolean|double|float|char|null|true|false|this|super|import|package|abstract|instanceof|break|continue|switch|case|default|local|then|end|and|or|not|SELECT|UPDATE|WHERE|FROM|ORDER|BY|LIMIT|SET|INSERT|INTO|AND|CREATE|TABLE|UNIQUE|KEY|PRIMARY|NOT|NULL|DEFAULT|INTERVAL)\b|\b(\d[\d_.]*)\b/g;
+  document.querySelectorAll('pre').forEach(function(pre){
+    var t = esc(pre.textContent);
+    pre.innerHTML = t.replace(RE, function(m,g1,g2,g3,g4){
+      if(g1) return '<span class="c">'+m+'</span>';
+      if(g2) return '<span class="s">'+m+'</span>';
+      if(g3) return '<span class="k">'+m+'</span>';
+      return '<span class="n">'+m+'</span>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

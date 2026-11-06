@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 11 · 设计模式与代码品味：策略 / 模板方法 / 责任链 / 单例 / 代理三兄弟</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:28px; line-height:1.34; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:780px}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.7px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #bcdcf2}
+  .check li b{color:#075985}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Java 面试深水区 · 第 11 期</div>
+  <h1>设计模式与代码品味<span class="arrow">→</span>从 if-else 到可演进结构</h1>
+  <p class="sub">这一期不讲"23 种模式是什么"——那本《设计模式》你背得比我熟。这期只讲面试官真正在筛的东西：<b>你能不能看出变化点在哪、能不能用最小的结构把变化关起来、以及你能不能忍住不乱加一层</b>。所有模式都用同一把尺子量：<em>下一个需求来了，你要改几个文件？</em></p>
+  <div class="meta">
+    <div><strong>10</strong>层递进</div>
+    <div><strong>10</strong>张原理图</div>
+    <div><strong>20+</strong>段代码</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span class="on">L0 考点真身</span>
+  <span>L1 策略替 if-else</span>
+  <span>L2 模板方法</span>
+  <span>L3 责任链三层</span>
+  <span>L4 单例五种</span>
+  <span>L5 工厂与建造者</span>
+  <span>L6 结构型三兄弟</span>
+  <span>L7 事件与观察者</span>
+  <span>L8 项目话术</span>
+  <span>L9 速查表</span>
+  <span>L10 问答</span>
+  <span>L11 模拟题</span>
+</div>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>先搞清楚对方想听什么，别一上来背定义</em></div>
+  <h2>面试官问设计模式时，实际在考三层能力</h2>
+
+  <p>绝大多数人答这道题的方式是：<em>"设计模式有 23 种，分为创建型、结构型、行为型……"</em>然后面试官心里给你打了个"背过八股"的标签，接着问下一个问题。因为你答的是<b>目录</b>，不是<b>判断力</b>。</p>
+
+  <p>真实岗位上的模式能力，可以拆成三层，难度递增，面试官的话术也完全不同：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="设计模式面试三层考点">
+      <defs>
+        <marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+      <text x="450" y="26" font-size="14" font-weight="700" fill="#171a21" text-anchor="middle">同一道题，三层答法，三种评价</text>
+
+      <rect x="40" y="48" width="820" height="96" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <rect x="40" y="48" width="6" height="96" rx="3" fill="#6b7280"/>
+      <text x="66" y="76" font-size="13" font-weight="700" fill="#3b4252">第 1 层 · 会不会写（写法层）</text>
+      <text x="66" y="98" font-size="12" fill="#5d6675">面试官话术：「说说策略模式怎么实现」「单例有几种写法」</text>
+      <text x="66" y="120" font-size="12" fill="#5d6675">考点：语法正确性 —— 接口抽得对不对、DCL 有没有 volatile、枚举单例知不知道</text>
+      <text x="800" y="90" font-size="11.5" fill="#6b7280" text-anchor="end">及格线</text>
+      <text x="800" y="110" font-size="11" fill="#9aa2b1" text-anchor="end">背书就能过</text>
+
+      <line x1="450" y1="146" x2="450" y2="166" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a1)"/>
+
+      <rect x="40" y="172" width="820" height="96" rx="10" fill="#f4f9fd" stroke="#cfe3f2"/>
+      <rect x="40" y="172" width="6" height="96" rx="3" fill="#0369a1"/>
+      <text x="66" y="200" font-size="13" font-weight="700" fill="#075985">第 2 层 · 会不会选（取舍层）</text>
+      <text x="66" y="222" font-size="12" fill="#5d6675">面试官话术：「你这段为什么用责任链不用 if-else」「策略和状态怎么选」</text>
+      <text x="66" y="244" font-size="12" fill="#5d6675">考点：能不能说出代价 —— 多一个类、多一次跳转、多一个排查难点，值不值</text>
+      <text x="800" y="214" font-size="11.5" fill="#0369a1" text-anchor="end">分水岭</text>
+      <text x="800" y="234" font-size="11" fill="#9aa2b1" text-anchor="end">一半人死在这</text>
+
+      <line x1="450" y1="270" x2="450" y2="290" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a1)"/>
+
+      <rect x="40" y="296" width="820" height="84" rx="10" fill="#fff6f8" stroke="#f5ccd4"/>
+      <rect x="40" y="296" width="6" height="84" rx="3" fill="#be123c"/>
+      <text x="66" y="324" font-size="13" font-weight="700" fill="#9f1239">第 3 层 · 敢不敢删（克制层）</text>
+      <text x="66" y="346" font-size="12" fill="#5d6675">面试官话术：「你觉得你们项目里哪些设计是过度设计」「这段能不能删」</text>
+      <text x="66" y="368" font-size="12" fill="#5d6675">考点：品味 —— 知道什么时候<tspan font-weight="700" fill="#9f1239">不该</tspan>加模式，比知道什么时候该加更难</text>
+      <text x="800" y="338" font-size="11.5" fill="#be123c" text-anchor="end">加分项</text>
+    </svg>
+    <figcaption><b>图 1</b>　同一道题的三层答法。第 1 层决定你不被淘汰，第 2、3 层决定你被分到哪个职级。</figcaption>
+  </figure>
+
+  <h3>23 种模式的分布：真正高频的只有 8 个</h3>
+  <p>GoF 的 23 种里，日常业务代码真正用得上、面试也真会追问的，就下面这些。剩下的（解释器、备忘录、访问者、中介者）属于"知道名字就行"，除非你去的是中间件/编译器团队。</p>
+
+  <table>
+    <tr><th style="width:110px">分类</th><th style="width:220px">模式</th><th>业务里的真实身影</th><th style="width:70px">面试频次</th></tr>
+    <tr><td rowspan="3">创建型<br><span style="color:#9aa2b1;font-size:12px">5 种</span></td>
+        <td><b>单例</b> Singleton</td><td>Spring 单例 Bean、连接池、配置中心客户端</td><td>★★★★★</td></tr>
+    <tr><td><b>工厂方法</b> / 简单工厂</td><td>支付渠道创建、MQ Producer 创建、按配置选实现</td><td>★★★★</td></tr>
+    <tr><td><b>建造者</b> Builder</td><td>请求参数组装、ES Query 构造、Lombok @Builder</td><td>★★★</td></tr>
+    <tr><td rowspan="3">结构型<br><span style="color:#9aa2b1;font-size:12px">7 种</span></td>
+        <td><b>代理</b> Proxy</td><td>Spring AOP、MyBatis Mapper、RPC 桩、事务</td><td>★★★★★</td></tr>
+    <tr><td><b>装饰器</b> Decorator</td><td>Java IO 流、HttpServletRequestWrapper</td><td>★★★</td></tr>
+    <tr><td><b>适配器</b> Adapter</td><td>slf4j 绑定、老接口兼容层、第三方 SDK 封装</td><td>★★</td></tr>
+    <tr><td rowspan="3">行为型<br><span style="color:#9aa2b1;font-size:12px">11 种</span></td>
+        <td><b>策略</b> Strategy</td><td>计费规则、路由选择、风控规则、导出格式</td><td>★★★★★</td></tr>
+    <tr><td><b>模板方法</b> Template</td><td>JdbcTemplate、refresh()、各种 AbstractXxx</td><td>★★★★</td></tr>
+    <tr><td><b>责任链 / 观察者</b></td><td>Filter 链、审批流、Spring 事件、MQ 消费</td><td>★★★★</td></tr>
+  </table>
+
+  <div class="oneline">
+    <b>一句话总纲</b>
+    设计模式不是"怎么写代码"，是"<b>把哪一块变化从主流程里挖出来，单独关起来</b>"。所以判断该不该用模式，只需要问三个问题：<br>
+    ① 变的是什么？（变的是规则？是流程？是创建方式？）<br>
+    ② 不变的是什么？（骨架、协议、调用入口）<br>
+    ③ 下一个需求来了，我要改 <b>1 个文件</b>还是 <b>N 个文件</b>？—— 答不上第 ③ 问，就别加模式。
+  </div>
+
+  <h3>反模式信号：什么时候模式变成了负债</h3>
+  <p>面试里敢主动说"我们这里其实是过度设计了"，比硬吹"我们用了 12 种模式"高级得多。下面这些信号出现任意两条，就说明抽象过头了：</p>
+  <ul>
+    <li><b>抽象类只有一个实现类</b>，且这个实现类从没被替换过 —— 这是"预防性抽象"，不是设计。</li>
+    <li><b>为了加一个字段，改了 6 个文件</b>：接口、实现、工厂、DTO、Converter、Enum。变化没被关起来，是被<b>摊开</b>了。</li>
+    <li><b>类名里出现 Abstract + Strategy + Factory + Manager 四个词</b>。这是著名的 <code class="inl">AbstractSingletonProxyFactoryBean</code> 笑话：Spring 内部真有这个类，但它存在的理由是框架要兼容一切，不是业务该学的榜样。</li>
+    <li><b>新人接手要画 3 张图才能读懂一次下单</b>。如果你的模式让主流程从 30 行变成 30 个类，那不是解耦，是<b>分散</b>。</li>
+  </ul>
+  <div class="warn">
+    <b>记住这个数字：</b>一个中等规模业务系统（20 万行代码），真正需要显式命名的模式实例通常不超过 <b>15 处</b>。如果你在简历上写"熟练运用 23 种设计模式"，面试官的第一反应不是"厉害"，而是"这人没在一线写过业务"。
+  </div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>策略模式：if-else 的四种死法与四种活法</em></div>
+  <h2>先算一道题：20 个分支是怎么长出来的</h2>
+
+  <p>假设你负责支付模块。需求方给了 5 个渠道（支付宝、微信、银联、余额、积分），每个渠道要做 4 个动作（下单、退款、查单、对账）。一周后渠道变成 6 个，动作变成 5 个。</p>
+
+  <p>用 if-else 硬写，代码量不是 <code class="inl">5 + 4</code>，是 <code class="inl">5 × 4 = 20</code> 个分支。渠道加到 6 个、动作加到 5 个，是 <code class="inl">30</code> 个分支。<b>每加一个渠道，要动 5 处；每加一个动作，要动 6 处。</b>这叫乘法级联，是 if-else 最致命的成本结构。</p>
+
+  <div class="trap">
+    <b>面试陷阱：</b>"if-else 有什么问题？" 如果你答"可读性差、不优雅"，面试官会觉得你在审美抱怨。正确答法是<b>用变更成本讲话</b>：N 个维度 × M 个取值的分支矩阵，每新增一个取值就要改 M 处，且没有任何编译期保护——漏改一处就是线上 bug。这才是工程判断。
+  </div>
+
+  <h3>四个演进阶段：从硬编码到自动注册</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="if-else 到策略模式的四阶段演进">
+      <defs>
+        <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#c7ccd8"/>
+        </marker>
+      </defs>
+      <text x="450" y="24" font-size="14" font-weight="700" fill="#171a21" text-anchor="middle">同一需求的四种写法：改动量从 5 处降到 1 处</text>
+
+      <rect x="24" y="44" width="196" height="150" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="122" y="68" font-size="12" font-weight="700" fill="#9f1239" text-anchor="middle">① 硬编码 if-else</text>
+      <text x="40" y="92" font-size="11.5" fill="#5d6675">if (ali) {...}</text>
+      <text x="40" y="112" font-size="11.5" fill="#5d6675">else if (wx) {...}</text>
+      <text x="40" y="132" font-size="11.5" fill="#5d6675">else if (union) {...}</text>
+      <text x="40" y="152" font-size="11.5" fill="#5d6675">else if (balance) {...}</text>
+      <text x="122" y="178" font-size="11" fill="#be123c" text-anchor="middle">新增渠道 → 改 20 处分支区</text>
+
+      <line x1="226" y1="118" x2="238" y2="118" stroke="#c7ccd8" stroke-width="1.6" marker-end="url(#a2)"/>
+
+      <rect x="246" y="44" width="196" height="150" rx="10" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="344" y="68" font-size="12" font-weight="700" fill="#b45309" text-anchor="middle">② 策略接口 + 分支</text>
+      <text x="262" y="92" font-size="11.5" fill="#5d6675">PayStrategy s;</text>
+      <text x="262" y="112" font-size="11.5" fill="#5d6675">if (ali) s = new AliPay();</text>
+      <text x="262" y="132" font-size="11.5" fill="#5d6675">else s = new WxPay();</text>
+      <text x="344" y="160" font-size="11" fill="#b45309" text-anchor="middle">算法抽走了</text>
+      <text x="344" y="178" font-size="11" fill="#b45309" text-anchor="middle">但分支还在 → 改 1 处</text>
+
+      <line x1="448" y1="118" x2="460" y2="118" stroke="#c7ccd8" stroke-width="1.6" marker-end="url(#a2)"/>
+
+      <rect x="468" y="44" width="196" height="150" rx="10" fill="#f4f9fd" stroke="#cfe3f2"/>
+      <text x="566" y="68" font-size="12" font-weight="700" fill="#075985" text-anchor="middle">③ 表驱动 Map</text>
+      <text x="484" y="92" font-size="11.5" fill="#5d6675">Map&lt;String,Strategy&gt; m</text>
+      <text x="484" y="112" font-size="11.5" fill="#5d6675">map.put("ALI", new Ali());</text>
+      <text x="566" y="140" font-size="11" fill="#0369a1" text-anchor="middle">查表代替判断</text>
+      <text x="566" y="160" font-size="11" fill="#0369a1" text-anchor="middle">无分支、可单测</text>
+      <text x="566" y="180" font-size="11" fill="#0369a1" text-anchor="middle">但注册表仍要手维护</text>
+
+      <line x1="670" y1="118" x2="682" y2="118" stroke="#c7ccd8" stroke-width="1.6" marker-end="url(#a2)"/>
+
+      <rect x="690" y="44" width="186" height="150" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="783" y="68" font-size="12" font-weight="700" fill="#047857" text-anchor="middle">④ 注解自动注册</text>
+      <text x="706" y="92" font-size="11.5" fill="#5d6675">@PayChannel("ALI")</text>
+      <text x="706" y="112" font-size="11.5" fill="#5d6675">class AliPay ...</text>
+      <text x="783" y="140" font-size="11" fill="#047857" text-anchor="middle">Spring 注入 List</text>
+      <text x="783" y="160" font-size="11" fill="#047857" text-anchor="middle">自己建注册表</text>
+      <text x="783" y="180" font-size="11" fill="#047857" text-anchor="middle">新增渠道 = 加 1 个类</text>
+
+      <rect x="24" y="216" width="852" height="72" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="242" font-size="12.5" font-weight="700" fill="#3b4252">四阶段的核心差异不是"优雅"，是「变更爆炸半径」</text>
+      <text x="42" y="264" font-size="12" fill="#5d6675">① 改 M 处（且分布在长方法里，漏改无编译报错）　② 改 1 处（但 if 链会重新长回来）　③ 改 1 处（注册表 + 实现类）</text>
+      <text x="42" y="280" font-size="12" fill="#5d6675">④ 改 0 处已有代码，只新增 1 个类 —— 这才是 OCP（对扩展开放、对修改关闭）的真实含义</text>
+
+      <text x="450" y="322" font-size="12" fill="#5d6675" text-anchor="middle">代价：从 ① 到 ④，类数量 1 → 1+N，调用链深度 0 → 3 层（Controller → 路由 → 策略实现）</text>
+      <text x="450" y="344" font-size="12" fill="#be123c" text-anchor="middle">所以 3 个以内且不再增长的分支，老老实实写 if-else 才是对的</text>
+      <text x="450" y="372" font-size="11.5" fill="#9aa2b1" text-anchor="middle">判据不是"有几行"，而是"这个维度还会不会长"</text>
+    </svg>
+    <figcaption><b>图 2</b>　四阶段演进的真实收益在「变更爆炸半径」，不在代码美观。第 ④ 阶段的关键是<b>新增渠道时零改动已有代码</b>。</figcaption>
+  </figure>
+
+  <h3>写法 ③：表驱动（最小可用版）</h3>
+  <pre>public interface PayStrategy {
+    PayResult pay(PayRequest req);
+    String channel();          // 让策略自报家门，注册时不用外部写死 key
+}
+
+// 注册中心：启动时扫一遍所有策略，建 Map。这才是"表驱动"的正解
+@Component
+public class PayStrategyRegistry {
+    private final Map&lt;String, PayStrategy&gt; map = new HashMap&lt;&gt;();
+
+    public PayStrategyRegistry(List&lt;PayStrategy&gt; strategies) {
+        for (PayStrategy s : strategies) {
+            PayStrategy old = map.put(s.channel(), s);
+            if (old != null) throw new IllegalStateException("渠道重复注册: " + s.channel());
+        }
+    }
+
+    public PayStrategy get(String channel) {
+        PayStrategy s = map.get(channel);
+        if (s == null) throw new BizException("不支持的支付渠道: " + channel);
+        return s;              // 不要 return null，让调用方 NPE 是最难查的 bug
+    }
+}</pre>
+
+  <h3>写法 ④：Spring 直接注入 Map，一行注册都不用写</h3>
+  <p>这是面试里最能体现"你真的用过 Spring"的细节：<b>Spring 支持按 Bean 名称注入 <code class="inl">Map&lt;String, T&gt;</code></b>，key 是 beanName，value 是 Bean 本身。所以你只要给每个策略起好 bean 名，连注册表都不用写。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spring Map 注入策略模式结构">
+      <defs>
+        <marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+      <text x="450" y="24" font-size="14" font-weight="700" fill="#171a21" text-anchor="middle">Spring 容器启动时把同类型 Bean 自动收进 Map，key = beanName</text>
+
+      <rect x="40" y="46" width="200" height="102" rx="9" fill="#eef6fd" stroke="#9dc9e8"/>
+      <text x="140" y="70" font-size="12.5" font-weight="700" fill="#075985" text-anchor="middle">PayController</text>
+      <text x="140" y="92" font-size="11" fill="#5d6675" text-anchor="middle">注入 Map&lt;String,PayStrategy&gt;</text>
+      <text x="140" y="110" font-size="11" fill="#5d6675" text-anchor="middle">不注入具体实现</text>
+      <text x="140" y="132" font-size="10.5" fill="#0369a1" text-anchor="middle">依赖倒置：只认接口</text>
+
+      <line x1="244" y1="97" x2="300" y2="97" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#a3)"/>
+      <text x="272" y="88" font-size="10.5" fill="#9aa2b1" text-anchor="middle">get(ch)</text>
+
+      <rect x="304" y="52" width="196" height="90" rx="9" fill="#f8f9fc" stroke="#c7ccd8"/>
+      <text x="402" y="74" font-size="12" font-weight="700" fill="#3b4252" text-anchor="middle">Map（容器构建）</text>
+      <text x="402" y="96" font-size="11" fill="#5d6675" text-anchor="middle">"aliPay" → AliPayStrategy</text>
+      <text x="402" y="114" font-size="11" fill="#5d6675" text-anchor="middle">"wxPay" → WxPayStrategy</text>
+      <text x="402" y="132" font-size="11" fill="#5d6675" text-anchor="middle">"balance" → BalanceStrategy</text>
+
+      <line x1="504" y1="80" x2="556" y2="66" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a3)"/>
+      <line x1="504" y1="97" x2="556" y2="97" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a3)"/>
+      <line x1="504" y1="114" x2="556" y2="128" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a3)"/>
+
+      <rect x="560" y="44" width="300" height="44" rx="8" fill="#fff" stroke="#cfe3f2"/>
+      <text x="576" y="64" font-size="11.5" font-weight="700" fill="#075985">@Service("aliPay")</text>
+      <text x="576" y="80" font-size="10.5" fill="#5d6675">implements PayStrategy</text>
+
+      <rect x="560" y="94" width="300" height="44" rx="8" fill="#fff" stroke="#cfe3f2"/>
+      <text x="576" y="114" font-size="11.5" font-weight="700" fill="#075985">@Service("wxPay")</text>
+      <text x="576" y="130" font-size="10.5" fill="#5d6675">implements PayStrategy</text>
+
+      <rect x="560" y="144" width="300" height="44" rx="8" fill="#fff" stroke="#cfe3f2"/>
+      <text x="576" y="164" font-size="11.5" font-weight="700" fill="#075985">@Service("balance")</text>
+      <text x="576" y="180" font-size="10.5" fill="#5d6675">implements PayStrategy</text>
+
+      <rect x="40" y="212" width="820" height="70" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="56" y="236" font-size="12" font-weight="700" fill="#3b4252">三个必须知道的细节</text>
+      <text x="56" y="256" font-size="11.5" fill="#5d6675">① key 是 <tspan font-weight="700" fill="#9f1239">beanName</tspan>（默认首字母小写的类名），不是枚举值 —— 想用 "ALI" 必须在 @Service 里显式写名字</text>
+      <text x="56" y="274" font-size="11.5" fill="#5d6675">② 加了 @Order 只影响 List 注入顺序，Map 注入不保证顺序 —— 需要优先级就用 List + 自己排序</text>
+
+      <rect x="40" y="294" width="820" height="62" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="56" y="318" font-size="12" font-weight="700" fill="#9f1239">③ 致命坑：策略类里 @Transactional / @Async 失效</text>
+      <text x="56" y="338" font-size="11.5" fill="#5d6675">如果你 <tspan font-family="ui-monospace,Consolas,monospace">new AliPayStrategy()</tspan> 手工创建，它不经过容器 → 没有代理 → 事务注解形同虚设。策略必须从容器拿。</text>
+    </svg>
+    <figcaption><b>图 3</b>　Spring 的 <code>Map&lt;String,T&gt;</code> 注入是策略模式的最省事落地方式；但要记住 key 是 beanName，且手工 new 出来的策略会丢掉 AOP 能力。</figcaption>
+  </figure>
+
+  <pre>@Service("aliPay")                       // ← beanName 即 Map 的 key
+public class AliPayStrategy implements PayStrategy {
+    @Override public String channel() { return "ALIPAY"; }
+    @Override public PayResult pay(PayRequest req) { /* ... */ }
+}
+
+@Service
+public class PayService {
+    private final Map&lt;String, PayStrategy&gt; strategies;   // key = beanName
+
+    public PayService(Map&lt;String, PayStrategy&gt; strategies) {
+        this.strategies = strategies;
+    }
+
+    public PayResult pay(String channel, PayRequest req) {
+        // 用 channel() 反查更稳：避免 beanName 与业务渠道码耦合
+        return strategies.values().stream()
+                .filter(s -&gt; s.channel().equals(channel))
+                .findFirst()
+                .orElseThrow(() -&gt; new BizException("不支持: " + channel))
+                .pay(req);
+    }
+}</pre>
+
+  <div class="good">
+    <b>加分回答：</b>上面为了讲清 Map 注入用了 <code class="inl">values().stream()</code> 线性查找。生产上应改成构造期建一次 <code class="inl">Map&lt;String, PayStrategy&gt; byChannel</code>（O(1)），否则每次支付都遍历一遍所有策略。面试时主动指出这个 O(n) → O(1) 的优化，比背模式定义有用得多。
+  </div>
+
+  <h3>策略 vs 状态：最容易混的一对</h3>
+  <table>
+    <tr><th style="width:120px">维度</th><th>策略 Strategy</th><th>状态 State</th></tr>
+    <tr><td>谁决定切换</td><td><b>外部</b>（调用方传 channel / 配置 / 用户选择）</td><td><b>内部</b>（对象自己根据当前状态决定下一状态）</td></tr>
+    <tr><td>策略之间关系</td><td>互不知情，平级并列</td><td>知道彼此的转移关系，形成状态机</td></tr>
+    <tr><td>典型场景</td><td>支付渠道、计费规则、导出格式</td><td>订单状态流转、审批流、TCP 连接状态</td></tr>
+    <tr><td>一句话记法</td><td>"我选一个算法来跑"</td><td>"我自己跑到下一步去了"</td></tr>
+  </table>
+  <p>两者代码骨架几乎一样（都是接口 + 多实现 + 上下文持有接口），<b>差别全在"谁来触发切换"</b>。面试时这样答，比背定义强十倍。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>模板方法与回调：控制权在谁手里</em></div>
+  <h2>好莱坞原则：别调用我们，我们会调用你</h2>
+
+  <p>模板方法最本质的一句话是<b>控制权反转</b>：父类掌握流程（什么时候做什么），子类只提供细节（具体怎么做）。所以父类的骨架方法必须是 <code class="inl">final</code>——这是整个模式的契约，一旦允许覆盖，模式就退化成"可选的建议"。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="模板方法父类骨架与子类钩子">
+      <text x="450" y="24" font-size="14" font-weight="700" fill="#171a21" text-anchor="middle">父类定死顺序，子类只填空 —— 顺序不可覆盖才是模式的核心</text>
+
+      <rect x="36" y="44" width="392" height="278" rx="10" fill="#f8f9fc" stroke="#c7ccd8"/>
+      <text x="232" y="70" font-size="12.5" font-weight="700" fill="#3b4252" text-anchor="middle">AbstractExporter（父类）</text>
+
+      <rect x="56" y="84" width="352" height="34" rx="7" fill="#eef6fd" stroke="#9dc9e8"/>
+      <text x="70" y="106" font-size="11.5" font-weight="700" fill="#075985">public final void export()</text>
+      <text x="392" y="106" font-size="10.5" fill="#0369a1" text-anchor="end">final 锁死顺序</text>
+
+      <text x="70" y="140" font-size="11.5" fill="#5d6675">1. validate();　　// 具体方法，可覆盖</text>
+      <text x="70" y="162" font-size="11.5" fill="#5d6675">2. open();　　　　// 抽象方法，必须实现</text>
+      <text x="70" y="184" font-size="11.5" fill="#5d6675">3. if (needHeader()) writeHeader();</text>
+      <text x="70" y="206" font-size="11.5" fill="#5d6675">4. doExport();　　// 抽象方法，必须实现</text>
+      <text x="70" y="228" font-size="11.5" fill="#5d6675">5. close();　　　// finally 里</text>
+
+      <rect x="56" y="242" width="352" height="30" rx="7" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="70" y="262" font-size="11" fill="#b45309">protected boolean needHeader() { return true; }　← 钩子</text>
+
+      <rect x="56" y="280" width="352" height="30" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="70" y="300" font-size="11" fill="#be123c">钩子默认实现为空 → 子类不关心就不用写</text>
+
+      <line x1="432" y1="182" x2="470" y2="182" stroke="#94a3b8" stroke-width="1.5"/>
+
+      <rect x="474" y="44" width="392" height="128" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="670" y="70" font-size="12.5" font-weight="700" fill="#047857" text-anchor="middle">CsvExporter（子类 A）</text>
+      <text x="492" y="96" font-size="11.5" fill="#5d6675">open()  → 建 BufferedWriter</text>
+      <text x="492" y="118" font-size="11.5" fill="#5d6675">doExport() → 逐行写 CSV</text>
+      <text x="492" y="140" font-size="11.5" fill="#5d6675">needHeader() → 不覆盖（用默认 true）</text>
+      <text x="492" y="162" font-size="10.5" fill="#047857">只写了 2 个方法，流程一行没碰</text>
+
+      <rect x="474" y="188" width="392" height="128" rx="10" fill="#f4f9fd" stroke="#cfe3f2"/>
+      <text x="670" y="214" font-size="12.5" font-weight="700" fill="#075985" text-anchor="middle">XlsxExporter（子类 B）</text>
+      <text x="492" y="240" font-size="11.5" fill="#5d6675">open()  → 建 Workbook</text>
+      <text x="492" y="262" font-size="11.5" fill="#5d6675">doExport() → 写 Sheet</text>
+      <text x="492" y="284" font-size="11.5" fill="#5d6675">needHeader() → 返回 false（不要表头）</text>
+      <text x="492" y="306" font-size="10.5" fill="#0369a1">同一个骨架，行为不同 —— 这就是复用的真身</text>
+
+      <text x="450" y="342" font-size="11.5" fill="#9aa2b1" text-anchor="middle">如果 export() 不是 final：子类重写它就能绕过校验和 close —— 骨架失效，模式变成装饰</text>
+    </svg>
+    <figcaption><b>图 4</b>　模板方法的三类方法：抽象方法（必须实现）、钩子方法（可选覆盖，给默认值）、具体方法（可覆盖但要谨慎）。<code>final</code> 是契约，不是风格。</figcaption>
+  </figure>
+
+  <h3>你在用的模板方法（自己却不知道）</h3>
+  <pre>// 1. JdbcTemplate：连接获取/释放/异常翻译全在骨架里，你只写 SQL 映射
+jdbcTemplate.query("select * from t_order where id = ?",
+    (rs, i) -&gt; new Order(rs.getLong("id"), rs.getString("no")),
+    1L);   // ← 第三个参数是 RowMapper，就是钩子
+
+// 2. Spring 的 refresh()：12 步流程写死，子类只能通过覆盖 onRefresh() 插手
+public void refresh() throws BeansException {
+    prepareRefresh();            // 可覆盖
+    ConfigurableListableBeanFactory bf = obtainFreshBeanFactory();
+    prepareBeanFactory(bf);
+    postProcessBeanFactory(bf);  // ← 典型钩子，空实现
+    invokeBeanFactoryPostProcessors(bf);
+    registerBeanPostProcessors(bf);
+    initMessageSource();
+    initApplicationEventMulticaster();
+    onRefresh();                 // ← 典型钩子，SpringBoot 用它启动内嵌 Tomcat
+    registerListeners();
+    finishBeanFactoryInitialization(bf);
+    finishRefresh();             // 可覆盖，发布 ContextRefreshedEvent
+}
+
+// 3. HttpServlet.service()：按 method 分发到 doGet/doPost，你只写 doGet
+protected void service(HttpServletRequest req, HttpServletResponse resp) {
+    String method = req.getMethod();
+    if ("GET".equals(method)) doGet(req, resp);
+    else if ("POST".equals(method)) doPost(req, resp);
+    // ...
+}</pre>
+
+  <div class="good">
+    <b>面试可直接引用的观察：</b>Spring 的 <code class="inl">refresh()</code> 之所以能同时支撑 XML 配置、注解配置、Spring Boot 三种形态，就是因为它把"顺序"锁在 <code class="inl">refresh()</code> 里，把"差异"放到 <code class="inl">onRefresh()</code>、<code class="inl">postProcessBeanFactory()</code> 这些钩子里。<b>你不需要读懂每一步，只需要知道哪几步是空的</b>——那才是留给扩展的口子。
+  </div>
+
+  <h3>模板方法 vs 策略：继承和组合的分水岭</h3>
+  <table>
+    <tr><th style="width:120px">维度</th><th>模板方法</th><th>策略</th></tr>
+    <tr><td>复用方式</td><td>继承（父类骨架 + 子类填空）</td><td>组合（上下文持有策略接口）</td></tr>
+    <tr><td>扩展粒度</td><td>部分步骤</td><td>整个算法</td></tr>
+    <tr><td>运行期可换</td><td><b>不能</b>（编译期定死）</td><td><b>能</b>（set 一下换算法）</td></tr>
+    <tr><td>致命限制</td><td>Java 单继承，占掉唯一的 extends 名额</td><td>类数量膨胀，调用链变深</td></tr>
+    <tr><td>选它的信号</td><td>流程固定、只有个别步骤不同</td><td>算法整体可替换、且要能动态切换</td></tr>
+  </table>
+
+  <div class="warn">
+    <b>一个常被追问的细节：</b>"模板方法里父类调用子类方法，会不会有风险？"——会，叫<b>构造器里调用可覆盖方法</b>。如果父类构造器里调了子类实现的方法，此时子类字段还没初始化（全是默认值 0/null），会拿到脏数据。这是《Effective Java》第 19 条明令禁止的写法，能答出来是明显加分项。
+  </div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>责任链：一条链上的三种变形，别混成一锅</em></div>
+  <h2>责任链的本质：把"判断"换成"传递"</h2>
+
+  <p>一段校验代码长这样：<code class="inl">if (a) return err; if (b) return err; if (c) return err;</code>。责任链做的事，是把它拆成 <code class="inl">a → b → c</code> 三个对象，每个对象只回答两个问题：<b>我要不要处理？处理完是停下还是交给下一个？</b></p>
+
+  <p>这个"停下还是继续"的开关，分出了三种完全不同的形态——面试里 90% 的混乱都源于把它们当成一个东西。</p>
+
+  <table>
+    <tr><th style="width:110px">形态</th><th style="width:150px">典型实现</th><th>行为</th><th style="width:150px">真实场景</th></tr>
+    <tr><td><b>纯责任链</b></td><td>自己写 <code>next</code> 引用</td><td>找到能处理的那个就<b>停</b>，后面的完全不执行</td><td>审批流、异常处理链、客服工单升级</td></tr>
+    <tr><td><b>过滤链</b></td><td>Servlet Filter、Netty ChannelHandler</td><td>每个节点<b>都执行一遍</b>，任一节点可短路</td><td>鉴权、限流、日志、XSS 清洗</td></tr>
+    <tr><td><b>拦截器</b></td><td>Spring Interceptor、AOP Around</td><td>每个节点<b>前后都能插逻辑</b>（环绕）</td><td>耗时统计、事务、TraceId 透传</td></tr>
+  </table>
+
+  <h3>为什么 Spring MVC 要搞三层"链"？</h3>
+  <p>这是面试高频题，标准答法不是背定义，而是<b>说清每一层能拿到什么、拿不到什么</b>——能力边界决定了它必须存在。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Filter Interceptor AOP 三层洋葱与执行顺序">
+      <defs>
+        <marker id="a4r" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#0369a1"/>
+        </marker>
+      </defs>
+      <text x="450" y="24" font-size="14" font-weight="700" fill="#171a21" text-anchor="middle">请求像剥洋葱：Filter 在最外，AOP 贴着方法</text>
+
+      <rect x="130" y="42" width="640" height="212" rx="12" fill="#f8f9fc" stroke="#c7ccd8"/>
+      <text x="150" y="64" font-size="12" font-weight="700" fill="#3b4252">① Filter 链（Servlet 容器层）</text>
+      <text x="150" y="82" font-size="10.5" fill="#9aa2b1">看得到 HttpServletRequest / Response，看不到 Controller 方法</text>
+
+      <rect x="176" y="94" width="548" height="146" rx="10" fill="#f4f9fd" stroke="#9dc9e8"/>
+      <text x="196" y="116" font-size="12" font-weight="700" fill="#075985">② Interceptor（DispatcherServlet 内）</text>
+      <text x="196" y="134" font-size="10.5" fill="#9aa2b1">看得到 HandlerMethod（哪个 Controller 哪个方法），看不到方法参数值</text>
+
+      <rect x="222" y="146" width="456" height="78" rx="10" fill="#faf6ff" stroke="#d8c8f5"/>
+      <text x="242" y="168" font-size="12" font-weight="700" fill="#6d28d9">③ AOP（Bean 代理层）</text>
+      <text x="242" y="186" font-size="10.5" fill="#9aa2b1">看得到方法签名 + 实参 + 返回值 + 异常，但只管得到 Bean 方法</text>
+
+      <rect x="330" y="196" width="240" height="20" rx="6" fill="#fff" stroke="#d8c8f5"/>
+      <text x="450" y="210" font-size="11" font-weight="700" fill="#6d28d9" text-anchor="middle">Controller.method()  ← 最内核</text>
+
+      <text x="760" y="116" font-size="10.5" fill="#0369a1" text-anchor="end">改 body 要先包装</text>
+      <text x="760" y="134" font-size="10.5" fill="#0369a1" text-anchor="end">能拦静态资源</text>
+      <text x="760" y="172" font-size="10.5" fill="#7c3aed" text-anchor="end">拿得到参数值</text>
+      <text x="760" y="190" font-size="10.5" fill="#7c3aed" text-anchor="end">拿不到 request</text>
+
+      <text x="450" y="278" font-size="12.5" font-weight="700" fill="#3b4252" text-anchor="middle">一次请求的完整时序（含异常分支）</text>
+
+      <line x1="60" y1="330" x2="840" y2="330" stroke="#c7ccd8" stroke-width="1.2" stroke-dasharray="4 4"/>
+      <text x="60" y="322" font-size="10.5" fill="#9aa2b1">时间 →</text>
+
+      <circle cx="90" cy="330" r="5" fill="#0369a1"/>
+      <text x="90" y="352" font-size="11" fill="#075985" text-anchor="middle">Filter#1</text>
+      <text x="90" y="368" font-size="10" fill="#9aa2b1" text-anchor="middle">doFilter 前</text>
+
+      <circle cx="210" cy="330" r="5" fill="#0369a1"/>
+      <text x="210" y="352" font-size="11" fill="#075985" text-anchor="middle">Filter#2</text>
+
+      <circle cx="330" cy="330" r="5" fill="#7c3aed"/>
+      <text x="330" y="352" font-size="11" fill="#6d28d9" text-anchor="middle">preHandle</text>
+      <text x="330" y="368" font-size="10" fill="#9aa2b1" text-anchor="middle">返回 false 即中断</text>
+
+      <circle cx="450" cy="330" r="6" fill="#be123c"/>
+      <text x="450" y="352" font-size="11" font-weight="700" fill="#9f1239" text-anchor="middle">Controller</text>
+      <text x="450" y="368" font-size="10" fill="#9aa2b1" text-anchor="middle">AOP 环绕在此</text>
+
+      <circle cx="570" cy="330" r="5" fill="#7c3aed"/>
+      <text x="570" y="352" font-size="11" fill="#6d28d9" text-anchor="middle">postHandle</text>
+      <text x="570" y="368" font-size="10" fill="#be123c" text-anchor="middle">异常时不执行</text>
+
+      <circle cx="690" cy="330" r="5" fill="#0369a1"/>
+      <text x="690" y="352" font-size="11" fill="#075985" text-anchor="middle">afterCompletion</text>
+      <text x="690" y="368" font-size="10" fill="#047857" text-anchor="middle">一定执行（可清 ThreadLocal）</text>
+
+      <circle cx="810" cy="330" r="5" fill="#0369a1"/>
+      <text x="810" y="352" font-size="11" fill="#075985" text-anchor="middle">Filter#2 回程</text>
+
+      <line x1="90" y1="330" x2="810" y2="330" stroke="#0369a1" stroke-width="2" marker-end="url(#a4r)"/>
+
+      <rect x="60" y="392" width="780" height="64" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="76" y="414" font-size="12" font-weight="700" fill="#9f1239">两个必踩的坑</text>
+      <text x="76" y="434" font-size="11.5" fill="#5d6675">① Filter 里 <tspan font-family="ui-monospace,Consolas,monospace">request.getInputStream()</tspan> 读一次就空了 → Controller 拿不到 body，必须用 ContentCachingRequestWrapper</text>
+      <text x="76" y="452" font-size="11.5" fill="#5d6675">② postHandle 在抛异常时被跳过 → 清理逻辑（如 MDC.remove）必须放 afterCompletion 或 finally</text>
+    </svg>
+    <figcaption><b>图 5</b>　三层拦截的本质是「能拿到什么上下文」不同：Filter 只有 HTTP 报文，Interceptor 有 HandlerMethod，AOP 有方法实参。选错层就会写出拿不到数据的代码。</figcaption>
+  </figure>
+
+  <h3>手写一条责任链（30 行，能讲清所有细节）</h3>
+  <pre>public abstract class Validator {
+    private Validator next;                       // 单链表，不是 List
+
+    public Validator linkWith(Validator next) {   // 返回 next 便于链式拼装
+        this.next = next;
+        return next;
+    }
+
+    public abstract String validate(OrderContext ctx);   // 返回 null 表示通过
+
+    protected String checkNext(OrderContext ctx) {       // 模板方法：统一"递下去"
+        return next == null ? null : next.validate(ctx);
+    }
+}
+
+public class StockValidator extends Validator {
+    @Override public String validate(OrderContext ctx) {
+        if (ctx.getStock() &lt; ctx.getQty()) return "库存不足";
+        return checkNext(ctx);                    // 只有通过才往下走
+    }
+}
+
+public class PriceValidator extends Validator {
+    @Override public String validate(OrderContext ctx) {
+        if (ctx.getPrice().compareTo(BigDecimal.ZERO) &lt;= 0) return "价格非法";
+        return checkNext(ctx);
+    }
+}
+
+// 组装（通常放 @PostConstruct 或配置类里，只组装一次）
+Validator chain = new StockValidator();
+chain.linkWith(new PriceValidator())
+     .linkWith(new CouponValidator())
+     .linkWith(new RiskValidator());
+
+String err = chain.validate(ctx);   // 一条链跑完，短路返回</pre>
+
+  <div class="warn">
+    <b>注意这里用到了两个模式：</b>责任链（结构）+ 模板方法（<code class="inl">checkNext</code> 统一了"要不要继续"）。真实代码里模式很少单独出现，<b>能指出"这里是两个模式叠加"是加分项</b>，说明你不是在背目录。
+  </div>
+
+  <h3>责任链的三个工程坑</h3>
+  <ol>
+    <li><b>链太长导致排查困难。</b>10 个节点的链，出问题时你不知道是哪一环返回的。解法：每个节点返回结构化结果（<code class="inl">errCode + nodeName</code>），不要只返回一个字符串。</li>
+    <li><b>节点顺序敏感但没人记录。</b>鉴权必须在限流之前、限流必须在业务之前。解法：给每个节点加 <code class="inl">order()</code>，启动时打印一次完整链顺序到日志——这一行日志能省掉半夜两小时的排查。</li>
+    <li><b>节点内部有状态。</b>责任链节点被 Spring 做成单例，如果节点里有成员变量存"当前请求的上下文"，就是并发 bug。上下文必须<b>作为参数传递</b>，不能存字段。</li>
+  </ol>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>单例：五种写法的成本表与 DCL 的真相</em></div>
+  <h2>先看一张坐标图，再背写法</h2>
+
+  <p>面试问"单例有几种写法"，如果你从"饿汉"开始一个个背，是记忆型回答。如果你先画一张<b>安全性 × 复杂度</b>的坐标，再说明为什么枚举落在右上角，是理解型回答。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="六种单例写法的安全性复杂度坐标">
+      <defs>
+        <marker id="a5" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+      <text x="450" y="24" font-size="14" font-weight="700" fill="#171a21" text-anchor="middle">横轴：代码复杂度　纵轴：抗破坏能力（反射 / 反序列化 / 并发）</text>
+
+      <line x1="90" y1="350" x2="820" y2="350" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a5)"/>
+      <line x1="90" y1="350" x2="90" y2="60" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a5)"/>
+      <text x="820" y="372" font-size="11.5" fill="#5d6675" text-anchor="end">实现复杂度 →</text>
+      <text x="78" y="60" font-size="11.5" fill="#5d6675" text-anchor="end">安全性 ↑</text>
+
+      <line x1="90" y1="205" x2="820" y2="205" stroke="#e3e7ef" stroke-width="1" stroke-dasharray="4 4"/>
+      <text x="100" y="200" font-size="10.5" fill="#9aa2b1">可用线</text>
+
+      <circle cx="170" cy="300" r="7" fill="#be123c"/>
+      <text x="170" y="282" font-size="11.5" font-weight="700" fill="#9f1239" text-anchor="middle">① 懒汉（无锁）</text>
+      <text x="170" y="322" font-size="10.5" fill="#9aa2b1" text-anchor="middle">并发下会产生多个实例</text>
+
+      <circle cx="270" cy="160" r="7" fill="#b45309"/>
+      <text x="270" y="142" font-size="11.5" font-weight="700" fill="#b45309" text-anchor="middle">② 同步方法</text>
+      <text x="270" y="182" font-size="10.5" fill="#9aa2b1" text-anchor="middle">线程安全但每次加锁</text>
+
+      <circle cx="380" cy="120" r="7" fill="#b45309"/>
+      <text x="380" y="102" font-size="11.5" font-weight="700" fill="#b45309" text-anchor="middle">③ DCL + volatile</text>
+      <text x="380" y="142" font-size="10.5" fill="#9aa2b1" text-anchor="middle">漏 volatile 就半初始化</text>
+
+      <circle cx="500" cy="96" r="7" fill="#0369a1"/>
+      <text x="500" y="78" font-size="11.5" font-weight="700" fill="#075985" text-anchor="middle">④ 静态内部类</text>
+      <text x="500" y="118" font-size="10.5" fill="#9aa2b1" text-anchor="middle">懒加载 + 无锁，推荐</text>
+
+      <circle cx="660" cy="84" r="7" fill="#047857"/>
+      <text x="660" y="66" font-size="11.5" font-weight="700" fill="#047857" text-anchor="middle">⑤ 枚举</text>
+      <text x="660" y="106" font-size="10.5" fill="#9aa2b1" text-anchor="middle">天然防反射/反序列化</text>
+
+      <circle cx="790" cy="150" r="7" fill="#6b7280"/>
+      <text x="790" y="132" font-size="11.5" font-weight="700" fill="#3b4252" text-anchor="middle">⑥ 容器托管</text>
+      <text x="790" y="172" font-size="10.5" fill="#9aa2b1" text-anchor="middle">@Component 默认单例</text>
+
+      <rect x="90" y="378" width="730" height="30" rx="7" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="106" y="398" font-size="11.5" fill="#5d6675">结论：业务代码首选 <tspan font-weight="700" fill="#075985">④ 静态内部类</tspan>（可读、懒加载、无锁）；对防破坏有要求选 <tspan font-weight="700" fill="#047857">⑤ 枚举</tspan>（《Effective Java》推荐）</text>
+    </svg>
+    <figcaption><b>图 6</b>　六种写法的真实定位。注意 ⑥ 不是 GoF 单例——Spring 的"单例"只是「容器里只有一个实例」，构造器仍是 public，谁都能 new。</figcaption>
+  </figure>
+
+  <h3>DCL 为什么必须加 volatile？画出那三步就懂了</h3>
+  <p><code class="inl">instance = new Singleton()</code> 在字节码层面是三步，不是一步。JIT 和 CPU 可能把第 2 步和第 3 步重排——因为在单线程视角里，先给引用赋值再执行构造器，结果看不出区别。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DCL 指令重排导致的半初始化对象">
+      <text x="450" y="24" font-size="14" font-weight="700" fill="#171a21" text-anchor="middle">new 的三步：① 分配内存　② 调用构造器　③ 引用赋值</text>
+
+      <rect x="40" y="44" width="390" height="30" rx="7" fill="#eef6fd" stroke="#9dc9e8"/>
+      <text x="56" y="64" font-size="12" font-weight="700" fill="#075985">正常顺序（单线程看到的一定是这样）</text>
+
+      <rect x="40" y="86" width="110" height="34" rx="7" fill="#fff" stroke="#c7ccd8"/>
+      <text x="95" y="108" font-size="11.5" fill="#3b4252" text-anchor="middle">① 分配内存</text>
+      <rect x="180" y="86" width="110" height="34" rx="7" fill="#fff" stroke="#c7ccd8"/>
+      <text x="235" y="108" font-size="11.5" fill="#3b4252" text-anchor="middle">② 构造器</text>
+      <rect x="320" y="86" width="110" height="34" rx="7" fill="#fff" stroke="#c7ccd8"/>
+      <text x="375" y="108" font-size="11.5" fill="#3b4252" text-anchor="middle">③ 引用赋值</text>
+      <line x1="152" y1="103" x2="176" y2="103" stroke="#94a3b8" stroke-width="1.4"/>
+      <line x1="292" y1="103" x2="316" y2="103" stroke="#94a3b8" stroke-width="1.4"/>
+
+      <text x="40" y="146" font-size="11.5" fill="#5d6675">线程 A 执行完 ①②③，线程 B 才进来 → 没问题。</text>
+      <text x="40" y="166" font-size="11.5" fill="#5d6675">问题出在 ② 和 ③ 被重排，而线程 A 还没执行完 ②：</text>
+
+      <rect x="40" y="182" width="390" height="30" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="56" y="202" font-size="12" font-weight="700" fill="#9f1239">重排后（无 volatile，JMM 允许）</text>
+
+      <rect x="40" y="224" width="110" height="34" rx="7" fill="#fff" stroke="#c7ccd8"/>
+      <text x="95" y="246" font-size="11.5" fill="#3b4252" text-anchor="middle">① 分配内存</text>
+      <rect x="180" y="224" width="110" height="34" rx="7" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="235" y="246" font-size="11.5" fill="#b45309" text-anchor="middle">③ 引用先赋值</text>
+      <rect x="320" y="224" width="110" height="34" rx="7" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="375" y="246" font-size="11.5" fill="#047857" text-anchor="middle">② 构造器</text>
+      <line x1="152" y1="241" x2="176" y2="241" stroke="#94a3b8" stroke-width="1.4"/>
+      <line x1="292" y1="241" x2="316" y2="241" stroke="#94a3b8" stroke-width="1.4"/>
+
+      <rect x="40" y="276" width="390" height="100" rx="9" fill="#fff" stroke="#e3e7ef"/>
+      <text x="56" y="298" font-size="11.5" font-weight="700" fill="#9f1239">线程 B 在这条缝里进来：</text>
+      <text x="56" y="318" font-size="11.5" fill="#5d6675">检查 instance != null → 为 true（引用已非空）</text>
+      <text x="56" y="338" font-size="11.5" fill="#5d6675">直接 return instance</text>
+      <text x="56" y="358" font-size="11.5" font-weight="700" fill="#be123c">→ 拿到一个字段全是 null / 0 的对象</text>
+
+      <line x1="440" y1="200" x2="480" y2="200" stroke="#94a3b8" stroke-width="1.5"/>
+
+      <rect x="484" y="44" width="382" height="146" rx="9" fill="#f4f9fd" stroke="#cfe3f2"/>
+      <text x="500" y="68" font-size="12" font-weight="700" fill="#075985">volatile 在这里做两件事</text>
+      <text x="500" y="92" font-size="11.5" fill="#5d6675">① 写屏障：禁止 ② ③ 重排</text>
+      <text x="500" y="112" font-size="11.5" fill="#5d6675">② 可见性：A 写完立刻刷主存，B 能看见</text>
+      <text x="500" y="138" font-size="11.5" fill="#5d6675">底层靠 lock 前缀指令 + 内存屏障实现</text>
+      <text x="500" y="164" font-size="11.5" fill="#047857">代价：多一次主存访问，微乎其微</text>
+      <text x="500" y="182" font-size="10.5" fill="#9aa2b1">在单例初始化这种一次性路径上，性能代价可忽略</text>
+
+      <rect x="484" y="204" width="382" height="172" rx="9" fill="#faf6ff" stroke="#d8c8f5"/>
+      <text x="500" y="228" font-size="12" font-weight="700" fill="#6d28d9">那为什么还推荐静态内部类？</text>
+      <text x="500" y="252" font-size="11.5" fill="#5d6675">类加载机制自带同步（JVM 保证 &lt;clinit&gt; 只执行一次），</text>
+      <text x="500" y="272" font-size="11.5" fill="#5d6675">天然线程安全 + 天然懒加载（内部类首次被引用才加载）。</text>
+      <text x="500" y="296" font-size="11.5" fill="#5d6675">不需要 volatile，不需要 DCL，也没有加锁开销。</text>
+      <text x="500" y="322" font-size="11.5" font-weight="700" fill="#047857">"用语言机制代替手写同步"——这才是最高级的写法</text>
+      <text x="500" y="348" font-size="10.5" fill="#9aa2b1">面试到这里停住，已经比 80% 的候选人深了</text>
+      <text x="500" y="368" font-size="10.5" fill="#be123c">唯一漏洞：反射 setAccessible 仍能破坏（枚举才彻底防住）</text>
+    </svg>
+    <figcaption><b>图 7</b>　DCL 的 bug 不是"锁没加对"，而是<b>对象引用可见 ≠ 对象状态可见</b>。<code>volatile</code> 修的是后半句。</figcaption>
+  </figure>
+
+  <h3>三段必须能默写的代码</h3>
+  <pre>// ① 静态内部类（业务首选）
+public class ConfigHolder {
+    private ConfigHolder() {
+        if (Holder.INSTANCE != null) throw new IllegalStateException("禁止反射创建");  // 防反射兜底
+    }
+    private static class Holder {
+        private static final ConfigHolder INSTANCE = new ConfigHolder();
+    }
+    public static ConfigHolder getInstance() { return Holder.INSTANCE; }
+}
+
+// ② 枚举（防反射 + 防反序列化，最安全）
+public enum Singleton {
+    INSTANCE;
+    private final Map&lt;String, String&gt; cache = new ConcurrentHashMap&lt;&gt;();
+    public String get(String k) { return cache.get(k); }
+}
+// 为什么防得住？
+//  - 反射：Constructor.newInstance 里判断 "if ((clazz.getModifiers() &amp; ENUM) != 0) throw ..."
+//  - 反序列化：readObject 对枚举类型走 valueOf 分支，不调构造器
+//  - 克隆：Enum 的 clone() 直接 throw CloneNotSupportedException
+
+// ③ DCL（要能讲清每个关键字的作用）
+public class LazySingleton {
+    private static volatile LazySingleton instance;     // 少了 volatile 就是 bug
+    private LazySingleton() {}
+    public static LazySingleton getInstance() {
+        if (instance == null) {                          // 第一次检查：避免每次都进锁
+            synchronized (LazySingleton.class) {
+                if (instance == null) {                  // 第二次检查：防重复创建
+                    instance = new LazySingleton();
+                }
+            }
+        }
+        return instance;
+    }
+}</pre>
+
+  <div class="trap">
+    <b>面试官最爱追的一刀：</b>"DCL 里第一个 <code class="inl">if</code> 去掉行不行？" —— 行，但每次调用都要抢锁，在热点路径上（比如每秒百万次的配置读取）会形成锁竞争。<b>第一个 if 是性能优化，第二个 if 是正确性保证</b>。能分清"哪个是为了对、哪个是为了快"，是这道题的分水岭。
+  </div>
+
+  <h3>Spring 的"单例"和 GoF 单例不是一回事</h3>
+  <table>
+    <tr><th style="width:130px">维度</th><th>GoF 单例</th><th>Spring singleton scope</th></tr>
+    <tr><td>保证什么</td><td>JVM 里只有<b>一个实例</b>（构造器私有）</td><td>容器里只有<b>一个 Bean 定义对应的实例</b>（构造器可 public）</td></tr>
+    <tr><td>能否 new</td><td>不能</td><td>能，你自己 new 出来的就是另一个对象</td></tr>
+    <tr><td>线程安全隐患</td><td>成员变量天然共享</td><td><b>同样共享</b>——这是 Spring 项目最常见的并发 bug 来源</td></tr>
+  </table>
+  <div class="trap">
+    <b>真实事故模板：</b>Service 里写了 <code class="inl">private List&lt;String&gt; tempList = new ArrayList&lt;&gt;();</code> 当方法内临时变量用。因为 Service 是单例，这个 list 被所有线程共享 → 用户 A 的请求数据出现在用户 B 的响应里。这类 bug 复现率极低、排查极难，正确做法是<b>所有临时变量都在方法内声明</b>，成员变量只能是 <code class="inl">final</code> 的、无状态的依赖。
+  </div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b1">L5</span><em>工厂三兄弟与建造者：什么时候不该 new</em></div>
+  <h2>先把"三个工厂"分清，再谈什么时候用</h2>
+
+  <table>
+    <tr><th style="width:130px">模式</th><th>解决的问题</th><th>结构</th><th style="width:190px">真实场景</th></tr>
+    <tr><td><b>简单工厂</b><br><span style="color:#9aa2b1;font-size:12px">不在 GoF 23 里</span></td>
+        <td>把 <code>new</code> 和分支收进一个方法</td>
+        <td>一个工厂类 + 一个 <code>create(type)</code> + if/switch</td>
+        <td>轻量工具类；缺点是加产品要改工厂，违反 OCP</td></tr>
+    <tr><td><b>工厂方法</b></td><td>加产品<b>不改</b>已有代码</td>
+        <td>抽象工厂 + 每产品一个具体工厂</td>
+        <td>MQ Producer（Kafka/RocketMQ）、不同协议的客户端创建</td></tr>
+    <tr><td><b>抽象工厂</b></td><td>创建<b>一族</b>相互配套的对象</td>
+        <td>一个工厂接口产多个产品（按钮 + 输入框）</td>
+        <td>多数据库方言（连 Connection + Command + DataAdapter）；跨云 SDK</td></tr>
+  </table>
+
+  <p>大多数业务代码里，<b>策略模式 + Map 注册</b> 就已经把简单工厂替代掉了（见 L1）。真正还需要"工厂"的场景只有两类：</p>
+  <ul>
+    <li><b>创建过程重</b>：需要连接、握手、加载配置、预热连接池。这时创建和使用必须分离，否则每个调用方都要重复一遍初始化。</li>
+    <li><b>创建结果要复用</b>：比如 IM 客户端按 appId 缓存，同一个 appId 只建一次。这时工厂其实是个"带缓存的对象池"。</li>
+  </ul>
+
+  <pre>// 工厂方法的真实价值：把"重创建 + 缓存 + 配置读取"从业务里挖出来
+public interface MqProducerFactory {
+    MqProducer create(MqConfig cfg);
+    String type();
+}
+
+@Component
+public class KafkaProducerFactory implements MqProducerFactory {
+    private final Map&lt;String, KafkaProducer&lt;String, String&gt;&gt; cache = new ConcurrentHashMap&lt;&gt;();
+
+    @Override public String type() { return "KAFKA"; }
+
+    @Override public MqProducer create(MqConfig cfg) {
+        // computeIfAbsent 保证同一 bootstrapServers 只建一次（注意：内部可能有阻塞 IO，
+        // 高并发下应改为 double-check + 显式锁，或用 LoadingCache）
+        return cache.computeIfAbsent(cfg.getServers(), k -&gt; build(cfg));
+    }
+
+    private KafkaProducer&lt;String, String&gt; build(MqConfig cfg) {
+        Properties p = new Properties();
+        p.put("bootstrap.servers", cfg.getServers());
+        p.put("acks", "all");                    // 不要用默认值，默认是 1
+        p.put("enable.idempotence", "true");     // 幂等生产者，防重
+        p.put("max.in.flight.requests.per.connection", "5");
+        return new KafkaProducer&lt;&gt;(p);
+    }
+}</pre>
+
+  <div class="warn">
+    <b>一个真实的坑：</b><code class="inl">computeIfAbsent</code> 里如果做了阻塞操作（建连接、调远程），会把整个 ConcurrentHashMap 的桶锁住，其他 key 的读写也被拖慢。生产上应该用"先 get，miss 后加锁重建"的双检模式，或者直接用 Caffeine 的 <code class="inl">LoadingCache</code>。这一段在面试里主动说出来，说明你真的处理过并发。
+  </div>
+
+  <h3>建造者：参数超过 4 个就该考虑</h3>
+  <p>判定标准不是"参数多"，而是<b>存在同类型参数的顺序风险</b>。比如 <code class="inl">new Order(String userId, String skuId, String couponId)</code>——三个都是 String，传错顺序编译器不报错，运行时才炸。建造者用命名方法把这个风险消灭掉。</p>
+
+  <pre>// 反面：三个 String 挨着，传错顺序编译器毫无意见
+new Order("U1001", "S2002", "C3003");
+new Order("S2002", "U1001", "C3003");   // 编译通过，运行时数据全错
+
+// 正面：命名即约束
+Order order = Order.builder()
+        .userId("U1001")
+        .skuId("S2002")
+        .couponId("C3003")
+        .build();      // build() 里统一做必填校验
+
+public Order build() {
+    Objects.requireNonNull(userId, "userId 必填");
+    Objects.requireNonNull(skuId, "skuId 必填");
+    if (qty &lt;= 0) throw new IllegalArgumentException("qty 必须 &gt; 0");
+    return new Order(this);       // 对外不可变
+}</pre>
+
+  <div class="trap">
+    <b>Lombok @Builder 的三个坑（能说出来就是老手）：</b><br>
+    ① <b>没有默认值</b>：<code class="inl">@Builder</code> 生成的 builder 字段不取类字段初始值，<code class="inl">int qty = 1;</code> 在 builder 里会是 0。必须加 <code class="inl">@Builder.Default</code>。<br>
+    ② <b>父类字段丢失</b>：子类加 <code class="inl">@Builder</code> 不会带上父类字段，必须手写全参构造 + <code class="inl">@SuperBuilder</code>。<br>
+    ③ <b>和 @NoArgsConstructor 冲突</b>：加了 <code class="inl">@Builder</code> 后全参构造被生成，无参构造消失，Jackson 反序列化直接失败 —— 必须同时加 <code class="inl">@NoArgsConstructor @AllArgsConstructor</code>。
+  </div>
+
+  <h3>原型：为什么它几乎只在"对象创建成本极高"时才有意义</h3>
+  <p>原型的本质是<b>用拷贝代替创建</b>。Java 里做这件事有两个坑：<code class="inl">Object.clone()</code> 是浅拷贝（引用类型字段共享同一个对象），深拷贝要么手写递归、要么序列化。序列化方案简单但慢 10~100 倍，且 <code class="inl">transient</code> 字段会丢。</p>
+  <pre>// 浅拷贝的经典事故：改副本，原件也变了
+Order copy = origin.clone();
+copy.getItems().add(newItem);      // items 是同一个 List → origin 也被改了
+
+// 深拷贝（序列化法，简单但慢，且 transient 字段丢失）
+public Order deepCopy(Order o) {
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    new ObjectOutputStream(bos).writeObject(o);
+    return (Order) new ObjectInputStream(new ByteArrayInputStream(bos.toByteArray())).readObject();
+}
+// 更好的做法：显式拷贝构造器，字段变化时编译器会提醒你
+public Order(Order other) {
+    this.userId = other.userId;
+    this.items = new ArrayList&lt;&gt;(other.items);   // 显式深拷，一眼看清
+}</pre>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L6</span><em>结构型三兄弟：装饰器 / 代理 / 适配器</em></div>
+  <h2>三者代码长得几乎一样，用途完全不同</h2>
+
+  <p>这三个模式都是"包一层"，都持有被包装对象的引用，都实现或继承同一个目标。所以面试里极易混。区分的唯一办法是问一句：<b>包这一层，是为了加功能、控访问、还是转接口？</b></p>
+
+  <figure>
+    <svg viewBox="0 0 900 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="装饰器 代理 适配器 三者对比">
+      <text x="450" y="24" font-size="14" font-weight="700" fill="#171a21" text-anchor="middle">同一句「包一层」，三种动机，三种结构</text>
+
+      <rect x="24" y="44" width="272" height="256" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="160" y="68" font-size="12.5" font-weight="700" fill="#047857" text-anchor="middle">装饰器 Decorator</text>
+      <text x="160" y="88" font-size="11" fill="#5d6675" text-anchor="middle">动机：<tspan font-weight="700">加功能</tspan>，可叠加 N 层</text>
+
+      <rect x="60" y="102" width="200" height="30" rx="6" fill="#fff" stroke="#cceddc"/>
+      <text x="160" y="122" font-size="11" fill="#3b4252" text-anchor="middle">InputStream（同接口）</text>
+      <line x1="160" y1="132" x2="160" y2="146" stroke="#94a3b8" stroke-width="1.2"/>
+      <rect x="60" y="146" width="200" height="30" rx="6" fill="#fff" stroke="#cceddc"/>
+      <text x="160" y="166" font-size="11" fill="#3b4252" text-anchor="middle">BufferedInputStream</text>
+      <line x1="160" y1="176" x2="160" y2="190" stroke="#94a3b8" stroke-width="1.2"/>
+      <rect x="60" y="190" width="200" height="30" rx="6" fill="#fff" stroke="#cceddc"/>
+      <text x="160" y="210" font-size="11" fill="#3b4252" text-anchor="middle">GZIPInputStream</text>
+      <line x1="160" y1="220" x2="160" y2="234" stroke="#94a3b8" stroke-width="1.2"/>
+      <rect x="60" y="234" width="200" height="30" rx="6" fill="#eafaf1" stroke="#8fd7b4"/>
+      <text x="160" y="254" font-size="11" font-weight="700" fill="#047857" text-anchor="middle">FileInputStream（真身）</text>
+
+      <text x="160" y="284" font-size="10.5" fill="#047857" text-anchor="middle">每层都实现同一接口 → 可任意嵌套</text>
+
+      <rect x="310" y="44" width="272" height="256" rx="10" fill="#f4f9fd" stroke="#cfe3f2"/>
+      <text x="446" y="68" font-size="12.5" font-weight="700" fill="#075985" text-anchor="middle">代理 Proxy</text>
+      <text x="446" y="88" font-size="11" fill="#5d6675" text-anchor="middle">动机：<tspan font-weight="700">控访问</tspan>，通常只一层</text>
+
+      <rect x="346" y="102" width="200" height="30" rx="6" fill="#fff" stroke="#cfe3f2"/>
+      <text x="446" y="122" font-size="11" fill="#3b4252" text-anchor="middle">UserService（同接口）</text>
+      <line x1="446" y1="132" x2="446" y2="146" stroke="#94a3b8" stroke-width="1.2"/>
+      <rect x="346" y="146" width="200" height="52" rx="6" fill="#eef6fd" stroke="#9dc9e8"/>
+      <text x="446" y="166" font-size="11" font-weight="700" fill="#075985" text-anchor="middle">$Proxy（代理对象）</text>
+      <text x="446" y="186" font-size="10" fill="#5d6675" text-anchor="middle">事务 / 权限 / 日志 / 远程调用</text>
+      <line x1="446" y1="198" x2="446" y2="214" stroke="#94a3b8" stroke-width="1.2"/>
+      <rect x="346" y="214" width="200" height="36" rx="6" fill="#fff" stroke="#cfe3f2"/>
+      <text x="446" y="236" font-size="11" fill="#3b4252" text-anchor="middle">UserServiceImpl</text>
+
+      <text x="446" y="282" font-size="10.5" fill="#0369a1" text-anchor="middle">客户端无感知，以为在调真身</text>
+
+      <rect x="596" y="44" width="280" height="256" rx="10" fill="#faf6ff" stroke="#d8c8f5"/>
+      <text x="736" y="68" font-size="12.5" font-weight="700" fill="#6d28d9" text-anchor="middle">适配器 Adapter</text>
+      <text x="736" y="88" font-size="11" fill="#5d6675" text-anchor="middle">动机：<tspan font-weight="700">转接口</tspan>，两侧接口不同</text>
+
+      <rect x="622" y="104" width="228" height="34" rx="6" fill="#fff" stroke="#d8c8f5"/>
+      <text x="736" y="126" font-size="11" fill="#3b4252" text-anchor="middle">我方接口：PayService.pay()</text>
+      <line x1="736" y1="138" x2="736" y2="158" stroke="#94a3b8" stroke-width="1.2"/>
+      <rect x="622" y="158" width="228" height="46" rx="6" fill="#f3ecff" stroke="#c4a9f0"/>
+      <text x="736" y="178" font-size="11" font-weight="700" fill="#6d28d9" text-anchor="middle">AlipayAdapter</text>
+      <text x="736" y="196" font-size="10" fill="#5d6675" text-anchor="middle">参数转换 + 错误码翻译</text>
+      <line x1="736" y1="204" x2="736" y2="222" stroke="#94a3b8" stroke-width="1.2"/>
+      <rect x="622" y="222" width="228" height="34" rx="6" fill="#fff" stroke="#d8c8f5"/>
+      <text x="736" y="244" font-size="11" fill="#3b4252" text-anchor="middle">支付宝 SDK：trade.create()</text>
+
+      <text x="736" y="282" font-size="10.5" fill="#7c3aed" text-anchor="middle">接口不同 → 必须翻译，不能透明</text>
+
+      <rect x="24" y="320" width="852" height="100" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="344" font-size="12.5" font-weight="700" fill="#3b4252">一句话判别法（面试可直接背）</text>
+      <text x="42" y="368" font-size="12" fill="#5d6675"><tspan font-weight="700" fill="#047857">装饰器</tspan>：同接口 + 同接口 + 同接口，功能累加，客户端能自己拼（new A(new B(new C()))）</text>
+      <text x="42" y="390" font-size="12" fill="#5d6675"><tspan font-weight="700" fill="#075985">代理</tspan>：同接口，但客户端拿不到真身，代理是框架塞给你的 —— 你写 implementation，Spring 给你 proxy</text>
+      <text x="42" y="412" font-size="12" fill="#5d6675"><tspan font-weight="700" fill="#6d28d9">适配器</tspan>：两侧接口不同，适配器负责「翻译」，它的存在本身就是接口不兼容的证据</text>
+    </svg>
+    <figcaption><b>图 8</b>　三者代码结构相似度 90%，区分只看动机与"客户端是否知情"。判断口诀：<b>能叠加是装饰、拿不到真身是代理、两边不一样是适配</b>。</figcaption>
+  </figure>
+
+  <h3>装饰器：顺序会改变行为，这不是小事</h3>
+  <pre>// 两种写法，语义完全不同
+new BufferedInputStream(new GZIPInputStream(new FileInputStream(f)));   // 先解压再缓冲 ✅
+new GZIPInputStream(new BufferedInputStream(new FileInputStream(f)));   // 先缓冲再解压 ⚠️
+
+// 为什么第二种不好：GZIP 解压本身要按块读，中间加一层缓冲会让每次 read 都先穿过缓冲区，
+// 多一次内存拷贝；严重时（缓冲区太小 + 大文件）性能下降 20%~40%。
+
+// 装饰器的正确姿势：自己实现 HttpServletRequestWrapper 来读 body
+public class CachedBodyRequestWrapper extends HttpServletRequestWrapper {
+    private final byte[] body;
+    public CachedBodyRequestWrapper(HttpServletRequest req) throws IOException {
+        super(req);
+        this.body = StreamUtils.copyToByteArray(req.getInputStream());  // 只读一次，缓存下来
+    }
+    @Override public ServletInputStream getInputStream() {
+        ByteArrayInputStream bais = new ByteArrayInputStream(body);
+        return new ServletInputStream() {                                // 每次返回新的流
+            public int read() { return bais.read(); }
+            public boolean isFinished() { return bais.available() == 0; }
+            public boolean isReady() { return true; }
+            public void setReadListener(ReadListener l) {}
+        };
+    }
+}</pre>
+
+  <div class="good">
+    <b>为什么这段代码值钱：</b>它同时解释了"装饰器能透明替换"（继承 <code class="inl">HttpServletRequestWrapper</code> 后，后面所有代码都当普通 request 用）和"为什么要包装"（原始流只能读一次）。这是 L3 里 Filter 坑的<b>标准解法</b>，能把它和 Filter 串起来讲，说明知识是连着的。
+  </div>
+
+  <h3>代理：JDK 动态代理 vs CGLIB，选型看三个条件</h3>
+  <table>
+    <tr><th style="width:120px">维度</th><th>JDK 动态代理</th><th>CGLIB</th></tr>
+    <tr><td>前提</td><td>目标类<b>必须实现接口</b></td><td>目标类<b>不能是 final</b>，方法不能 final/private</td></tr>
+    <tr><td>实现方式</td><td>生成 <code>$Proxy0</code> 实现同一接口，内部持 InvocationHandler</td><td>生成子类，字节码级别覆写方法</td></tr>
+    <tr><td>创建速度</td><td>快（反射调用 Method）</td><td>慢（ASM 生成字节码），但调用快</td></tr>
+    <tr><td>调用速度</td><td>JDK 8+ 已优化，差距很小</td><td>直接 invoke，无反射开销</td></tr>
+    <tr><td>Spring Boot 默认</td><td colspan="2"><b>CGLIB</b>（<code>spring.aop.proxy-target-class=true</code> 是 2.x 起的默认值）</td></tr>
+  </table>
+  <div class="warn">
+    <b>为什么 Spring Boot 改成默认 CGLIB？</b>因为业务代码大量是"Controller/Service 类不实现接口"的写法。如果坚持 JDK 代理，这些类根本没法被代理，<code class="inl">@Transactional</code> 直接失效。改成 CGLIB 后，只要不是 final 类就能代理，心智负担更小——<b>这是框架向"人的写法"妥协，不是技术更优</b>。这个回答比"因为 CGLIB 快"高一个层次。
+  </div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b3">L7</span><em>观察者与发布订阅：同一条消息，两种耦合方向</em></div>
+  <h2>观察者 ≠ 发布订阅，差在"中间有没有人"</h2>
+
+  <p>这两个词在日常讨论里被混用，但在面试里能分清是加分项。区别就一句话：<b>观察者模式里，主题直接持有观察者列表（强耦合）；发布订阅里，双方只认识中间件（解耦）</b>。</p>
+
+  <table>
+    <tr><th style="width:120px">维度</th><th>观察者 Observer</th><th>发布订阅 Pub/Sub</th></tr>
+    <tr><td>耦合点</td><td>Subject 持有 <code>List&lt;Observer&gt;</code></td><td>Publisher / Subscriber 只认识 Broker</td></tr>
+    <tr><td>通信方式</td><td>方法调用（进程内、同步）</td><td>消息（可跨进程、可异步）</td></tr>
+    <tr><td>典型实现</td><td>Spring <code>ApplicationEvent</code>、<code>PropertyChangeListener</code></td><td>Kafka、RocketMQ、Redis Pub/Sub</td></tr>
+    <tr><td>失败影响</td><td>一个观察者抛异常，可能拖垮整个发布者</td><td>消费者挂了不影响生产者（消息堆积）</td></tr>
+  </table>
+
+  <h3>Spring 事件：最方便，也最容易踩事务坑</h3>
+  <p>Spring 的 <code class="inl">ApplicationEventPublisher</code> 默认是<b>同步调用</b>，而且——这是最关键的一点——<b>它在发布者当前的事务上下文里执行</b>。也就是说，事件发出去了、监听器也执行了，但发布者的事务后来回滚了。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Spring 事件同步与 AFTER_COMMIT 时序对比">
+      <defs>
+      </defs>
+      <text x="450" y="24" font-size="14" font-weight="700" fill="#171a21" text-anchor="middle">同一个业务，两种监听方式的后果差异</text>
+
+      <rect x="24" y="42" width="420" height="196" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="234" y="66" font-size="12.5" font-weight="700" fill="#9f1239" text-anchor="middle">❌ @EventListener（默认同步 + 同事务）</text>
+
+      <line x1="50" y1="90" x2="50" y2="220" stroke="#c7ccd8" stroke-width="1.2"/>
+      <text x="50" y="86" font-size="10" fill="#9aa2b1" text-anchor="middle">下单</text>
+
+      <rect x="60" y="96" width="130" height="26" rx="6" fill="#fff" stroke="#f5ccd4"/>
+      <text x="125" y="114" font-size="11" fill="#5d6675" text-anchor="middle">begin tx</text>
+
+      <rect x="60" y="130" width="130" height="26" rx="6" fill="#fff" stroke="#f5ccd4"/>
+      <text x="125" y="148" font-size="11" fill="#5d6675" text-anchor="middle">insert order</text>
+
+      <rect x="200" y="130" width="150" height="26" rx="6" fill="#ffe8ee" stroke="#e79bb0"/>
+      <text x="275" y="148" font-size="11" font-weight="700" fill="#9f1239" text-anchor="middle">publishEvent 同步执行</text>
+
+      <rect x="200" y="164" width="150" height="26" rx="6" fill="#ffe8ee" stroke="#e79bb0"/>
+      <text x="275" y="182" font-size="11" font-weight="700" fill="#9f1239" text-anchor="middle">发送短信 ✅ 已发出</text>
+
+      <rect x="60" y="164" width="130" height="26" rx="6" fill="#fff" stroke="#f5ccd4"/>
+      <text x="125" y="182" font-size="11" fill="#5d6675" text-anchor="middle">后续步骤抛异常</text>
+
+      <rect x="60" y="198" width="130" height="26" rx="6" fill="#ffe8ee" stroke="#e79bb0"/>
+      <text x="125" y="216" font-size="11" font-weight="700" fill="#9f1239" text-anchor="middle">rollback</text>
+
+      <text x="234" y="262" font-size="11.5" font-weight="700" fill="#be123c" text-anchor="middle">结果：订单不存在，用户收到「下单成功」短信</text>
+      <text x="234" y="282" font-size="11" fill="#5d6675" text-anchor="middle">监听器抛异常还会连带回滚主流程 → 更糟</text>
+      <text x="234" y="304" font-size="11" fill="#9aa2b1" text-anchor="middle">这是电商 / 支付系统最经典的数据不一致来源之一</text>
+
+      <rect x="456" y="42" width="420" height="196" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="666" y="66" font-size="12.5" font-weight="700" fill="#047857" text-anchor="middle">✅ @TransactionalEventListener(AFTER_COMMIT)</text>
+
+      <line x1="482" y1="90" x2="482" y2="220" stroke="#c7ccd8" stroke-width="1.2"/>
+      <text x="482" y="86" font-size="10" fill="#9aa2b1" text-anchor="middle">下单</text>
+
+      <rect x="492" y="96" width="130" height="26" rx="6" fill="#fff" stroke="#cceddc"/>
+      <text x="557" y="114" font-size="11" fill="#5d6675" text-anchor="middle">begin tx</text>
+
+      <rect x="492" y="130" width="130" height="26" rx="6" fill="#fff" stroke="#cceddc"/>
+      <text x="557" y="148" font-size="11" fill="#5d6675" text-anchor="middle">insert order</text>
+
+      <rect x="492" y="164" width="130" height="26" rx="6" fill="#fff" stroke="#cceddc"/>
+      <text x="557" y="182" font-size="11" fill="#5d6675" text-anchor="middle">commit ✅</text>
+
+      <rect x="636" y="164" width="164" height="26" rx="6" fill="#eafaf1" stroke="#8fd7b4"/>
+      <text x="718" y="182" font-size="11" font-weight="700" fill="#047857" text-anchor="middle">事件此刻才触发</text>
+
+      <rect x="636" y="130" width="164" height="26" rx="6" fill="#eafaf1" stroke="#8fd7b4"/>
+      <text x="718" y="148" font-size="11" font-weight="700" fill="#047857" text-anchor="middle">发短信 / 发 MQ</text>
+
+      <text x="666" y="262" font-size="11.5" font-weight="700" fill="#047857" text-anchor="middle">结果：只有数据真的落库了才通知</text>
+      <text x="666" y="282" font-size="11" fill="#5d6675" text-anchor="middle">回滚 → 事件根本不触发，无脏数据</text>
+      <text x="666" y="304" font-size="11" fill="#9aa2b1" text-anchor="middle">代价：commit 之后异常无法再回滚主事务</text>
+
+      <rect x="24" y="326" width="852" height="98" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="350" font-size="12.5" font-weight="700" fill="#3b4252">还有一个坑：@Async 让事件变异步后，事务注解反而失效</text>
+      <text x="42" y="372" font-size="12" fill="#5d6675">@Async 在新线程执行 → 新线程没有原事务上下文 → 监听器里写库是<tspan font-weight="700" fill="#9f1239">独立事务</tspan>，与主流程无关，也不会被回滚</text>
+      <text x="42" y="394" font-size="12" fill="#5d6675">另外 @Async 方法抛异常会被线程池吞掉（默认只打日志）→ 必须配 AsyncUncaughtExceptionHandler，否则事件"静默消失"</text>
+      <text x="42" y="414" font-size="12" fill="#be123c">所以：AFTER_COMMIT + @Async 组合最常用，但必须自己兜住异常 + 幂等，否则可靠性不如本地消息表</text>
+    </svg>
+    <figcaption><b>图 9</b>　<code>@EventListener</code> 的执行时机在事务<b>内部</b>，这是绝大多数"发了短信但订单不存在"事故的根因。<code>AFTER_COMMIT</code> 把时机挪到提交之后，代价是失去回滚能力。</figcaption>
+  </figure>
+
+  <pre>@Service
+public class OrderService {
+    private final ApplicationEventPublisher publisher;
+
+    @Transactional
+    public void createOrder(OrderCmd cmd) {
+        orderMapper.insert(cmd.toOrder());
+        // 只是"注册事件"，不是"执行监听器" —— 这句话能讲清就说明你真懂
+        publisher.publishEvent(new OrderCreatedEvent(cmd.getOrderNo()));
+        // 如果这里后续抛异常，事务回滚，AFTER_COMMIT 的监听器不会执行
+    }
+}
+
+@Component
+public class OrderNotifier {
+    // phase 默认是 AFTER_COMMIT，这里显式写出来
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Async("notifyExecutor")
+    public void onCreated(OrderCreatedEvent e) {
+        try {
+            smsClient.send(e.getOrderNo());       // 必须自己 try-catch，@Async 会吞异常
+        } catch (Exception ex) {
+            log.error("通知失败, orderNo={}", e.getOrderNo(), ex);
+            retryQueue.offer(e);                  // 兜底：进重试队列 / 本地消息表
+        }
+    }
+}</pre>
+
+  <div class="warn">
+    <b>面试可以这样收尾：</b>"Spring 事件适合<b>进程内、弱一致性、可容忍丢失</b>的通知场景（发短信、刷缓存、记审计日志）。如果这条消息关系到钱或库存，我会用<b>本地消息表 + MQ</b>，而不是 Spring 事件——因为事件是内存里的，进程一挂就没了。"这个回答把观察者模式、可靠性、分布式事务三块串起来了。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L8</span><em>「你项目里用过什么设计模式」怎么答才不像背书</em></div>
+  <h2>这道题考的是叙事能力，不是模式清单</h2>
+
+  <p>这道题几乎每场必问，但绝大多数人答成"我们用了工厂模式创建对象、用了单例模式管理配置"，然后就没了。面试官听完只会有一个印象：<b>你能识别模式，但没做过决策</b>。</p>
+
+  <p>好的回答有固定结构，五步，缺一不可：</p>
+
+  <ol>
+    <li><b>场景</b>：一句话说清业务是什么（支付 / 审批 / 报表导出）。</li>
+    <li><b>痛点 + 数字</b>：改动前是什么样，成本有多大。<span style="color:#be123c">必须有数字</span>。</li>
+    <li><b>方案</b>：用了什么结构，<b>以及为什么不用另一个</b>。</li>
+    <li><b>结果 + 数字</b>：改动量、耗时、缺陷率的变化。</li>
+    <li><b>反思（代价）</b>：这个方案带来了什么新问题。<span style="color:#be123c">这一段最能体现深度</span>。</li>
+  </ol>
+
+  <h3>四档回答对照（同一道题）</h3>
+  <table>
+    <tr><th style="width:90px">档位</th><th>回答</th><th style="width:170px">面试官判断</th></tr>
+    <tr><td style="color:#be123c"><b>不及格</b></td>
+        <td>"我们用过工厂模式、单例模式、观察者模式，Spring 里到处都是。"</td>
+        <td>只会背名字，没有决策经历</td></tr>
+    <tr><td style="color:#b45309"><b>及格</b></td>
+        <td>"支付模块有多个渠道，我们用策略模式把 if-else 拆成了多个实现类，加了新渠道只要加一个类。"</td>
+        <td>知道怎么用，但说不出代价</td></tr>
+    <tr><td style="color:#0369a1"><b>良好</b></td>
+        <td>"原来 pay() 里有 20 多个分支，5 个渠道 × 4 个动作。加一个渠道要改 5 处，去年漏改过一次导致对账差异 3 万。改成策略 + Spring Map 注入后，新增渠道只加一个类，改动量从 5 处降到 0 处。代价是类数量从 1 个变成 8 个，新人要花半天理解路由逻辑，所以我们在类上加了一行注释说明怎么注册。"</td>
+        <td>有数字、有取舍、有反思</td></tr>
+    <tr><td style="color:#047857"><b>优秀</b></td>
+        <td>在"良好"基础上补："后来发现策略类里有 3 个渠道的退款逻辑高度相似，我们没有再抽一层模板方法，而是把公共部分下沉到一个 <code>AbstractPayStrategy</code>，只保留真正不同的 3 个钩子。再后来有个渠道要求同步返回 + 异步对账，我们评估后决定<b>不</b>在这个模块里加复杂度，而是拆到独立的对账服务——因为支付主链路不能被对账的失败率拖累。"</td>
+        <td>知道什么时候<b>停手</b>，有边界意识</td></tr>
+  </table>
+
+  <div class="good">
+    <b>「优秀」那一段为什么值钱：</b>它包含了三个高级信号 —— ① 用模板方法消除重复（说明会做<b>二次抽象</b>）；② 主动判断"不该在这里加复杂度"（说明有<b>架构边界感</b>）；③ 用失败率/影响面做决策，而不是用"优雅"（说明是<b>工程思维</b>）。这三条，比背 23 个模式难得多。
+  </div>
+
+  <h3>三个可以现套的真实叙事（按你的项目改数字即可）</h3>
+
+  <p><b>叙事 A · 支付/渠道路由（策略 + 工厂）</b></p>
+  <p>痛点：<code class="inl">switch(channel)</code> 里有 5 个渠道 × 4 个动作 = 20 个分支，最长的方法 400 行，单测覆盖率 12%。方案：策略接口 + 注解注册，<code class="inl">@PayChannel("ALIPAY")</code> 自动进注册表。结果：新增渠道 0 改动已有代码，单测覆盖率提到 68%。代价：调试时断点要跳 3 层，我们在入口加了一行 <code class="inl">log.debug("route to {}", channel)</code> 缓解。</p>
+
+  <p><b>叙事 B · 审批流（责任链 + 状态机）</b></p>
+  <p>痛点：审批规则由 8 个 <code class="inl">if</code> 串成，产品每次改规则都要发版，平均 2 周一次。方案：责任链把"谁审、审不审"拆成节点，节点配置化（从 DB 读，热更新）。结果：规则调整从"改代码 + 发版 2 周"变成"改配置 10 分钟"。代价：链路长了以后排查困难 → 每个节点输出结构化日志 <code class="inl">{node, result, cost}</code>，一次请求的完整链路可回放。</p>
+
+  <p><b>叙事 C · 多数据源/多租户（抽象工厂 + 适配器）</b></p>
+  <p>痛点：同一套查询逻辑要跑 MySQL 和 ClickHouse，SQL 方言差异导致 <code class="inl">if (isClickHouse)</code> 散落 30 多处。方案：抽象工厂产出"方言族"（Dialect + Parser + TypeMapper），适配器把两边的 ResultSet 统一成同一结构。结果：方言差异收敛到 2 个类。代价：新增一种数据库要实现 3 个接口，前期成本比 if-else 高——<b>但如果只有一种数据库，这套东西就是纯负债</b>。</p>
+
+  <div class="trap">
+    <b>绝对不要说的话：</b>"我们项目用了 12 种设计模式。" —— 面试官下一句一定是"哪 12 种？分别解决什么问题？"然后你就开始背目录，且必然被追问到卡壳。<b>主动收缩到 2~3 个讲透，永远优于铺开 12 个讲浅。</b>
+  </div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b1">L9</span><em>速查：一张图决定"要不要加模式"</em></div>
+  <h2>决策图：先问变化，再问成本</h2>
+
+  <figure>
+    <svg viewBox="0 0 900 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="是否引入设计模式的决策流程">
+      <defs>
+        <marker id="a7" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+      <text x="450" y="24" font-size="14" font-weight="700" fill="#171a21" text-anchor="middle">四个问题问完，答案自然出现（任意一步"否"就停）</text>
+
+      <rect x="300" y="40" width="300" height="40" rx="20" fill="#eef6fd" stroke="#9dc9e8"/>
+      <text x="450" y="65" font-size="12.5" font-weight="700" fill="#075985" text-anchor="middle">这段逻辑会变吗？（未来 6 个月）</text>
+
+      <line x1="450" y1="80" x2="450" y2="100" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a7)"/>
+      <text x="462" y="95" font-size="10.5" fill="#047857">会</text>
+
+      <rect x="300" y="104" width="300" height="40" rx="20" fill="#eef6fd" stroke="#9dc9e8"/>
+      <text x="450" y="129" font-size="12.5" font-weight="700" fill="#075985" text-anchor="middle">变化是「多取值」还是「多步骤」？</text>
+
+      <line x1="330" y1="144" x2="190" y2="176" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a7)"/>
+      <line x1="570" y1="144" x2="700" y2="176" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a7)"/>
+      <text x="240" y="158" font-size="10.5" fill="#0369a1">多取值（换算法）</text>
+      <text x="600" y="158" font-size="10.5" fill="#b45309">多步骤（加环节）</text>
+
+      <rect x="60" y="180" width="260" height="48" rx="9" fill="#f4f9fd" stroke="#cfe3f2"/>
+      <text x="190" y="200" font-size="12" font-weight="700" fill="#075985" text-anchor="middle">→ 策略 / 简单工厂</text>
+      <text x="190" y="219" font-size="10.5" fill="#5d6675" text-anchor="middle">取值 ≥ 4 且会增长才值得</text>
+
+      <rect x="580" y="180" width="260" height="48" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="710" y="200" font-size="12" font-weight="700" fill="#b45309" text-anchor="middle">→ 责任链 / 模板方法</text>
+      <text x="710" y="219" font-size="10.5" fill="#5d6675" text-anchor="middle">环节 ≥ 4 或顺序会调整</text>
+
+      <line x1="190" y1="228" x2="190" y2="252" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a7)"/>
+      <line x1="710" y1="228" x2="710" y2="252" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a7)"/>
+
+      <rect x="60" y="256" width="260" height="40" rx="20" fill="#eef6fd" stroke="#9dc9e8"/>
+      <text x="190" y="281" font-size="12" font-weight="700" fill="#075985" text-anchor="middle">调用方需要动态切换吗？</text>
+
+      <rect x="580" y="256" width="260" height="40" rx="20" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="710" y="281" font-size="12" font-weight="700" fill="#b45309" text-anchor="middle">流程顺序固定、只差细节吗？</text>
+
+      <line x1="190" y1="296" x2="190" y2="320" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a7)"/>
+      <line x1="710" y1="296" x2="710" y2="320" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#a7)"/>
+
+      <rect x="60" y="324" width="260" height="56" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="190" y="346" font-size="12" font-weight="700" fill="#047857" text-anchor="middle">策略模式（组合，运行期可换）</text>
+      <text x="190" y="366" font-size="10.5" fill="#5d6675" text-anchor="middle">不能换 → 用简单工厂或直接 new</text>
+
+      <rect x="580" y="324" width="260" height="56" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="710" y="346" font-size="12" font-weight="700" fill="#047857" text-anchor="middle">模板方法（继承，final 锁顺序）</text>
+      <text x="710" y="366" font-size="10.5" fill="#5d6675" text-anchor="middle">顺序也不定 → 才用责任链</text>
+
+      <rect x="60" y="396" width="780" height="34" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="450" y="417" font-size="11.5" fill="#9f1239" text-anchor="middle">任一问题答"不确定" → 先别加模式，写下注释标记 TODO，等第二次需求来时再抽（Rule of Three）</text>
+    </svg>
+    <figcaption><b>图 10</b>　判据总结：<b>变化的维度决定模式类型，变化的频率决定要不要抽</b>。只出现一次的"变化"，抽象它就是在赌未来。</figcaption>
+  </figure>
+
+  <h3>12 条速查（面试前一晚只看这个）</h3>
+  <table>
+    <tr><th style="width:34px">#</th><th style="width:150px">知识点</th><th>一句话答案</th></tr>
+    <tr><td>1</td><td>模式的三层考点</td><td>会不会写 → 会不会选 → 敢不敢删；分水岭在第 2 层</td></tr>
+    <tr><td>2</td><td>该不该用模式</td><td>看「下一个需求来了改几个文件」，不是看代码好不好看</td></tr>
+    <tr><td>3</td><td>if-else 的真实成本</td><td>N 个维度 × M 个取值 = 分支矩阵，加一个取值改 M 处，无编译期保护</td></tr>
+    <tr><td>4</td><td>策略的 Spring 落地</td><td>注入 <code>Map&lt;String,T&gt;</code>，key 是 beanName；手工 new 会丢 AOP</td></tr>
+    <tr><td>5</td><td>策略 vs 状态</td><td>谁来触发切换：外部选是策略，内部流转是状态</td></tr>
+    <tr><td>6</td><td>模板方法的核心</td><td>骨架方法必须 final；父类构造器里绝不能调可覆盖方法</td></tr>
+    <tr><td>7</td><td>模板方法 vs 策略</td><td>继承 vs 组合；能否运行期切换是唯一硬判据</td></tr>
+    <tr><td>8</td><td>责任链三种形态</td><td>纯链（找到就停）/ 过滤链（都过一遍）/ 拦截器（前后都能插）</td></tr>
+    <tr><td>9</td><td>Filter 读 body</td><td>流只能读一次 → 必须 ContentCachingRequestWrapper</td></tr>
+    <tr><td>10</td><td>DCL 为什么 volatile</td><td>「引用可见 ≠ 状态可见」，禁止 ②③ 重排，防半初始化对象</td></tr>
+    <tr><td>11</td><td>枚举单例为什么安全</td><td>JVM 层面：反射 newInstance 抛异常、反序列化走 valueOf、clone 抛异常</td></tr>
+    <tr><td>12</td><td>Spring 事件最大的坑</td><td>默认同步 + 同事务 → 回滚了但短信已发；要用 AFTER_COMMIT</td></tr>
+  </table>
+
+  <h3>模式 ↔ 框架 对照（说得出这个，说明你真读过源码）</h3>
+  <table>
+    <tr><th style="width:150px">框架位置</th><th style="width:150px">用的模式</th><th>为什么</th></tr>
+    <tr><td><code>JdbcTemplate.query()</code></td><td>模板方法</td><td>连接/释放/异常翻译固定，只留 RowMapper 钩子</td></tr>
+    <tr><td><code>AbstractApplicationContext.refresh()</code></td><td>模板方法</td><td>12 步顺序锁死，<code>onRefresh()</code> 给 Boot 启动 Tomcat</td></tr>
+    <tr><td><code>BeanFactory</code> / <code>FactoryBean</code></td><td>工厂方法</td><td>创建逻辑复杂（依赖注入、代理、作用域）必须收口</td></tr>
+    <tr><td>Spring AOP / <code>@Transactional</code></td><td>代理</td><td>不改业务代码就插入事务边界</td></tr>
+    <tr><td><code>HttpServletRequestWrapper</code></td><td>装饰器</td><td>同接口增强，后续代码无感知</td></tr>
+    <tr><td><code>slf4j</code> + <code>logback-classic</code></td><td>适配器 + 门面</td><td>API 与实现解耦，换实现不改代码</td></tr>
+    <tr><td><code>ApplicationEventPublisher</code></td><td>观察者</td><td>业务解耦，但同步执行、进程内容易丢</td></tr>
+    <tr><td>Servlet <code>FilterChain</code></td><td>责任链</td><td>鉴权/限流/日志可插拔、可短路</td></tr>
+    <tr><td><code>BeanDefinition</code> 的 <code>Builder</code></td><td>建造者</td><td>属性多且有必填项，避免构造器参数爆炸</td></tr>
+  </table>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L10</span><em>14 条高频问答，按被问概率排序</em></div>
+  <h2>问答速刷</h2>
+
+  <div class="qa">
+    <div class="qq">设计模式到底解决什么问题？一句话。</div>
+    <p>把「会变的部分」从「不变的部分」里隔离出来，让变化只影响一个地方。所有 23 种模式都是这句话的不同切法。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">单例有几种写法？推荐哪个？</div>
+    <p>五种主流：饿汉、懒汉（不安全）、同步方法、DCL + volatile、静态内部类，加上枚举共六种。业务代码推荐<b>静态内部类</b>（懒加载 + 无锁 + 可读）；对防反射/防反序列化有要求选<b>枚举</b>。饿汉的问题不是"不懒加载"，而是<b>类加载时就初始化，初始化失败会让整个类不可用</b>（ExceptionInInitializerError）。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">DCL 为什么必须加 volatile？去掉会怎样？</div>
+    <p><code>new</code> 分三步：分配内存、调构造器、引用赋值。②③ 可能重排，导致另一个线程看到非 null 引用但字段还是默认值（半初始化对象）。volatile 通过写屏障禁止重排 + 保证可见性。去掉后在高并发下会偶发拿到字段为 null 的对象，且极难复现。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">策略模式怎么替代 if-else？替代后有什么坏处？</div>
+    <p>抽接口 → 每分支一个实现 → 用 <code>Map</code> 或 Spring <code>Map&lt;String,T&gt;</code> 注入做路由。坏处：① 类数量从 1 变 N，新人理解成本上升；② 调用链多 2~3 层，调试要跳转；③ 分支只有 2~3 个时纯属过度设计。所以判据是"这个维度还会不会长"，不是"分支有几行"。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">策略模式和状态模式的区别？</div>
+    <p>结构几乎一样，差别在<b>谁触发切换</b>：策略由外部选择（用户选支付方式），状态由对象内部根据当前状态决定下一步（订单从待支付变成已支付）。状态模式通常还有转移表/状态机，策略之间互不知情。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">模板方法为什么骨架方法要加 final？</div>
+    <p>因为模式的核心契约是"顺序由父类控制"。不加 final，子类重写就能绕过校验、跳过 close、改变步骤顺序，父类的复用价值瞬间归零，退化成"一堆可选建议"。这是正确性问题，不是编码规范问题。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">模板方法有什么已知缺陷？</div>
+    <p>① 继承占掉唯一 extends 名额，业务类往往已经有父类；② 编译期绑定，运行期不能换算法（这点不如策略）；③ <b>父类构造器里调可覆盖方法</b>会读到子类未初始化的字段（Effective Java 第 19 条）。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">责任链、过滤器链、拦截器有什么区别？</div>
+    <p>都是链，差别在"能不能环绕"和"能不能中断"。纯责任链找到处理者就停；过滤链每个都执行、可短路；拦截器支持前后各插一段逻辑（preHandle/postHandle），AOP 甚至能改返回值。Spring MVC 里三层并存是因为能拿到的上下文不同：Filter 只有报文，Interceptor 有 HandlerMethod，AOP 有方法实参。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">Filter 里读了 request body，Controller 为什么拿不到？</div>
+    <p>Servlet 的 <code>getInputStream()</code> 是流，读完就到底了，没有 reset。解法是用 <code>HttpServletRequestWrapper</code> 在 Filter 里把 body 全读进 byte[] 缓存，重写 <code>getInputStream()</code> 每次返回新的 ByteArrayInputStream。这本质是<b>装饰器模式</b>的典型应用。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">JDK 动态代理和 CGLIB 怎么选？</div>
+    <p>JDK 要求目标类实现接口，CGLIB 要求类和方法非 final。Spring Boot 2.x 起默认 CGLIB，原因是业务代码大量"类不实现接口"，用 JDK 代理会导致 <code>@Transactional</code> 静默失效——这是框架对开发习惯的妥协，不是性能考虑。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">装饰器、代理、适配器的区别？</div>
+    <p>看动机：装饰器是<b>加功能且可叠加</b>（IO 流），代理是<b>控访问且客户端拿不到真身</b>（AOP），适配器是<b>两侧接口不同要翻译</b>（slf4j 绑定）。代码结构 90% 相似，靠"客户端是否知情""能否嵌套"来区分。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">Spring 的 Bean 是单例，会有线程安全问题吗？</div>
+    <p>会，而且这是最常见的事故源。Spring 只管"容器里一个实例"，不管"实例里字段是否被并发修改"。判据：Bean 是否<b>无状态</b>。成员变量只能是 final 的依赖注入对象；任何临时数据都必须在方法内声明，或放 ThreadLocal（用完必须 remove）。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">Spring 事件有什么坑？</div>
+    <p>三个：① 默认同步，监听器异常会连带回滚/中断主流程；② 在发布者事务内部执行，事务回滚了但短信已发 → 要用 <code>@TransactionalEventListener(AFTER_COMMIT)</code>；③ 加 <code>@Async</code> 后异常被线程池吞掉，必须配 <code>AsyncUncaughtExceptionHandler</code>，且需要自己做幂等（异步 + 重试会重复消费）。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">你见过哪些过度设计？</div>
+    <p>（这题是给你送分的，一定要接。）典型三种：① 只有一个实现类的接口，且永远不会有第二个；② 为了"未来可能换数据库"而写的 Repository 抽象层，结果 SQL 方言根本没被隔离住；③ 5 个字段的 DTO 用建造者 + 工厂 + 转换器三件套。判断标准统一：<b>抽象的成本是"每次改动多改 3 个文件"，收益是"未来少改 1 处"，如果未来不确定，这个交易就是亏的</b>。</p>
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L11</span><em>模拟面试：3 道，含追问链和评分点</em></div>
+  <h2>第 1 题 · 重构设计（中等偏难）</h2>
+
+  <div class="q">
+    <h4><span>Q1.</span>我们有个结算服务，<code class="inl">settle()</code> 方法 600 行，里面有 6 个渠道 × 5 个动作的分支，还有 3 段几乎一样的重试逻辑。你会怎么重构？</h4>
+    <div class="lab">考察点</div>
+    <p>能不能识别"两种不同性质的变化"（渠道维度 vs 通用横切逻辑），并给出分步落地方案，而不是一次性推倒重写。</p>
+    <div class="lab g">参考答法</div>
+    <p>先分类，不要一上来就抽接口。</p>
+    <p><b>第一步，拆两类变化。</b>渠道 × 动作的矩阵是"业务差异"，属于策略维度；重试是"技术横切"，属于模板方法或装饰器维度。这两类必须分开处理，混在一起抽会得到一个既像策略又像模板的怪物。</p>
+    <p><b>第二步，先处理重试（风险最低）。</b>把 3 段重复的重试下沉到 <code>RetryTemplate</code> 或自写的 <code>executeWithRetry(supplier, policy)</code>。这一步不改业务逻辑，只消除重复，可以独立上线验证。</p>
+    <p><b>第三步，再抽策略。</b>定义 <code>SettleStrategy</code>（<code>channel()</code> + <code>settle()</code> + <code>refund()</code> + <code>query()</code> + <code>reconcile()</code>），6 个实现类，用 Spring <code>Map</code> 注入。原 <code>settle()</code> 缩成一个路由方法（约 10 行）。</p>
+    <p><b>第四步，兜底。</b>加一个 <code>DefaultSettleStrategy</code> 抛明确异常，防止新增渠道时忘记实现导致 NPE；加启动时校验（6 个渠道是否都注册齐）。</p>
+    <div class="lab r">追问链（面试官一定会问）</div>
+    <p>① "重构期间怎么保证不出错？" → 先补特征测试（characterization test），把现有 30 个分支的输入输出录成快照，重构后逐条比对；灰度按渠道切流，一个渠道一个渠道迁。</p>
+    <p>② "600 行里有一些渠道的特例逻辑，抽不出来怎么办？" → 允许策略实现里保留私有方法，但禁止跨策略调用。如果两个渠道有 80% 相同，用 <code>AbstractSettleStrategy</code> 下沉公共部分（这里模板方法和策略叠加，能说出来加分）。</p>
+    <p>③ "如果只有 2 个渠道呢？" → 那就不重构。600 行的问题根源是"6×5 的矩阵 + 重复重试"，不是"方法长"。如果只有 2 个渠道且不增长，抽策略的收益低于理解成本。</p>
+  </div>
+
+  <h2>第 2 题 · 原理深挖（难）</h2>
+
+  <div class="q">
+    <h4><span>Q2.</span>你说项目里用 Spring 事件做了解耦。如果下单成功后要发短信、加积分、推消息给物流，用 Spring 事件合适吗？如果事务回滚了怎么办？如果某个监听器特别慢怎么办？</h4>
+    <div class="lab">考察点</div>
+    <p>能不能从"模式能用"走到"模式在分布式/事务语境下的可靠性边界"。这题是筛高级岗的。</p>
+    <div class="lab g">参考答法</div>
+    <p><b>分层回答，先说能用，再说不能用的边界。</b></p>
+    <p>事务回滚的问题：默认 <code>@EventListener</code> 在事务内部同步执行，如果后续步骤抛异常，事务回滚但短信已经发出去了。改用 <code>@TransactionalEventListener(phase = AFTER_COMMIT)</code>，把触发时机挪到提交之后——但代价是提交后异常无法回滚主事务，所以监听器必须<b>自己保证幂等 + 失败重试</b>。</p>
+    <p>慢监听器的问题：默认同步执行，一个监听器耗时 800ms 会把接口整体拖慢 800ms。解法是 <code>@Async</code> + 独立线程池（不能共用业务线程池，否则一个慢通知就能打满主链路线程）。但 <code>@Async</code> 会让异常被吞，必须配 <code>AsyncUncaughtExceptionHandler</code>；同时线程池队列要有界 + 拒绝策略要明确（用 CallerRuns 反而会阻塞主线程）。</p>
+    <p><b>关键判断：</b>如果是"发短信、加积分、推物流"这种<b>丢了要赔钱/要客服介入</b>的场景，Spring 事件不够——它是内存里的，进程重启就丢。这时应该用<b>本地消息表 + MQ</b>：业务和消息在同一个本地事务里落库，再由定时任务/CDC 投递，靠 MQ 的至少一次投递 + 消费端幂等保证最终一致。</p>
+    <div class="lab r">追问链</div>
+    <p>① "本地消息表和事务消息（RocketMQ）怎么选？" → 事务消息需要 MQ 支持半消息 + 回查，运维成本高但不用自己扫表；本地消息表通用、不绑 MQ，但要自己写补偿任务和清理。中小团队优先本地消息表。</p>
+    <p>② "@Async 方法里调另一个 @Async 方法会怎样？" → 自调用不走代理，第二个 @Async 失效，仍在第一个线程里同步执行。这是 AOP 自调用的通病，同类问题还有 <code>@Transactional</code> 自调用失效。</p>
+    <p>③ "监听器里再发布一个事件，会怎样？" → 默认同步，会形成嵌套调用链；如果两个事件互相发布就是死循环，直到 StackOverflow。生产上建议事件只做"一跳"。</p>
+  </div>
+
+  <h2>第 3 题 · 品味与边界（拉开差距）</h2>
+
+  <div class="q">
+    <h4><span>Q3.</span>你怎么判断一段代码"设计得好"？如果给你一个 8000 行的 Service 类，你怎么决定要不要拆、怎么拆？</h4>
+    <div class="lab">考察点</div>
+    <p>有没有自己的判断体系。这题没有标准答案，但答得出来的人极少。</p>
+    <div class="lab g">参考答法</div>
+    <p><b>先给判断标准，再给操作路径。</b></p>
+    <p>判断标准我只看三条，按优先级：</p>
+    <p>① <b>变更成本</b>：一个典型需求要改几个文件、几个类？如果一个字段改动要穿 6 层，说明分层错了，不是"设计严谨"。</p>
+    <p>② <b>失败可见性</b>：出问题时能不能在 5 分钟内定位到哪一层？如果链条太长导致日志无法串联，那这个抽象已经在损害可维护性。</p>
+    <p>③ <b>新人上手时间</b>：一个熟悉业务但不熟悉代码的人，读懂主流程要多久？超过半天就是抽象过度的信号。</p>
+    <p><b>8000 行怎么拆：不要按"技术分层"拆，要按"变化原因"拆。</b>做法是先把方法按业务动作列出来（可能 40 个方法），然后标两列：这个方法属于哪个业务概念？它和谁一起变？同一列聚到一起就是一个类。这叫"按变更原因聚合"，比按"工具类/帮助类"拆要稳得多——后者拆出来的往往是 <code>XxxUtils</code> 这种什么都往里塞的垃圾桶。</p>
+    <p><b>拆的顺序也有讲究：</b>先拆<b>纯函数</b>（无状态、无 IO 的计算逻辑，风险最低、最好测），再拆<b>外部依赖</b>（把 RPC/DB 调用收口到 Repository/Gateway），最后才拆<b>流程编排</b>（这层最容易拆错，因为流程是业务的核心，拆散了就看不懂了）。</p>
+    <div class="lab r">追问链</div>
+    <p>① "拆完类变多了，是不是更难懂？" → 会。所以要控制"入口数"：对外只暴露 1~2 个 public 方法，其他全部包私有。类多但入口少是可接受的；类多且每个都能被随便调，才是灾难。</p>
+    <p>② "什么情况下你会选择不拆？" → 三种：马上要下线/替换的模块；业务已冻结、半年没改过的模块；拆了也没有测试覆盖兜底的模块（没测试的重构是赌博）。</p>
+    <p>③ "怎么说服团队接受这个拆法？" → 不讲"设计模式"，讲"上次那个 bug 我们查了 6 小时，就是因为这段逻辑分散在 4 个类里"。用历史故障成本说话，比讲 SOLID 有效一百倍。</p>
+  </div>
+
+  <div class="oneline">
+    <b>本期收尾</b>
+    设计模式的最高境界不是"会用 23 种"，而是<b>能对着一段代码说出"这里该抽"和"这里别动"</b>。前者靠经验，后者靠品味——而品味，本质上是你交过的学费。下一期我们聊「JVM 调优与性能压测」，把这些结构放回真实流量下去检验。
+  </div>
+</section>
+
+<footer>
+  Java 面试深水区 · 第 11 期 · 设计模式与代码品味<br>
+  10 层递进 · 10 张原理图 · 20+ 段代码 · 14 条问答 · 3 道模拟面试<br>
+  <span style="color:#c7ccd8">下一期预告：JVM 调优与性能压测（堆参数推导 / GC 日志解读 / 压测模型与瓶颈定位）</span>
+</footer>
+
+</div>
+<script>
+(function(){
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  var RE = /(\/\/[^\n]*|(?:^|\s)#[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|\b(public|private|protected|static|final|void|class|interface|enum|new|return|if|else|for|while|do|try|catch|finally|throw|throws|synchronized|volatile|transient|extends|implements|abstract|instanceof|break|continue|switch|case|default|int|long|byte|short|boolean|double|float|char|null|true|false|this|super|import|package|override|Override|Builder|Service|Component|Transactional|Async|EventListener|TransactionalEventListener)\b|\b(\d[\d_.]*)\b/g;
+  document.querySelectorAll('pre').forEach(function(pre){
+    var t = esc(pre.textContent);
+    pre.innerHTML = t.replace(RE, function(m,g1,g2,g3,g4){
+      if(g1) return '<span class="c">'+m+'</span>';
+      if(g2) return '<span class="s">'+m+'</span>';
+      if(g3) return '<span class="k">'+m+'</span>';
+      return '<span class="n">'+m+'</span>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 09 · 线上问题排查实战：CPU 100% / OOM / 死锁 / arthas / 连接池</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:28px; line-height:1.34; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:780px}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.7px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .an{color:#0369a1; font-weight:600}
+  pre .e{color:#be123c; font-weight:600}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #bcdcf2}
+  .check li b{color:#075985}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">每 2 小时 · Java 面试深挖 · 第 09 期</div>
+  <h1>CPU 100%<span class="arrow">→</span>OOM<span class="arrow">→</span>死锁<span class="arrow">→</span>arthas<span class="arrow">→</span>连接池</h1>
+  <p class="sub">「你处理过线上问题吗？」——「处理过，重启就好了。」面试到此结束。因为面试官想听的不是你重启了，而是<strong>你在重启之前从现场取到了什么证据</strong>。前八期把组件一个个拆开看，这一期反过来：当它们凌晨三点一起崩掉时，你怎么在 5 分钟里找到那一行代码。核心是三个顺序问题——先止血还是先查因、先看哪个指标、拿到线程栈之后看第几行。</p>
+  <div class="meta">
+    <div><strong>9</strong>层递进</div>
+    <div><strong>10</strong>张原理图</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span>01 HashMap</span><span>02 JVM/GC</span><span>03 并发</span>
+  <span>04 Spring</span><span>05 MySQL</span><span>06 Redis</span>
+  <span>07 MQ · 事务</span><span>08 微服务</span><span class="on">09 线上排查</span>
+</div>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>方法论 · 顺序比知识更重要</em></div>
+  <h2>先止血，再定位，最后才谈根因</h2>
+
+  <p>排查能力的分水岭不在「知道多少种 OOM」，而在三个顺序问题：
+  <strong>先止血还是先查因？先看哪个指标？拿到线程栈之后看第几行？</strong>
+  这三个答对，你就是那个「能扛事的人」；答错，你就是那个「重启工程师」。</p>
+
+  <h3>三条铁律</h3>
+
+  <p><strong>① 止血优先于定位。</strong>
+  线上每分钟在亏钱，而你找一个偶发 bug 可能要 3 小时。正确顺序是<strong>先让业务恢复</strong>（限流 / 摘流 / 回滚 / 扩容 / 降级），
+  <strong>再在有余量的环境里查根因</strong>。唯一例外：问题正在扩散且回滚无效（数据被写坏），此时必须边止血边取证。</p>
+
+  <p><strong>② 只读取证，绝不急着重启。</strong>
+  重启 = 现场销毁。凡是「重启就好了」的问题，<strong>100% 会复发</strong>，而且下次复发时你手上依然什么都没有。
+  取证动作全是只读的：<code class="inl">top</code>、<code class="inl">jstack</code>、<code class="inl">jstat</code>、<code class="inl">jmap -histo</code>、<code class="inl">arthas</code>、<code class="inl">ss</code>、<code class="inl">iostat</code>。
+  唯一的例外是 <code class="inl">jmap -dump:live</code> 会触发一次 Full GC——所以<strong>堆快满时先 dump 再重启</strong>，因为满了之后 dump 可能直接失败。</p>
+
+  <p><strong>③ 结论必须能被数字证实。</strong>
+  「可能是 GC 问题」不是结论；「FGC 从 0 涨到 120 次/分钟，单次停顿 620ms，吞吐下降 47%」才是结论。
+  「可能是连接池不够」不是结论；「200 QPS × 200ms = 40 个并发连接需求，池上限 10，排队 30 秒后超时」才是结论。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="止血轨与取证轨并行示意">
+      <defs>
+        <marker id="ar1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#b6bdcb"/>
+        </marker>
+      </defs>
+      <text x="24" y="30" font-size="14" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">一次线上事故：两条轨道必须并行</text>
+
+      <!-- Lane A -->
+      <rect x="24" y="48" width="852" height="132" rx="12" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="42" y="72" font-size="11.5" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif" letter-spacing="1">止血轨 · 业务优先</text>
+      <text x="42" y="90" font-size="10.5" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">目标：5 分钟内让指标回落</text>
+
+      <rect x="42" y="104" width="176" height="60" rx="8" fill="#ffffff" stroke="#b7e3ca"/>
+      <text x="56" y="124" font-size="11" font-weight="700" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">① 判断影响面</text>
+      <text x="56" y="141" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">哪些接口 · 多少用户</text>
+      <text x="56" y="156" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">是否还在扩散</text>
+
+      <rect x="248" y="104" width="176" height="60" rx="8" fill="#ffffff" stroke="#b7e3ca"/>
+      <text x="262" y="124" font-size="11" font-weight="700" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">② 一招止血</text>
+      <text x="262" y="141" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">限流 / 摘流 / 回滚</text>
+      <text x="262" y="156" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">选最快那招，不选最好的</text>
+
+      <rect x="454" y="104" width="176" height="60" rx="8" fill="#ffffff" stroke="#b7e3ca"/>
+      <text x="468" y="124" font-size="11" font-weight="700" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">③ 确认回落</text>
+      <text x="468" y="141" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">错误率 · RT · 成功率</text>
+      <text x="468" y="156" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">三个指标同时看</text>
+
+      <rect x="660" y="104" width="196" height="60" rx="8" fill="#eafaf2" stroke="#8fd6b2"/>
+      <text x="674" y="124" font-size="11" font-weight="700" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">✅ 业务已恢复</text>
+      <text x="674" y="141" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">此时才有资格慢慢查</text>
+      <text x="674" y="156" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">而不是边亏钱边猜</text>
+
+      <line x1="218" y1="134" x2="244" y2="134" stroke="#b6bdcb" stroke-width="1.4" marker-end="url(#ar1)"/>
+      <line x1="424" y1="134" x2="450" y2="134" stroke="#b6bdcb" stroke-width="1.4" marker-end="url(#ar1)"/>
+      <line x1="630" y1="134" x2="656" y2="134" stroke="#b6bdcb" stroke-width="1.4" marker-end="url(#ar1)"/>
+
+      <!-- Lane B -->
+      <rect x="24" y="200" width="852" height="196" rx="12" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="224" font-size="11.5" font-weight="800" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif" letter-spacing="1">取证轨 · 只读，不重启</text>
+      <text x="42" y="242" font-size="10.5" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">目标：保住那份再也拿不回来的现场</text>
+
+      <rect x="42" y="256" width="196" height="60" rx="8" fill="#ffffff" stroke="#f2c3cd"/>
+      <text x="56" y="276" font-size="11" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">④ 只读三连</text>
+      <text x="56" y="293" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">top -Hp · jstack</text>
+      <text x="56" y="308" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">jstat -gcutil</text>
+
+      <rect x="268" y="256" width="196" height="60" rx="8" fill="#ffffff" stroke="#f2c3cd"/>
+      <text x="282" y="276" font-size="11" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">⑤ 保存现场</text>
+      <text x="282" y="293" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">jstack 间隔 5s 打两次</text>
+      <text x="282" y="308" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">dump + GC 日志 + 指标</text>
+
+      <rect x="494" y="256" width="196" height="60" rx="8" fill="#ffffff" stroke="#f2c3cd"/>
+      <text x="508" y="276" font-size="11" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">⑥ arthas 定位</text>
+      <text x="508" y="293" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">thread -n 3 / -b</text>
+      <text x="508" y="308" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">trace 慢方法 -n 5</text>
+
+      <rect x="720" y="256" width="136" height="60" rx="8" fill="#ffffff" stroke="#f2c3cd"/>
+      <text x="734" y="276" font-size="11" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">⑦ 根因收口</text>
+      <text x="734" y="293" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">类 + 方法 + 行</text>
+      <text x="734" y="308" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">机制性修复</text>
+
+      <line x1="242" y1="286" x2="264" y2="286" stroke="#b6bdcb" stroke-width="1.4" marker-end="url(#ar1)"/>
+      <line x1="468" y1="286" x2="490" y2="286" stroke="#b6bdcb" stroke-width="1.4" marker-end="url(#ar1)"/>
+      <line x1="694" y1="286" x2="716" y2="286" stroke="#b6bdcb" stroke-width="1.4" marker-end="url(#ar1)"/>
+
+      <text x="42" y="340" font-size="10.5" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">⚠ 致命误区：先重启再查 → jstack 里唯一的证据随进程消失，问题必然复发且下次依然无据可查</text>
+      <text x="42" y="362" font-size="10.5" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">关键技巧：jstack 连打两次做 diff —— 5 秒内位置没变的那个线程，就是卡住的地方（比读 400 行栈快十倍）</text>
+      <text x="42" y="384" font-size="10.5" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">时间账：止血 T+2 起步，取证 T+1 就要开始 —— 两条轨道是并行，不是串行</text>
+    </svg>
+    <figcaption><b>图 1 · 双轨时间轴</b>：止血和取证不是先后关系。等你止血完再去看现场，很多证据（线程状态、堆内容、连接数）已经变了。</figcaption>
+  </figure>
+
+  <h3>五分钟分诊表</h3>
+  <p>拿到告警不要凭直觉猜，先按「现象 → 第一条命令 → 关键读数」走一遍。这张表覆盖了 80% 的线上故障：</p>
+
+  <table>
+    <tr><th style="width:26%">现象</th><th style="width:30%">第一条命令</th><th style="width:22%">关键读数</th><th>初判方向</th></tr>
+    <tr><td>接口全超时、CPU 100%</td><td><code>top -Hp &lt;pid&gt;</code></td><td>单线程 100% / 多线程均高</td><td>死循环 vs GC vs 计算密集</td></tr>
+    <tr><td>内存缓慢上涨、3 天必挂</td><td><code>jstat -gcutil &lt;pid&gt; 1000</code></td><td>OU 逼近 100、FGC 递增</td><td>内存泄漏</td></tr>
+    <tr><td>突然 OOM，但堆没满</td><td><code>dmesg -T | tail</code></td><td><code>OOMKilled</code></td><td>堆外 / 容器限制</td></tr>
+    <tr><td>偶发 30s 超时、DB 却不忙</td><td><code>jstack | grep -c getConnection</code></td><td>大量 WAITING</td><td>连接池耗尽</td></tr>
+    <tr><td>线程数暴涨到几千</td><td><code>jstack | wc -l</code></td><td>线程名前缀集中</td><td>池配置 / 线程泄漏</td></tr>
+    <tr><td>RT 抖动 + 周期性卡顿</td><td>GC 日志</td><td><code>Pause</code> 时长</td><td>大对象 / 晋升失败</td></tr>
+    <tr><td>请求卡住、CPU 不高</td><td><code>jstack</code></td><td>大量 BLOCKED 同锁</td><td>死锁 / 锁竞争</td></tr>
+    <tr><td>发布后 5 分钟报错、10 分钟自愈</td><td>实例级错误率</td><td>只有新实例报错</td><td>摘流窗口（见第 08 期）</td></tr>
+  </table>
+
+  <div class="oneline"><b>一句话口径</b>
+  排查的本质是「用最少的只读动作，把可能性从 N 个砍到 1 个」。所以顺序永远是：<strong>先看是资源问题还是代码问题，再看是哪个子系统，最后才看哪一行。</strong></div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>CPU 100% · 最好查，也最容易被误判</em></div>
+  <h2>六种真凶：它一定留在线程栈里</h2>
+
+  <p>CPU 打满是最好查的一类问题，因为<strong>它一定会留在线程栈里</strong>。
+  难点不在取证——取证只要三步、30 秒——难点在<strong>认出是哪种</strong>。因为你走错方向，就会花两小时去 jstack 里找一个根本不存在的死循环。</p>
+
+  <h3>取证三步</h3>
+  <pre># ① 找到进程，再找到进程里最烧 CPU 的线程（-H = 显示线程）
+top -Hp 12345
+#   PID  USER  %CPU  COMMAND
+# 12378  app   98.9  java      &lt;-- 就是这个
+
+# ② 十进制 tid 转十六进制（jstack 里的 nid 是十六进制）
+printf '%x\n' 12378           # -&gt; 305a
+
+# ③ 在 jstack 里定位这一帧
+jstack 12345 | grep -A 30 'nid=0x305a'</pre>
+
+  <p>输出长这样，<strong>答案就在第一行 at</strong>：</p>
+
+  <pre>"http-nio-8080-exec-7" #47 daemon prio=5 os_prio=0 tid=0x00007f... nid=0x305a runnable
+   java.lang.Thread.State: RUNNABLE
+        at com.demo.order.OrderService.calcTotal(OrderService.java:88)   &lt;-- 现场
+        at com.demo.order.OrderController.submit(OrderController.java:41)</pre>
+
+  <figure>
+    <svg viewBox="0 0 900 316" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CPU 打满取证三步链路">
+      <defs>
+        <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa4b6"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="13.5" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">30 秒拿到现场：三个命令，一次十六进制转换</text>
+
+      <rect x="24" y="42" width="248" height="146" rx="10" fill="#ffffff" stroke="#bcdcf2"/>
+      <text x="40" y="64" font-size="11" font-weight="800" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">① 找线程</text>
+      <text x="40" y="88" font-size="10.8" fill="#262b36" font-family="ui-monospace,Consolas,monospace">top -Hp 12345</text>
+      <text x="40" y="108" font-size="10.8" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">  PID   %CPU  CMD</text>
+      <rect x="34" y="116" width="228" height="20" rx="4" fill="#fff1f2"/>
+      <text x="40" y="131" font-size="10.8" fill="#be123c" font-family="ui-monospace,Consolas,monospace">12378   98.9  java</text>
+      <text x="40" y="152" font-size="10.8" fill="#8b93a5" font-family="ui-monospace,Consolas,monospace">12345    2.1  java</text>
+      <text x="40" y="174" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">十进制线程号，回头要转十六进制</text>
+
+      <line x1="274" y1="115" x2="306" y2="115" stroke="#9aa4b6" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+      <rect x="310" y="42" width="196" height="146" rx="10" fill="#ffffff" stroke="#bcdcf2"/>
+      <text x="326" y="64" font-size="11" font-weight="800" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">② 转十六进制</text>
+      <text x="326" y="90" font-size="10.8" fill="#262b36" font-family="ui-monospace,Consolas,monospace">printf '%x\n' 12378</text>
+      <rect x="320" y="100" width="176" height="22" rx="4" fill="#eff6fc"/>
+      <text x="330" y="116" font-size="11.4" font-weight="700" fill="#0369a1" font-family="ui-monospace,Consolas,monospace">305a</text>
+      <text x="326" y="142" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">jstack 用 nid=0x…</text>
+      <text x="326" y="158" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">不转这一步，你 grep 的</text>
+      <text x="326" y="174" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">永远是别的线程</text>
+
+      <line x1="508" y1="115" x2="540" y2="115" stroke="#9aa4b6" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+      <rect x="544" y="42" width="332" height="146" rx="10" fill="#ffffff" stroke="#bcdcf2"/>
+      <text x="560" y="64" font-size="11" font-weight="800" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">③ 定位那一帧</text>
+      <text x="560" y="88" font-size="10.8" fill="#262b36" font-family="ui-monospace,Consolas,monospace">jstack 12345 | grep -A 30</text>
+      <text x="560" y="104" font-size="10.8" fill="#262b36" font-family="ui-monospace,Consolas,monospace">    'nid=0x305a'</text>
+      <rect x="554" y="112" width="312" height="40" rx="4" fill="#f2fbf6"/>
+      <text x="562" y="128" font-size="10.6" fill="#047857" font-family="ui-monospace,Consolas,monospace">"http-nio-8080-exec-7" nid=0x305a</text>
+      <text x="562" y="144" font-size="10.6" font-weight="700" fill="#be123c" font-family="ui-monospace,Consolas,monospace">  at OrderService.calcTotal(:88)</text>
+      <text x="560" y="170" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">nid 必须与 ① 的 tid 对上，否则看错人</text>
+
+      <rect x="24" y="206" width="852" height="96" rx="10" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="42" y="228" font-size="11" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">最大的坑：RUNNABLE 不等于在烧 CPU</text>
+      <text x="42" y="250" font-size="10.5" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">等网络时线程停在 socketRead0，等事件时停在 epollWait —— 这些 native 方法在 jstack 里同样显示 RUNNABLE，</text>
+      <text x="42" y="268" font-size="10.5" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">因为 JVM 无法判断 native 代码内部在干什么。所以「RUNNABLE 多」≠「CPU 忙」，必须回头对上 top -Hp 的 %CPU。</text>
+      <text x="42" y="290" font-size="10.5" fill="#8a5a1a" font-family="-apple-system,PingFang SC,sans-serif">另注：单核跑满 = 100%，16 核机器顶栏 1600% 才是全满。容器里「100%」通常指用满了 limit，不是用满整机。</text>
+    </svg>
+    <figcaption><b>图 2 · CPU 取证链路</b>：三步里最容易漏掉的是第二步——<code>printf %x</code>。漏了它，你 grep 到的线程和 top 里看到的那一个根本不是同一个。</figcaption>
+  </figure>
+
+  <h3>六种真凶的指纹表</h3>
+  <p>不看定义，看<strong>栈的第一行在哪</strong>。这六种的特征互相排斥，认出一种就排除了其余五种：</p>
+
+  <table>
+    <tr><th style="width:4%">#</th><th style="width:16%">真凶</th><th style="width:18%">线程状态</th><th style="width:32%">栈特征（第一行 at）</th><th>附带证据</th></tr>
+    <tr><td>1</td><td>死循环 / 无限重试</td><td>RUNNABLE，单线程 100%</td><td>同一个方法反复出现</td><td>该接口 RT 无限长</td></tr>
+    <tr><td>2</td><td>频繁 Full GC</td><td>GC 线程占 CPU</td><td><code>GC Thread#</code> / <code>G1 Evacuation</code></td><td>FGC 递增、堆将满</td></tr>
+    <tr><td>3</td><td>锁争用 / 上下文切换</td><td>大量 BLOCKED</td><td><code>Object.wait</code> / <code>park</code></td><td><code>cs</code> 飙升、<code>sy</code> 高</td></tr>
+    <tr><td>4</td><td>正则回溯</td><td>RUNNABLE</td><td><code>Pattern$Curly.match</code></td><td>入参是超长字符串</td></tr>
+    <tr><td>5</td><td>序列化 / 大对象</td><td>RUNNABLE</td><td><code>ObjectMapper._writeValue</code></td><td>YGC 同时飙升</td></tr>
+    <tr><td>6</td><td>加解密 / 压缩</td><td>RUNNABLE</td><td><code>Cipher.update</code> / <code>Deflater</code></td><td>高 QPS 小包 HTTPS</td></tr>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 900 404" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="六种 CPU 真凶的栈指纹矩阵">
+      <text x="24" y="26" font-size="13.5" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">六种真凶：栈的「第一行」就是身份证</text>
+
+      <!-- card 1 -->
+      <rect x="24" y="44" width="276" height="112" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="40" y="66" font-size="11.5" font-weight="800" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">① 死循环 / 无限重试</text>
+      <text x="40" y="86" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">RUNNABLE · 单线程顶到 100%</text>
+      <text x="40" y="106" font-size="10.4" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">at 同一业务方法反复出现</text>
+      <text x="40" y="126" font-size="10.4" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">旁证：接口 RT 无限长、日志刷同一行</text>
+      <text x="40" y="146" font-size="10.4" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">解药：次数上限 + 退避 + 熔断</text>
+
+      <!-- card 2 -->
+      <rect x="312" y="44" width="276" height="112" rx="10" fill="#f5f3ff" stroke="#d8ccfb"/>
+      <text x="328" y="66" font-size="11.5" font-weight="800" fill="#7c3aed" font-family="-apple-system,PingFang SC,sans-serif">② 频繁 Full GC</text>
+      <text x="328" y="86" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">CPU 高的是 GC 线程，不是业务</text>
+      <text x="328" y="106" font-size="10.4" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">at GC Thread# / G1 Evacuation</text>
+      <text x="328" y="126" font-size="10.4" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">旁证：jstat 的 FGC 持续增长</text>
+      <text x="328" y="146" font-size="10.4" fill="#5b3aab" font-family="-apple-system,PingFang SC,sans-serif">→ 方向立刻切到内存（L2）</text>
+
+      <!-- card 3 -->
+      <rect x="600" y="44" width="276" height="112" rx="10" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="616" y="66" font-size="11.5" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">③ 锁争用 / 上下文切换</text>
+      <text x="616" y="86" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">大量 BLOCKED 挤在同一把锁</text>
+      <text x="616" y="106" font-size="10.4" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">at Object.wait / Unsafe.park</text>
+      <text x="616" y="126" font-size="10.4" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">旁证：vmstat 的 cs 十万级、sy 高</text>
+      <text x="616" y="146" font-size="10.4" fill="#8a5a1a" font-family="-apple-system,PingFang SC,sans-serif">解药：缩粒度 / LongAdder / 锁分离</text>
+
+      <!-- card 4 -->
+      <rect x="24" y="168" width="276" height="112" rx="10" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="40" y="190" font-size="11.5" font-weight="800" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">④ 正则回溯</text>
+      <text x="40" y="210" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">RUNNABLE，代码看着完全正常</text>
+      <text x="40" y="230" font-size="10.4" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">at Pattern$Curly.match</text>
+      <text x="40" y="250" font-size="10.4" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">旁证：入参是用户可控的长字符串</text>
+      <text x="40" y="270" font-size="10.4" fill="#0b4f75" font-family="-apple-system,PingFang SC,sans-serif">(a+)+ 对 30 个 a → 2³⁰ ≈ 10.7 亿次</text>
+
+      <!-- card 5 -->
+      <rect x="312" y="168" width="276" height="112" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="328" y="190" font-size="11.5" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">⑤ 序列化 / 大对象</text>
+      <text x="328" y="210" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">RUNNABLE，同时 YGC 次数飙升</text>
+      <text x="328" y="230" font-size="10.4" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">at ObjectMapper._writeValue</text>
+      <text x="328" y="250" font-size="10.4" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">旁证：响应体 MB 级、GC 频繁</text>
+      <text x="328" y="270" font-size="10.4" fill="#1f6a4c" font-family="-apple-system,PingFang SC,sans-serif">解药：分页 / 流式 / 字段裁剪</text>
+
+      <!-- card 6 -->
+      <rect x="600" y="168" width="276" height="112" rx="10" fill="#f8f9fc" stroke="#dfe4ee"/>
+      <text x="616" y="190" font-size="11.5" font-weight="800" fill="#3b4252" font-family="-apple-system,PingFang SC,sans-serif">⑥ 加解密 / 压缩</text>
+      <text x="616" y="210" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">RUNNABLE，CPU 高但不出栈</text>
+      <text x="616" y="230" font-size="10.4" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">at Cipher.update / Deflater</text>
+      <text x="616" y="250" font-size="10.4" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">旁证：小包高频 HTTPS、RSA 验签</text>
+      <text x="616" y="270" font-size="10.4" fill="#3b4252" font-family="-apple-system,PingFang SC,sans-serif">解药：AES 会话密钥，RSA 只握手</text>
+
+      <rect x="24" y="296" width="852" height="88" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="318" font-size="11" font-weight="800" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">判断顺序（别乱）：</text>
+      <text x="42" y="340" font-size="10.5" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">第 1 步看是不是 ②（GC 线程）——是则整条路走内存，jstack 里根本没有你要的答案；</text>
+      <text x="42" y="358" font-size="10.5" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">第 2 步看是不是 ③（大量 BLOCKED）——是则查锁；</text>
+      <text x="42" y="376" font-size="10.5" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">第 3 步才是 ①④⑤⑥ 的分辨，全看栈顶停在哪个包（业务 / regex / jackson / crypto）。</text>
+    </svg>
+    <figcaption><b>图 3 · 六指纹矩阵</b>：这六种的证据链互相排斥。<b>先判 GC，再判锁，最后才认代码</b>——顺序错了就是白忙。</figcaption>
+  </figure>
+
+  <h3>真凶 ①：死循环</h3>
+  <pre>// 事故代码：用 == 比较 Integer，超过 127 缓存范围就永远不相等
+public int findIndex(List&lt;Integer&gt; list, Integer target) {
+    int i = 0;
+    while (list.get(i) != target) {   // 找不到时 i 一路自增 -&gt; IndexOutOfBounds
+        i++;                          // 若外层 catch 了异常并 continue -&gt; 死循环
+    }
+    return i;
+}</pre>
+
+  <p>更隐蔽的一种是<strong>在循环里做远程调用并无限重试</strong>：</p>
+
+  <pre>while (true) {
+    try {
+        return remoteClient.query(id);        // 下游挂了 -&gt; 每次抛异常 -&gt; 立刻重试
+    } catch (Exception e) {
+        // 没有 sleep、没有次数上限、没有退避
+    }
+}</pre>
+
+  <p>特征：<strong>CPU 高 + 下游超时 + 日志疯狂刷同一行</strong>。
+  修复必须是三重——<strong>次数上限 + 指数退避 + 熔断</strong>。
+  只加 <code class="inl">Thread.sleep(100)</code> 是没用的，它只是把死循环变成慢死循环，线程依然一个都不放。</p>
+
+  <h3>真凶 ④：正则回溯（最容易被忽略的一种）</h3>
+  <pre>// 校验「一段字母后面跟一个数字」，写成了嵌套量词
+Pattern P = Pattern.compile("^(a+)+$");
+P.matcher("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!").matches();   // 30 个 a + 一个 !</pre>
+
+  <p><code class="inl">(a+)+</code> 对于不匹配的输入，会把「30 个 a 怎么分组」的所有组合都试一遍，复杂度是
+  <strong>2³⁰ ≈ 10.7 亿次</strong>。单次调用可能耗时几秒，<strong>10 个并发就能把 CPU 打满</strong>，
+  而且线程栈看起来<strong>完全正常</strong>（就是在 <code class="inl">Pattern$Curly.match</code> 里跑）——
+  于是很多人误判成「JVM 卡了」，白白浪费两小时。</p>
+
+  <p>三种修法，从弱到强：</p>
+  <pre>// ① 消灭嵌套量词：把 (a+)+ 改成 a+
+Pattern.compile("^a+$");
+
+// ② 用占有量词 / 独立分组，禁止回溯
+Pattern.compile("^(?&gt;a+)+$");
+
+// ③ 最稳的：先卡长度，再匹配（超长输入直接拒绝）
+if (input.length() &gt; 64) return false;</pre>
+
+  <div class="trap"><b>唯一一种「CPU 打满但一切看起来都健康」的故障。</b>
+  判断标志三连：<strong>入参是用户可控的长字符串 + 栈停在 regex 包 + 堆和 GC 都正常</strong>。
+  这三个同时成立，就不用再查别的了。</div>
+
+  <h3>真凶 ②：频繁 GC 的读法</h3>
+  <pre>jstat -gcutil 12345 1000 10
+#   S0     S1     E      O      M     CCS    YGC   YGCT    FGC   FGCT     GCT
+#   0.00  96.12  99.31  99.87  94.21  92.10   8421  96.32    317  198.44  294.76</pre>
+
+  <p>三行读数：
+  <br>· <code class="inl">O</code>（老年代使用率）<strong>99.87%</strong> + <code class="inl">FGC</code> 持续增长 = 正在疯狂 Full GC。
+  <br>· <code class="inl">FGCT / FGC</code> = 单次 Full GC 平均耗时 = 198.44 / 317 ≈ <strong>626ms</strong>。
+  <br>· 若 FGC 每分钟 60 次、每次 626ms，<strong>每秒有 0.6 秒在做 GC</strong>，吞吐直接掉 60%。</p>
+
+  <p>此时 CPU 高的是 <strong>GC 线程</strong>：<code class="inl">top -Hp</code> 里能看到名字是 <code class="inl">GC Thread#0</code>、<code class="inl">G1 Young RemSet Sampling</code> 这类。
+  <strong>这种情况别再去 jstack 找业务死循环</strong>，方向错了，找一晚上也找不到。</p>
+
+  <div class="warn"><b>处理顺序不能反。</b>
+  先 <code>jmap -histo:live</code> 或 dump 看什么对象占大头 → 若是「本不该活那么久」的对象（缓存/泄漏）→ 改代码；
+  若确实是内存不够 → 调大堆或加机器。<strong>先 dump 再调参</strong>，参数一改，现场就没了。</div>
+
+  <h3>真凶 ③：锁争用</h3>
+  <p>CPU 高但<strong>业务没干多少活</strong>——<code class="inl">vmstat 1</code> 里 <code class="inl">cs</code>（上下文切换）每秒十万级、<code class="inl">sy</code>（内核态）占比高，这是<strong>线程在抢锁</strong>，不是在做计算。</p>
+
+  <pre>jstack 12345 | grep -c "BLOCKED"      # 数量异常高就是锁竞争
+vmstat 1 5                            # 盯 cs 与 sy 两列</pre>
+
+  <p>修复方向：缩小锁粒度（分段锁）、改无锁、锁分离（读写锁）、或干脆去掉锁（ThreadLocal / 不可变对象）。</p>
+
+  <p><code class="inl">AtomicLong</code> 在高并发下是个典型陷阱：<strong>CAS 失败会自旋</strong>，
+  1000 个线程抢一个计数器时 CPU 全花在自旋上，吞吐反而不如加锁的 <code class="inl">synchronized</code>——
+  这正是 <code class="inl">LongAdder</code> 存在的理由（分段累加，最后求和）。</p>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>内存 · OOM 有八种，线上最高频的是第九种</em></div>
+  <h2>八种 OOM 与 dump 分析</h2>
+
+  <p>「OOM」在面试里是个筛子：只答得出 <code class="inl">Java heap space</code> 的人，说明只见过这一种。
+  而真正让人半夜爬起来的是第 ⑨ 种——它<strong>连异常都不给你</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 424" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="九种 OOM 在 JVM 内存结构中的落点">
+      <text x="24" y="26" font-size="13.5" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">九种 OOM 的落点：先搞清它死在哪块内存</text>
+      <rect x="24" y="42" width="852" height="330" rx="14" fill="#fbfcfe" stroke="#c9d0dd" stroke-width="1.4"/>
+      <text x="42" y="66" font-size="10.5" font-weight="700" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">JVM 进程（容器 limit 之内）</text>
+
+      <!-- heap -->
+      <rect x="46" y="78" width="372" height="118" rx="10" fill="#f5f3ff" stroke="#d8ccfb"/>
+      <text x="62" y="100" font-size="11" font-weight="800" fill="#7c3aed" font-family="-apple-system,PingFang SC,sans-serif">堆 Heap</text>
+      <text x="62" y="122" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">① Java heap space</text>
+      <text x="62" y="142" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">② GC overhead limit exceeded</text>
+      <text x="62" y="168" font-size="9.8" fill="#6b5aa8" font-family="-apple-system,PingFang SC,sans-serif">对象太多 / 单个太大 / 该释放的没释放</text>
+      <text x="62" y="186" font-size="9.8" fill="#6b5aa8" font-family="-apple-system,PingFang SC,sans-serif">→ jmap -histo:live + dump</text>
+
+      <!-- metaspace -->
+      <rect x="434" y="78" width="186" height="118" rx="10" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="450" y="100" font-size="11" font-weight="800" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">元空间</text>
+      <text x="450" y="122" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">③ Metaspace</text>
+      <text x="450" y="148" font-size="9.8" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">动态生成类：CGLIB /</text>
+      <text x="450" y="164" font-size="9.8" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">Groovy / 热部署</text>
+      <text x="450" y="184" font-size="9.8" fill="#0b4f75" font-family="-apple-system,PingFang SC,sans-serif">→ jstat 看 MC / MU</text>
+
+      <!-- stack -->
+      <rect x="636" y="78" width="218" height="118" rx="10" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="652" y="100" font-size="11" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">栈（线程私有）</text>
+      <text x="652" y="122" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">⑧ StackOverflowError</text>
+      <text x="652" y="148" font-size="9.8" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">递归太深 / 栈帧太大</text>
+      <text x="652" y="166" font-size="9.8" fill="#8a5a1a" font-family="-apple-system,PingFang SC,sans-serif">注意：它不是 OOM，</text>
+      <text x="652" y="182" font-size="9.8" fill="#8a5a1a" font-family="-apple-system,PingFang SC,sans-serif">但总被一起问</text>
+
+      <!-- offheap -->
+      <rect x="46" y="210" width="372" height="70" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="62" y="232" font-size="11" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">堆外（Direct Memory）</text>
+      <text x="62" y="254" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">④ Direct buffer memory</text>
+      <text x="62" y="272" font-size="9.8" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">Netty / NIO；默认上限 = 堆上限（未设 MaxDirectMemorySize 时）</text>
+
+      <!-- OS -->
+      <rect x="434" y="210" width="420" height="142" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="450" y="232" font-size="11" font-weight="800" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">操作系统资源（不是 JVM 内部）</text>
+      <text x="450" y="254" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">⑤ unable to create new native thread</text>
+      <text x="450" y="272" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">⑥ Requested array size exceeds VM limit</text>
+      <text x="450" y="290" font-size="10.4" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">⑦ Map failed / Out of swap space</text>
+      <text x="450" y="308" font-size="10.4" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">⑨ OOMKilled（exit 137，内核杀的）</text>
+      <text x="450" y="330" font-size="9.8" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">⑨ 没有异常、没有 dump，只有 exit code 137</text>
+      <text x="450" y="346" font-size="9.8" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">→ dmesg -T | grep -i "killed process"</text>
+
+      <text x="46" y="308" font-size="9.8" fill="#1f6a4c" font-family="-apple-system,PingFang SC,sans-serif">-XX:MaxDirectMemorySize 未显式设置</text>
+      <text x="46" y="324" font-size="9.8" fill="#1f6a4c" font-family="-apple-system,PingFang SC,sans-serif">时，默认等于最大堆 → 堆 4G 则堆外也</text>
+      <text x="46" y="340" font-size="9.8" fill="#1f6a4c" font-family="-apple-system,PingFang SC,sans-serif">可吃 4G，容器必然先被内核干掉</text>
+
+      <text x="46" y="360" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">JVM 总占用 = 堆 + 元空间 + 直接内存 + 线程栈(N×1MB) + GC 结构 + JIT 代码缓存 + 符号表</text>
+    </svg>
+    <figcaption><b>图 4 · 九种 OOM 的落点</b>：①② 在堆，③ 在元空间，④ 在堆外，⑤⑥⑦⑨ 在操作系统层。<b>⑨ 是容器时代最高频的一种，而它不在 JVM 的报错体系里</b>。</figcaption>
+  </figure>
+
+  <table>
+    <tr><th style="width:4%">#</th><th style="width:32%">报错原文</th><th style="width:34%">真正原因</th><th>第一手命令</th></tr>
+    <tr><td>①</td><td><code>Java heap space</code></td><td>堆里对象太多 / 单个对象太大</td><td><code>jmap -histo:live</code> + dump</td></tr>
+    <tr><td>②</td><td><code>GC overhead limit exceeded</code></td><td>98% 时间在 GC 却回收不到 2%</td><td><code>jstat -gcutil</code>，本质同 ①</td></tr>
+    <tr><td>③</td><td><code>Metaspace</code></td><td>动态生成类太多（CGLIB/Groovy/热部署）</td><td><code>jstat -gc</code> 看 MC/MU</td></tr>
+    <tr><td>④</td><td><code>Direct buffer memory</code></td><td>Netty/NIO 堆外没释放</td><td><code>jcmd VM.native_memory</code></td></tr>
+    <tr><td>⑤</td><td><code>unable to create new native thread</code></td><td>线程数触顶（<code>ulimit -u</code>）</td><td><code>cat /proc/&lt;pid&gt;/status</code></td></tr>
+    <tr><td>⑥</td><td><code>Requested array size exceeds VM limit</code></td><td><code>new byte[Integer.MAX_VALUE]</code></td><td>代码 review</td></tr>
+    <tr><td>⑦</td><td><code>Map failed</code> / <code>Out of swap space</code></td><td>物理内存 + swap 耗尽，mmap 失败</td><td><code>free -m</code>、<code>dmesg</code></td></tr>
+    <tr><td>⑧</td><td><code>StackOverflowError</code></td><td>递归太深 / 栈帧太大（<strong>不是 OOM</strong>）</td><td><code>jstack</code> 看重复帧</td></tr>
+    <tr><td>⑨</td><td>容器 <code>OOMKilled</code>（exit 137）</td><td><strong>被内核杀的，JVM 没机会抛异常</strong></td><td><code>dmesg -T</code>、<code>kubectl describe</code></td></tr>
+  </table>
+
+  <div class="trap"><b>第 ⑨ 种为什么最高频？</b>
+  容器 limit 4G，堆设 3G，看起来留了 1G 余量。但<strong>堆外</strong>（元空间 + 直接内存 + 线程栈 + GC 自身结构 + JIT 代码缓存）轻松吃掉 1.5G
+  → 进程被内核 OOM Killer 干掉 → 你只能看到 <code>exit code 137</code>，<strong>没有异常，也没有 dump</strong>。
+  <br>所以容器里必须显式设 <code>-XX:MaxRAMPercentage=70</code>（而不是 <code>-Xmx</code> 拍脑袋），把 30% 留给堆外。</div>
+
+  <h3>三种拿 dump 的方式</h3>
+  <pre># ① 最推荐：让 JVM 自己吐（OOM 那一刻的现场，最真实）
+-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/dump
+
+# ② 手动（注意 live 会先触发一次 Full GC，堆快满时可能直接失败）
+jmap -dump:live,format=b,file=/data/a.hprof 12345
+jcmd 12345 GC.heap_dump /data/a.hprof          # 等价，推荐用 jcmd
+
+# ③ arthas（在线，不用额外装 jdk 工具）
+heapdump /data/a.hprof</pre>
+
+  <p>三个必须知道的数字：
+  <br>· dump 文件大小 ≈ 堆使用量。<strong>4G 堆 → 4G 文件。</strong>
+  <br>· 打开 dump 需要 <strong>2~4 倍</strong>堆大小的内存（MAT 要把对象图建出来）。4G dump 至少要给 8G。
+  <br>· <code class="inl">jmap -dump:live</code> 的 STW 时间 ≈ 一次 Full GC，<strong>4G 堆约 0.5~2 秒</strong>，高峰期慎用。</p>
+
+  <h3>MAT 三看：从 4G 的堆里找到那一行代码</h3>
+  <p>不要一上来翻 Histogram 找大对象——<strong>大对象往往不是问题，数量多的小对象才是</strong>。
+  正确路径是三看，而且顺序不能换：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 312" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MAT 分析三步法与引用链">
+      <defs>
+        <marker id="ar3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa4b6"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="13.5" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">三看：从「谁大」到「谁持有它」</text>
+
+      <rect x="24" y="46" width="356" height="64" rx="9" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="40" y="68" font-size="11" font-weight="800" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">① Leak Suspects（自动怀疑报告）</text>
+      <text x="40" y="88" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">直接给「某实例占 68%」和引用链</text>
+      <text x="40" y="104" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">80% 的泄漏在这里就结束了</text>
+
+      <rect x="24" y="122" width="316" height="64" rx="9" fill="#f5f3ff" stroke="#d8ccfb"/>
+      <text x="40" y="144" font-size="11" font-weight="800" fill="#7c3aed" font-family="-apple-system,PingFang SC,sans-serif">② Dominator Tree（支配树）</text>
+      <text x="40" y="164" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">按「回收它能释放多少」排序，</text>
+      <text x="40" y="180" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">不是按对象自身大小排序</text>
+
+      <rect x="24" y="198" width="276" height="64" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="40" y="220" font-size="11" font-weight="800" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">③ Path to GC Roots</text>
+      <text x="40" y="240" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">必须勾 exclude weak / soft</text>
+      <text x="40" y="256" font-size="10.2" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">引用链终点 = 那行代码</text>
+
+      <line x1="200" y1="110" x2="200" y2="120" stroke="#9aa4b6" stroke-width="1.4" marker-end="url(#ar3)"/>
+      <line x1="180" y1="186" x2="180" y2="196" stroke="#9aa4b6" stroke-width="1.4" marker-end="url(#ar3)"/>
+
+      <line x1="382" y1="78" x2="424" y2="78" stroke="#9aa4b6" stroke-width="1.4" marker-end="url(#ar3)"/>
+
+      <!-- right: reference chain -->
+      <rect x="430" y="46" width="444" height="216" rx="10" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="448" y="68" font-size="11" font-weight="800" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">引用链长这样（MAT 里从下往上读）</text>
+
+      <rect x="448" y="80" width="196" height="26" rx="6" fill="#f3f5f9" stroke="#dfe4ee"/>
+      <text x="458" y="97" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">Thread http-nio-exec-3</text>
+
+      <rect x="468" y="114" width="196" height="26" rx="6" fill="#f3f5f9" stroke="#dfe4ee"/>
+      <text x="478" y="131" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">ThreadLocalMap threadLocals</text>
+
+      <rect x="488" y="148" width="196" height="26" rx="6" fill="#f3f5f9" stroke="#dfe4ee"/>
+      <text x="498" y="165" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">Entry[17]  value -&gt;</text>
+
+      <rect x="508" y="182" width="196" height="30" rx="6" fill="#fff1f2" stroke="#f0a8b8"/>
+      <text x="518" y="202" font-size="10.4" font-weight="700" fill="#be123c" font-family="ui-monospace,Consolas,monospace">byte[52428800]  50MB</text>
+
+      <line x1="546" y1="106" x2="546" y2="112" stroke="#9aa4b6" stroke-width="1.3" marker-end="url(#ar3)"/>
+      <line x1="566" y1="140" x2="566" y2="146" stroke="#9aa4b6" stroke-width="1.3" marker-end="url(#ar3)"/>
+      <line x1="586" y1="174" x2="586" y2="180" stroke="#9aa4b6" stroke-width="1.3" marker-end="url(#ar3)"/>
+
+      <text x="722" y="98" font-size="10" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">线程池线程</text>
+      <text x="722" y="114" font-size="10" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">几乎永生</text>
+      <text x="722" y="132" font-size="10" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">强引用根</text>
+      <text x="722" y="166" font-size="10" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">弱引用 key</text>
+      <text x="722" y="204" font-size="10" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">结果不是原因</text>
+
+      <text x="448" y="234" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">Histogram 里最大的常是 byte[] / char[] —— 那是症状。</text>
+      <text x="448" y="250" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">支配树 + 引用链才能回答「谁让它活着」。</text>
+
+      <text x="24" y="290" font-size="10.2" fill="#8a5a1a" font-family="-apple-system,PingFang SC,sans-serif">示例：一个 HashMap 自身只有 48 字节，但它支配着 3G 的 value —— 只有支配树能看出来，直方图永远看不到。</text>
+    </svg>
+    <figcaption><b>图 5 · MAT 三看</b>：排查泄漏问的不是「谁大」，而是「<b>谁让它活着</b>」。引用链的终点，就是忘写 <code>remove()</code> 的那一行。</figcaption>
+  </figure>
+
+  <h3>三个经典泄漏，背下来</h3>
+
+  <p><strong>① ThreadLocal 没 remove（最经典）</strong></p>
+  <pre>public class UserContext {
+    private static final ThreadLocal&lt;User&gt; HOLDER = new ThreadLocal&lt;&gt;();
+
+    public static void set(User u) { HOLDER.set(u); }
+    // 忘了 remove()
+}</pre>
+
+  <p>为什么泄漏？看 <code class="inl">ThreadLocalMap.Entry</code> 的定义——<strong>key 弱、value 强</strong>：</p>
+  <pre>static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt; {
+    Object value;                 // &lt;-- 强引用！
+    Entry(ThreadLocal&lt;?&gt; k, Object v) { super(k); value = v; }
+}</pre>
+
+  <figure>
+    <svg viewBox="0 0 900 404" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ThreadLocal 在线程池中泄漏的时序">
+      <defs>
+        <marker id="ar4" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa4b6"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="13.5" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">线程池复用线程 → ThreadLocal 的 value 永远下不来</text>
+
+      <text x="24" y="52" font-size="10.4" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">线程 T1（池化，永不销毁）</text>
+      <line x1="126" y1="60" x2="126" y2="356" stroke="#c9d0dd" stroke-width="2"/>
+
+      <rect x="40" y="70" width="230" height="48" rx="8" fill="#ffffff" stroke="#bcdcf2"/>
+      <text x="54" y="90" font-size="10.4" font-weight="700" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">请求 1：set(UserA 50MB)</text>
+      <text x="54" y="107" font-size="9.8" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">结束：没有 remove()</text>
+
+      <rect x="40" y="136" width="230" height="48" rx="8" fill="#ffffff" stroke="#bcdcf2"/>
+      <text x="54" y="156" font-size="10.4" font-weight="700" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">请求 2：set(UserB 50MB)</text>
+      <text x="54" y="173" font-size="9.8" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">同一个 T1，复用同一个 Map</text>
+
+      <rect x="40" y="202" width="230" height="48" rx="8" fill="#ffffff" stroke="#bcdcf2"/>
+      <text x="54" y="222" font-size="10.4" font-weight="700" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">请求 3：set(UserC 50MB)</text>
+      <text x="54" y="239" font-size="9.8" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">…一直加，从不清理</text>
+
+      <rect x="40" y="268" width="230" height="48" rx="8" fill="#fff1f2" stroke="#f0a8b8"/>
+      <text x="54" y="288" font-size="10.4" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">请求 N：读到了 UserA</text>
+      <text x="54" y="305" font-size="9.8" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">数据串味：越权事故</text>
+
+      <line x1="272" y1="94" x2="404" y2="94" stroke="#9aa4b6" stroke-width="1.3" marker-end="url(#ar4)"/>
+      <line x1="272" y1="160" x2="404" y2="160" stroke="#9aa4b6" stroke-width="1.3" marker-end="url(#ar4)"/>
+      <line x1="272" y1="226" x2="404" y2="226" stroke="#9aa4b6" stroke-width="1.3" marker-end="url(#ar4)"/>
+      <line x1="272" y1="292" x2="404" y2="292" stroke="#9aa4b6" stroke-width="1.3" marker-end="url(#ar4)"/>
+
+      <rect x="408" y="66" width="468" height="252" rx="10" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="424" y="88" font-size="11" font-weight="800" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">T1.threadLocals → ThreadLocalMap</text>
+
+      <rect x="424" y="100" width="436" height="34" rx="6" fill="#f8f9fc" stroke="#dfe4ee"/>
+      <text x="436" y="121" font-size="10" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">Entry[0] key=null(已被GC) value -&gt; UserA 50MB 强引用</text>
+
+      <rect x="424" y="142" width="436" height="34" rx="6" fill="#f8f9fc" stroke="#dfe4ee"/>
+      <text x="436" y="163" font-size="10" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">Entry[1] key=null(已被GC) value -&gt; UserB 50MB 强引用</text>
+
+      <rect x="424" y="184" width="436" height="34" rx="6" fill="#f8f9fc" stroke="#dfe4ee"/>
+      <text x="436" y="205" font-size="10" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">Entry[2] key=null(已被GC) value -&gt; UserC 50MB 强引用</text>
+
+      <rect x="424" y="226" width="436" height="34" rx="6" fill="#fff1f2" stroke="#f0a8b8"/>
+      <text x="436" y="247" font-size="10" fill="#be123c" font-family="ui-monospace,Consolas,monospace">Entry[3] key=存活        value -&gt; UserD 50MB 强引用</text>
+
+      <text x="424" y="282" font-size="10.2" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">key 是弱引用 → ThreadLocal 对象能被回收，key 变 null</text>
+      <text x="424" y="300" font-size="10.2" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">value 是强引用 → 只要 T1 活着，value 一个都下不来</text>
+
+      <text x="40" y="346" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">4 个请求 × 50MB = 200MB 永久驻留。线程池 200 个线程 × 每次请求泄漏 → 三天必挂，正是这个曲线。</text>
+      <text x="40" y="368" font-size="10.2" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">正确写法：try { set(x); ... } finally { HOLDER.remove(); } —— 这不是好习惯，是正确性要求。</text>
+      <text x="40" y="390" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">注意：ThreadLocalMap 的 key 被回收后，get() 也可能命中残留 value（key 为 null 的 Entry 不会自动删）→ 越权。</text>
+    </svg>
+    <figcaption><b>图 6 · ThreadLocal 泄漏时序</b>：泄漏和「数据串味」是同一个 bug 的两面。前者让你 OOM，后者让你进事故复盘会。</figcaption>
+  </figure>
+
+  <p>所以 <code class="inl">ThreadLocal</code> 必须在 <code class="inl">finally</code> 里 <code class="inl">remove()</code>：</p>
+  <pre>try {
+    UserContext.set(user);
+    doBusiness();
+} finally {
+    UserContext.remove();     // 不写这行，线程池就是泄漏放大器
+}</pre>
+
+  <p><strong>② 静态集合只加不减</strong></p>
+  <pre>private static final Map&lt;String, Object&gt; CACHE = new HashMap&lt;&gt;();   // 没有淘汰</pre>
+  <p>局部缓存没上限 = 缓慢泄漏。用 Caffeine / Guava，并且<strong>必须设 maximumSize 和 expireAfter</strong>。
+  「我知道数据量不大」是所有泄漏事故的开场白。</p>
+
+  <p><strong>③ 连接 / 流没关（以及装饰器陷阱）</strong></p>
+  <pre>// 坑：包装流 close 会连带关内层，但多包一层就容易漏
+BufferedReader r = new BufferedReader(new InputStreamReader(url.openStream()));
+// 正确：try-with-resources，原则是「谁打开谁关闭」</pre>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>线程 · 死锁与线程池打满</em></div>
+  <h2>jstack 四个指纹，一眼定性</h2>
+
+  <p>拿到 <code class="inl">jstack</code> 不要逐行读 400 行线程栈，先 <code class="inl">grep</code> 出状态分布——<strong>状态分布直接告诉你去哪个方向</strong>：</p>
+
+  <pre>jstack 12345 &gt; /tmp/t1.log
+grep -c "java.lang.Thread.State: RUNNABLE" /tmp/t1.log
+grep -c "java.lang.Thread.State: BLOCKED"  /tmp/t1.log
+grep -c "java.lang.Thread.State: WAITING"  /tmp/t1.log
+grep -A 20 "Found one Java-level deadlock" /tmp/t1.log</pre>
+
+  <table>
+    <tr><th style="width:38%">指纹</th><th style="width:26%">含义</th><th>结论</th></tr>
+    <tr><td>大量 <code>WAITING</code>，栈在 <code>LinkedBlockingQueue.take</code></td><td>队列空，线程在等任务</td><td><strong>不是打满，是闲置</strong>（池开太大了）</td></tr>
+    <tr><td>大量 <code>WAITING</code>，栈在 <code>HikariPool.getConnection</code></td><td>等数据库连接</td><td>连接池耗尽 → 见 L5</td></tr>
+    <tr><td>大量 <code>RUNNABLE</code>，栈在 <code>socketRead0</code></td><td>在等下游响应</td><td>下游慢 / 超时设太长</td></tr>
+    <tr><td>大量 <code>BLOCKED</code>，同一个 <code>waiting to lock &lt;0x…&gt;</code></td><td>抢同一把锁</td><td>锁竞争 / 死锁前兆</td></tr>
+    <tr><td>全部 <code>WAITING</code> 在 <code>Condition.await</code></td><td>等外部信号</td><td>异步编排卡住（池套池）</td></tr>
+  </table>
+
+  <div class="trap"><b>jstack 最大的坑，值得单独说一遍。</b>
+  线程等网络时停在 <code>socketRead0</code>，等事件时停在 <code>epollWait</code>——这些 <strong>native 阻塞方法在 jstack 里同样显示 RUNNABLE</strong>，
+  因为 JVM 无法窥探 native 代码内部在干什么。
+  所以「RUNNABLE 多」≠「CPU 忙」，必须回头对上 <code>top -Hp</code> 的 <code>%CPU</code>。只说前者，面试官立刻知道你没真查过。</div>
+
+  <h3>死锁：jstack 会直接告诉你</h3>
+
+  <pre>// 两个人互相转账，锁顺序相反 -&gt; 必然死锁
+void transfer(Account from, Account to, int amount) {
+    synchronized (from) {                  // 线程 A 锁住 acc1
+        synchronized (to) {                // 线程 B 锁住 acc2
+            from.minus(amount);            // A 等 acc2，B 等 acc1 -&gt; 成环
+            to.plus(amount);
+        }
+    }
+}</pre>
+
+  <p>JDK 自带死锁检测，jstack 输出里会直接有一段：</p>
+
+  <pre>Found one Java-level deadlock:
+=============================
+"pool-1-thread-2":
+  waiting to lock monitor 0x00007f... (object 0x00000000d6f0a1b8, a com.demo.Account),
+  which is held by "pool-1-thread-1"
+"pool-1-thread-1":
+  waiting to lock monitor 0x00007f... (object 0x00000000d6f0a2c8, a com.demo.Account),
+  which is held by "pool-1-thread-2"</pre>
+
+  <figure>
+    <svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="死锁的环形等待">
+      <defs>
+        <marker id="ar5" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#be123c"/>
+        </marker>
+        <marker id="ar6" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#5d6675"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="13.5" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">死锁 = 四个条件同时成立，工程上只能破「循环等待」</text>
+
+      <rect x="110" y="76" width="180" height="58" rx="9" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="126" y="99" font-size="11" font-weight="800" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">线程 A</text>
+      <text x="126" y="118" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">transfer(acc1 -&gt; acc2)</text>
+
+      <rect x="610" y="76" width="180" height="58" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="626" y="99" font-size="11" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">锁 acc1</text>
+      <text x="626" y="118" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">monitor 0xd6f0a1b8</text>
+
+      <rect x="110" y="212" width="180" height="58" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="126" y="235" font-size="11" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">锁 acc2</text>
+      <text x="126" y="254" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">monitor 0xd6f0a2c8</text>
+
+      <rect x="610" y="212" width="180" height="58" rx="9" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="626" y="235" font-size="11" font-weight="800" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">线程 B</text>
+      <text x="626" y="254" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">transfer(acc2 -&gt; acc1)</text>
+
+      <!-- A holds acc1 -->
+      <line x1="292" y1="98" x2="604" y2="98" stroke="#5d6675" stroke-width="1.6" marker-end="url(#ar6)"/>
+      <text x="330" y="90" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">① 持有 holds</text>
+
+      <!-- A waits acc2 -->
+      <line x1="200" y1="136" x2="200" y2="206" stroke="#be123c" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ar5)"/>
+      <text x="210" y="176" font-size="10.2" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">② 等待 waits</text>
+
+      <!-- B holds acc2 -->
+      <line x1="604" y1="250" x2="296" y2="250" stroke="#5d6675" stroke-width="1.6" marker-end="url(#ar6)"/>
+      <text x="360" y="242" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">③ 持有 holds</text>
+
+      <!-- B waits acc1 -->
+      <line x1="700" y1="206" x2="700" y2="140" stroke="#be123c" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ar5)"/>
+      <text x="710" y="176" font-size="10.2" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">④ 等待 waits</text>
+
+      <!-- center cycle -->
+      <circle cx="450" cy="173" r="42" fill="none" stroke="#f0a8b8" stroke-width="1.4" stroke-dasharray="4 4"/>
+      <text x="450" y="168" font-size="10.4" font-weight="700" fill="#be123c" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif">环形等待</text>
+      <text x="450" y="184" font-size="9.6" fill="#8a3141" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif">wait-for cycle</text>
+
+      <text x="110" y="300" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">四个必要条件：互斥 · 占有且等待 · 不可剥夺 · 循环等待</text>
+      <text x="110" y="318" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">工程上唯一可破的是第四个：全局锁顺序（按 id 排序后加锁）</text>
+    </svg>
+    <figcaption><b>图 7 · 死锁环</b>：前三个条件（互斥、占有且等待、不可剥夺）在业务里几乎无法消除，所以面试要答「<b>破循环等待</b>」，而不是背四个条件就完事。</figcaption>
+  </figure>
+
+  <p>三种工程解法：</p>
+  <pre>// ① 全局锁顺序：按 id 排序后再加锁，永远只有一个方向
+void transfer(Account a, Account b, int amount) {
+    Account first  = a.id &lt; b.id ? a : b;
+    Account second = a.id &lt; b.id ? b : a;
+    synchronized (first) {
+        synchronized (second) { /* 转账 */ }
+    }
+}</pre>
+
+  <p><strong>② <code class="inl">tryLock(timeout)</code></strong>：拿不到就放弃并回滚，避免无限等待（但要处理「部分成功」的回滚语义）。
+  <br><strong>③ 单锁化</strong>：把所有账户操作串行化到一个锁 / 一个队列（牺牲并发换正确性，很多支付系统真这么干）。</p>
+
+  <h3>线程池「打满」的三种真相</h3>
+  <p>面试问「线程池打满了怎么办」，90% 的人答「加大队列」。<strong>这是最危险的操作</strong>——
+  队列变大只是把「<strong>立刻拒绝</strong>」变成「<strong>超时后拒绝</strong>」，故障从秒级拖到分钟级，用户从「看到报错」变成「转圈 30 秒」。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 336" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="线程池三种状态指纹">
+      <text x="24" y="26" font-size="13.5" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">同样是「线程都没空」，三种原因、三种解法</text>
+
+      <!-- col1 -->
+      <rect x="24" y="44" width="276" height="180" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="40" y="66" font-size="11.5" font-weight="800" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">A · 真·堆积</text>
+      <text x="40" y="88" font-size="10" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">队列满了，开始拒绝</text>
+      <rect x="34" y="96" width="256" height="76" rx="6" fill="#ffffff" stroke="#f0c6cf"/>
+      <text x="42" y="114" font-size="9.6" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">queue = 1000 / 1000</text>
+      <text x="42" y="130" font-size="9.6" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">active = 200 / 200</text>
+      <text x="42" y="146" font-size="9.6" fill="#be123c" font-family="ui-monospace,Consolas,monospace">RejectedExecution x 1532</text>
+      <text x="42" y="162" font-size="9.6" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">线程栈都在「跑业务」</text>
+      <text x="40" y="192" font-size="10.2" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">解：限流上游 + 扩容 + 降级</text>
+      <text x="40" y="210" font-size="10.2" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">加队列 = 把拒绝变超时，更糟</text>
+
+      <!-- col2 -->
+      <rect x="312" y="44" width="276" height="180" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="328" y="66" font-size="11.5" font-weight="800" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">B · 假·闲置</text>
+      <text x="328" y="88" font-size="10" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">池开太大，大部分在睡觉</text>
+      <rect x="322" y="96" width="256" height="76" rx="6" fill="#ffffff" stroke="#b7e3ca"/>
+      <text x="330" y="114" font-size="9.6" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">queue = 0 / 1000</text>
+      <text x="330" y="130" font-size="9.6" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">active = 3 / 200</text>
+      <text x="330" y="146" font-size="9.6" fill="#047857" font-family="ui-monospace,Consolas,monospace">at LinkedBlockingQueue.take</text>
+      <text x="330" y="162" font-size="9.6" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">197 个线程 WAITING</text>
+      <text x="328" y="192" font-size="10.2" fill="#1f6a4c" font-family="-apple-system,PingFang SC,sans-serif">解：缩小池，省 1MB × N 栈内存</text>
+      <text x="328" y="210" font-size="10.2" fill="#1f6a4c" font-family="-apple-system,PingFang SC,sans-serif">还省上下文切换</text>
+
+      <!-- col3 -->
+      <rect x="600" y="44" width="276" height="180" rx="10" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="616" y="66" font-size="11.5" font-weight="800" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">C · 卡死</text>
+      <text x="616" y="88" font-size="10" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">线程被 IO 占住，动不了</text>
+      <rect x="610" y="96" width="256" height="76" rx="6" fill="#ffffff" stroke="#f4dcc2"/>
+      <text x="618" y="114" font-size="9.6" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">queue = 800 / 1000</text>
+      <text x="618" y="130" font-size="9.6" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">active = 200 / 200</text>
+      <text x="618" y="146" font-size="9.6" fill="#b45309" font-family="ui-monospace,Consolas,monospace">at socketRead0 / getConnection</text>
+      <text x="618" y="162" font-size="9.6" fill="#5d6675" font-family="ui-monospace,Consolas,monospace">RT 全部 = 超时时间</text>
+      <text x="616" y="192" font-size="10.2" fill="#8a5a1a" font-family="-apple-system,PingFang SC,sans-serif">解：查下游 + 缩超时 + 隔离舱</text>
+      <text x="616" y="210" font-size="10.2" fill="#8a5a1a" font-family="-apple-system,PingFang SC,sans-serif">线程池按依赖拆分</text>
+
+      <rect x="24" y="240" width="852" height="80" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="262" font-size="10.8" font-weight="800" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">线程数量的账：</text>
+      <text x="42" y="282" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">默认 -Xss1m → 200 线程 = 200MB 栈内存（不在堆里，jmap 看不到）</text>
+      <text x="42" y="300" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">ulimit -u = 1024 → 第 1025 个线程直接 OOM: unable to create new native thread</text>
+      <text x="440" y="282" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">CPU 密集 N+1 ｜ IO 密集 N×(1+等待/计算)</text>
+      <text x="440" y="300" font-size="10.2" fill="#8a5a1a" font-family="-apple-system,PingFang SC,sans-serif">上限还被下游连接池卡死：池 10 个，200 线程全在排队</text>
+    </svg>
+    <figcaption><b>图 8 · 线程池三种真相</b>：先分清 A/B/C，再决定「扩还是缩」。<b>B 类（假闲置）是最容易被误判成「打满」的</b>——线程多不等于忙。</figcaption>
+  </figure>
+
+  <div class="warn"><b>线程池大小的经验公式（Brian Goetz）：</b>
+  <br>CPU 密集型 = <code>N + 1</code>；IO 密集型 = <code>N × (1 + 等待时间 / 计算时间)</code>。
+  <br>8 核、单次请求 200ms 其中 190ms 在等 DB → <code>8 × (1 + 190/10) = 152</code> 个线程。
+  <br>但这是<strong>理论上限</strong>，实际会被下游连接池卡住——<strong>线程池 200 而连接池 10，多出来的 190 个线程全在 <code>getConnection</code> 上排队，等于白开</strong>。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>arthas · 不重启的线上手术刀</em></div>
+  <h2>六个命令覆盖 90% 场景</h2>
+
+  <p>线上不能加日志、不能重启，arthas 是唯一能在<strong>运行中的 JVM 里</strong>看参数、看耗时、看返回值的工具。
+  它的原理是<strong>字节码增强</strong>（把方法体改掉插桩），所以它能看到日志永远看不到的东西——比如「这次调用到底花在哪一行」。</p>
+
+  <table>
+    <tr><th style="width:16%">命令</th><th style="width:34%">作用</th><th>典型用法</th></tr>
+    <tr><td><code>dashboard</code></td><td>全局概览（线程/内存/GC/运行时）</td><td>进来先看一眼</td></tr>
+    <tr><td><code>thread -n 3</code></td><td>CPU 最高的 3 个线程 + 栈</td><td><strong>替代 top -Hp + jstack 两步</strong></td></tr>
+    <tr><td><code>thread -b</code></td><td>找出「阻塞其他线程」的那个线程</td><td>死锁 / 锁竞争神器</td></tr>
+    <tr><td><code>trace</code></td><td>方法内部调用链路耗时</td><td><code>trace com.x.Svc m -n 5 '#cost&gt;100'</code></td></tr>
+    <tr><td><code>watch</code></td><td>看入参/返回值/异常</td><td><code>watch com.x.Svc m '{params,returnObj}' -x 2</code></td></tr>
+    <tr><td><code>jad</code></td><td>反编译线上类</td><td><strong>确认线上跑的是哪一版代码</strong></td></tr>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="trace 输出把慢请求拆解成耗时占比">
+      <text x="24" y="26" font-size="13.5" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">trace 输出：把一次 1284ms 的请求按比例画出来</text>
+      <text x="24" y="46" font-size="10" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">横轴 = 耗时（总长 1284ms → 700px，1ms ≈ 0.55px）</text>
+
+      <!-- axis -->
+      <line x1="140" y1="272" x2="852" y2="272" stroke="#dfe4ee" stroke-width="1"/>
+      <text x="140" y="288" font-size="9.6" fill="#9aa2b1" font-family="-apple-system,PingFang SC,sans-serif">0</text>
+      <text x="490" y="288" font-size="9.6" fill="#9aa2b1" font-family="-apple-system,PingFang SC,sans-serif">642ms</text>
+      <text x="828" y="288" font-size="9.6" fill="#9aa2b1" font-family="-apple-system,PingFang SC,sans-serif">1284ms</text>
+
+      <!-- submit full -->
+      <text x="24" y="76" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">submit()</text>
+      <rect x="140" y="62" width="700" height="20" rx="4" fill="#e8eef6" stroke="#c9d0dd"/>
+      <text x="722" y="76" font-size="9.6" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">1284ms</text>
+
+      <!-- validate / build tiny -->
+      <text x="24" y="112" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">validate()</text>
+      <rect x="140" y="98" width="4" height="20" rx="2" fill="#047857"/>
+      <text x="152" y="112" font-size="9.6" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">0.32ms（看不见，正常）</text>
+
+      <text x="24" y="148" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">buildOrder()</text>
+      <rect x="140" y="134" width="4" height="20" rx="2" fill="#047857"/>
+      <text x="152" y="148" font-size="9.6" fill="#047857" font-family="-apple-system,PingFang SC,sans-serif">0.18ms</text>
+
+      <!-- checkStock -->
+      <text x="24" y="184" font-size="10.2" font-weight="700" fill="#be123c" font-family="ui-monospace,Consolas,monospace">checkStock()</text>
+      <rect x="141" y="170" width="676" height="20" rx="4" fill="#fde8ed" stroke="#f0a8b8"/>
+      <text x="700" y="184" font-size="9.6" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">1241ms</text>
+
+      <!-- invClient -->
+      <text x="44" y="220" font-size="10" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">└ InvClient.query()</text>
+      <rect x="142" y="206" width="674" height="20" rx="4" fill="#fbd0da" stroke="#f0a8b8"/>
+      <text x="660" y="220" font-size="9.6" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">1240ms ← 96.6%</text>
+
+      <!-- save -->
+      <text x="24" y="256" font-size="10.2" fill="#3f4756" font-family="ui-monospace,Consolas,monospace">save()</text>
+      <rect x="816" y="242" width="24" height="20" rx="3" fill="#e8eef6" stroke="#c9d0dd"/>
+      <text x="756" y="236" font-size="9.6" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">42.6ms</text>
+
+      <text x="24" y="312" font-size="10.2" fill="#5d6675" font-family="-apple-system,PingFang SC,sans-serif">日志只能告诉你「慢」，trace 能告诉你「慢在哪一层」——这次 96.6% 的时间在一次 HTTP 调用上，跟数据库毫无关系。</text>
+    </svg>
+    <figcaption><b>图 9 · trace 耗时分解</b>：一条 <code>trace</code> 就能把「接口慢」拆成「哪一层慢」，这是加日志永远做不到的——因为你不知道要加在哪。</figcaption>
+  </figure>
+
+  <p>三个参数必须写全，否则<strong>会给生产制造新故障</strong>：</p>
+  <pre>trace com.demo.order.OrderService submit -n 5 '#cost &gt; 100'
+
+#  -n 5        只采样 5 次。不写会把每次调用都增强一遍，高 QPS 下直接打满 CPU
+#  '#cost>100' 只打印耗时超过 100ms 的。不写会刷屏，滚得你什么都看不见
+#  全限定类名   接口和实现类要分清，增强接口方法常常不生效，写实现类</pre>
+
+  <p><strong>watch：抓那个「偶发」的入参。</strong></p>
+  <pre># 只在这个用户的请求上停住，看入参、返回值和异常
+watch com.demo.order.OrderService submit '{params, returnObj, throwExp}' \
+      'params[0].userId == 10086' -x 2 -n 5</pre>
+
+  <div class="warn"><b><code>-x 2</code> 是展开层级</b>（默认 1，嵌套对象只显示 <code>{...}</code>）。
+  <code>throwExp</code> 一定要写进表达式——否则<strong>异常路径不打出来</strong>，你会误以为「方法没被调用」，然后跑去查上游，白折腾一晚上。</div>
+
+  <p><strong>一个真实坑：改了代码、发了包、行为却没变。</strong>
+  用 <code class="inl">jad</code> 反编译线上类，和源码对比——你会看到方法体还是旧版本。
+  <code class="inl">Metaspace</code> OOM 的常见来源正是<strong>热部署不断重新加载类</strong>，旧 ClassLoader 不释放。</p>
+
+  <pre>jad com.demo.order.OrderService     # 看线上到底跑的哪一版
+stop                                # 退出时务必 stop，别留着字节码增强</pre>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b2">L5</span><em>连接池 · 最容易误判的一类</em></div>
+  <h2>慢 SQL 还是连接池耗尽？</h2>
+
+  <p>现象完全一样：<strong>接口超时，日志里一堆 timeout</strong>。但根因和处理方式<strong>完全相反</strong>——一个要加索引，一个要改事务边界。判错方向，越治越糟。</p>
+
+  <h3>先用一道算术题定位</h3>
+  <p><strong>Little's Law</strong>（排队论，比任何「经验值」都准）：</p>
+  <pre>同时占用连接数 L = QPS(λ) × 平均持有时间 W
+
+200 QPS，每请求持连接 200ms
+L = 200 × 0.2 = 40 个连接
+HikariCP maximumPoolSize 默认 10
+-&gt; 40 个并发需求挤 10 个坑 -&gt; 排队
+-&gt; 排到第 30 秒还没轮到 -&gt; connectionTimeout 抛异常</pre>
+
+  <p>看到 <code class="inl">HikariPool-1 - Connection is not available, request timed out after 30000ms</code>，
+  <strong>不用怀疑，就是池不够或有人不还</strong>。这一句日志本身就是结论。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 384" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="接口超时的分诊决策树">
+      <defs>
+        <marker id="ar7" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa4b6"/>
+        </marker>
+      </defs>
+      <text x="24" y="26" font-size="13.5" font-weight="700" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">一个动作定生死：同时看应用线程栈 + 数据库 processlist</text>
+
+      <rect x="350" y="42" width="200" height="46" rx="9" fill="#f3f5f9" stroke="#c9d0dd"/>
+      <text x="450" y="62" font-size="11.5" font-weight="800" fill="#171a21" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif">接口超时 / RT 飙升</text>
+      <text x="450" y="79" font-size="9.8" fill="#5d6675" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif">先 jstack，看栈顶停在哪</text>
+
+      <line x1="410" y1="88" x2="300" y2="110" stroke="#9aa4b6" stroke-width="1.4" marker-end="url(#ar7)"/>
+      <line x1="490" y1="88" x2="618" y2="110" stroke="#9aa4b6" stroke-width="1.4" marker-end="url(#ar7)"/>
+
+      <rect x="190" y="114" width="212" height="46" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="296" y="134" font-size="10.8" font-weight="700" fill="#be123c" text-anchor="middle" font-family="ui-monospace,Consolas,monospace">at HikariPool.getConnection</text>
+      <text x="296" y="150" font-size="9.8" fill="#8a3141" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif">在等连接 → 是数据库侧的问题</text>
+
+      <rect x="520" y="114" width="212" height="46" rx="9" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="626" y="134" font-size="10.8" font-weight="700" fill="#0369a1" text-anchor="middle" font-family="ui-monospace,Consolas,monospace">at socketRead0</text>
+      <text x="626" y="150" font-size="9.8" fill="#0b4f75" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif">没有 getConnection → 下游慢</text>
+
+      <line x1="250" y1="160" x2="160" y2="192" stroke="#9aa4b6" stroke-width="1.4" marker-end="url(#ar7)"/>
+      <line x1="348" y1="160" x2="392" y2="192" stroke="#9aa4b6" stroke-width="1.4" marker-end="url(#ar7)"/>
+      <line x1="626" y1="160" x2="640" y2="192" stroke="#9aa4b6" stroke-width="1.4" marker-end="url(#ar7)"/>
+
+      <rect x="30" y="196" width="234" height="58" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="46" y="216" font-size="10.8" font-weight="700" fill="#b45309" font-family="-apple-system,PingFang SC,sans-serif">① 连接没还</text>
+      <text x="46" y="234" font-size="9.8" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">DB 连接少、CPU 低、慢日志空</text>
+      <text x="46" y="248" font-size="9.8" fill="#8a5a1a" font-family="-apple-system,PingFang SC,sans-serif">→ 事务里调 HTTP / 发 MQ</text>
+
+      <rect x="276" y="196" width="234" height="58" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="292" y="216" font-size="10.8" font-weight="700" fill="#be123c" font-family="-apple-system,PingFang SC,sans-serif">② 慢 SQL</text>
+      <text x="292" y="234" font-size="9.8" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">DB active 高、CPU 高、慢日志有</text>
+      <text x="292" y="248" font-size="9.8" fill="#8a3141" font-family="-apple-system,PingFang SC,sans-serif">→ 索引 / 大表 / 锁等待 / 回表</text>
+
+      <rect x="522" y="196" width="240" height="58" rx="9" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="538" y="216" font-size="10.8" font-weight="700" fill="#0369a1" font-family="-apple-system,PingFang SC,sans-serif">③ 下游慢 / 超时太长</text>
+      <text x="538" y="234" font-size="9.8" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">跟 DB 无关</text>
+      <text x="538" y="248" font-size="9.8" fill="#0b4f75" font-family="-apple-system,PingFang SC,sans-serif">→ 查 RPC 超时、加熔断</text>
+
+      <rect x="24" y="276" width="852" height="90" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="298" font-size="10.8" font-weight="800" fill="#171a21" font-family="-apple-system,PingFang SC,sans-serif">为什么必须两边一起看：</text>
+      <text x="42" y="318" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">只看应用侧 → 看到「等连接」就以为该调大池子，但如果是「不还」，调多大都会被吃光；</text>
+      <text x="42" y="336" font-size="10.2" fill="#3f4756" font-family="-apple-system,PingFang SC,sans-serif">只看数据库侧 → 看到「连接数只有 10 个、CPU 很低」就断定不是 DB 的锅，但池上限本来就是 10。</text>
+      <text x="42" y="356" font-size="10.2" fill="#8a5a1a" font-family="-apple-system,PingFang SC,sans-serif">关键判据：池已满 + DB 却很闲 = 有人拿着连接不干活（这不是容量问题，是代码问题）。</text>
+    </svg>
+    <figcaption><b>图 10 · 超时分诊树</b>：这条链只要走对第一步（看栈顶是 <code>getConnection</code> 还是 <code>socketRead0</code>），后面就不会错。</figcaption>
+  </figure>
+
+  <h3>「连接没还」的五种写法（每一种都见过线上事故）</h3>
+
+  <p><strong>① <code class="inl">@Transactional</code> 里调外部接口</strong>——雪崩头号写法：</p>
+  <pre>@Transactional
+public void createOrder(Order o) {
+    orderMapper.insert(o);              // 拿到连接，事务开始
+    smsClient.send(o.getPhone());       // 外部 HTTP，可能 3 秒
+    inventoryClient.lock(o.getSku());   // 又一个远程调用
+}                                       // 全部做完才提交、才还连接</pre>
+
+  <p>一个请求持连接 3 秒，200 QPS 需要 <strong>600 个连接</strong>，池只有 10 个 → 立刻雪崩。
+  <strong>正确做法：事务内只做 DB 操作，远程调用放到事务外</strong>（或事务提交后异步做）。
+  这条如果不改，加多少连接都只是推迟崩盘时间。</p>
+
+  <p><strong>② 流式查询没关 ResultSet</strong>，或直接用 <code class="inl">selectList</code> 查百万行；
+  <br><strong>③ 手写 JDBC 忘了 <code class="inl">close()</code></strong>（<code class="inl">try-with-resources</code> 能解决）；
+  <br><strong>④ 嵌套事务 <code class="inl">REQUIRES_NEW</code> 在同线程开了第二个连接</strong>，内层不提交，外层一直等（两个连接互相占着）；
+  <br><strong>⑤ <code class="inl">leakDetectionThreshold</code> 没开</strong>，泄漏了你也不知道。</p>
+
+  <pre># HikariCP 生产必备三项
+maximum-pool-size: 20              # 按 Little's Law 算，别拍脑袋
+connection-timeout: 3000           # 默认 30s 太长，故障时线程全挂死在这儿
+leak-detection-threshold: 20000    # 借出 20s 未归还就打印堆栈（排泄漏神器）</pre>
+
+  <div class="good"><b>一个反直觉的结论：</b>池子不是越大越好。
+  连接数超过 DB 的并行处理能力（一般 = CPU 核数 × 2~4）后，再加连接只会让 DB 在<strong>线程切换和锁竞争</strong>上消耗更多，
+  TPS 反而下降。所以「连接池打满」的正解通常是<strong>缩短持有时间</strong>（把远程调用移出事务），而不是把池子调大。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L6</span><em>速查 · 一张纸的命令清单</em></div>
+  <h2>拷到备忘录里，出事直接用</h2>
+
+  <pre># ── CPU ──────────────────────────────────────────────
+top -Hp &lt;pid&gt;                        # 线程级 CPU
+printf '%x\n' &lt;tid&gt;                  # 十 -&gt; 十六进制
+jstack &lt;pid&gt; | grep -A 30 'nid=0x&lt;hex&gt;'
+
+# ── 内存 ─────────────────────────────────────────────
+jstat -gcutil &lt;pid&gt; 1000             # GC 使用率与次数
+jmap -histo:live &lt;pid&gt; | head -30    # 对象直方图（会触发 FGC）
+jcmd &lt;pid&gt; GC.heap_dump /data/a.hprof
+jcmd &lt;pid&gt; VM.native_memory summary  # 需 -XX:NativeMemoryTracking=summary
+
+# ── 线程 ─────────────────────────────────────────────
+jstack &lt;pid&gt; &gt; /tmp/t1.log
+grep -c BLOCKED /tmp/t1.log
+grep -A 20 "Found one Java-level deadlock" /tmp/t1.log
+cat /proc/&lt;pid&gt;/status | grep Threads
+
+# ── 系统 ─────────────────────────────────────────────
+vmstat 1 5                           # cs / sy / wa 三列
+iostat -x 1                          # %util 接近 100 = IO 打满
+ss -s                                # socket 总数与状态
+dmesg -T | grep -i "killed process"  # 是否被内核杀的
+ulimit -u                            # 进程/线程数上限
+
+# ── 数据库 ───────────────────────────────────────────
+show processlist;                    # 谁在跑、跑了多久
+show engine innodb status\G          # 锁等待、最近一次死锁
+show variables like 'slow_query%';   # 慢日志开关
+
+# ── arthas ───────────────────────────────────────────
+dashboard
+thread -n 3
+thread -b
+trace com.x.Svc method -n 5 '#cost &gt; 100'
+watch com.x.Svc method '{params,returnObj,throwExp}' 'params[0].id==1' -x 2
+jad com.x.Svc
+heapdump /data/a.hprof
+stop                                 # 退出务必 stop，别留着增强</pre>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L7</span><em>高频问答 · 14 条</em></div>
+  <h2>面试官真正在问什么</h2>
+
+  <div class="qa"><div class="qq">线上 CPU 100%，你的排查步骤？</div>
+  <p><code class="inl">top -Hp</code> 找最烧 CPU 的线程 → <code class="inl">printf %x</code> 转十六进制 → <code class="inl">jstack | grep nid=0x</code> 定位栈。
+  然后按栈定性：业务代码循环（死循环）、<code class="inl">Pattern</code>（正则回溯）、<code class="inl">Cipher</code>（加解密）、GC 线程（内存问题）、大量 BLOCKED（锁竞争）。
+  加分项：<strong>先看是不是 GC 线程，因为方向完全相反</strong>。</p></div>
+
+  <div class="qa"><div class="qq">jstack 里 RUNNABLE 很多，是不是 CPU 打满了？</div>
+  <p>不一定。<code class="inl">socketRead0</code> / <code class="inl">epollWait</code> 这些 native 阻塞方法在 jstack 里也显示 RUNNABLE。
+  必须配合 <code class="inl">top -Hp</code> 的 <code class="inl">%CPU</code>——<strong>线程状态和 CPU 占用是两回事</strong>。只答前者，说明没真查过。</p></div>
+
+  <div class="qa"><div class="qq">OOM 有哪几种？</div>
+  <p>堆（<code>Java heap space</code> / <code>GC overhead</code>）、元空间（<code>Metaspace</code>）、堆外（<code>Direct buffer</code>）、
+  资源（<code>new native thread</code> / <code>array size</code> / <code>Map failed</code>）、以及<strong>被内核杀的 OOMKilled（exit 137，没有异常也没有 dump）</strong>。
+  能主动说出最后一种是加分项。</p></div>
+
+  <div class="qa"><div class="qq">容器里为什么老是被 OOMKilled，堆明明没满？</div>
+  <p>JVM 总内存 = 堆 + 元空间 + 直接内存 + 线程栈 + GC 结构 + JIT 代码缓存。堆设 3G 而 limit 是 4G 时，堆外轻松超 1G。
+  解药：<code class="inl">-XX:MaxRAMPercentage=70</code>，剩余 30% 留给堆外。</p></div>
+
+  <div class="qa"><div class="qq">dump 怎么拿？拿不到怎么办？</div>
+  <p>首选 <code class="inl">-XX:+HeapDumpOnOutOfMemoryError</code>（OOM 瞬间自动吐）；在线用 <code class="inl">jcmd GC.heap_dump</code> 或 arthas <code class="inl">heapdump</code>。
+  拿不到的情况：被内核 kill（无 dump）、磁盘不够、dump 到 tmpfs 把内存打爆。
+  备选：<code class="inl">jmap -histo:live</code> 看类维度分布（轻量，只有统计没有对象图）。</p></div>
+
+  <div class="qa"><div class="qq">MAT 里怎么快速找到泄漏点？</div>
+  <p>Leak Suspects → Dominator Tree（按「回收能释放多少」排序）→ 选中对象 → Path to GC Roots（<strong>exclude 软/弱引用</strong>）。
+  引用链的终点就是持有它的那个字段，那就是代码位置。</p></div>
+
+  <div class="qa"><div class="qq">ThreadLocal 为什么会内存泄漏？</div>
+  <p>Entry 的 key 是弱引用（ThreadLocal 本身可回收），value 是强引用；线程不死（线程池），value 就永远挂在
+  <code class="inl">Thread.threadLocals</code> 上。而且 key 变 null 后，下一个请求复用该线程时会<strong>读到别人的数据</strong>。
+  所以必须 <code class="inl">try/finally remove()</code>。</p></div>
+
+  <div class="qa"><div class="qq">怎么排查死锁？</div>
+  <p><code class="inl">jstack</code> 会直接打印 <code class="inl">Found one Java-level deadlock</code> 和环形等待的两个线程。
+  没有自动检测时（例如部分 <code class="inl">ReentrantLock</code> 场景），看「waiting to lock」的对象地址是否互指。
+  预防：<strong>全局锁顺序</strong>（按 id 排序）、<code class="inl">tryLock</code> 带超时、减少锁粒度。</p></div>
+
+  <div class="qa"><div class="qq">线程池打满了怎么处理？</div>
+  <p>先分清：A 真堆积（队列满、有拒绝）；B 假闲置（栈在 <code class="inl">take</code>、pool 远大于 active）；C 卡死（全在 <code class="inl">socketRead</code> / <code class="inl">getConnection</code>）。
+  A → 限流上游 + 扩容 + 降级，<strong>不要盲目加大队列</strong>；C → 查下游 + 缩短超时 + 线程池隔离；B → 缩小池，省 1MB × N 的栈内存。</p></div>
+
+  <div class="qa"><div class="qq">线程池大小怎么定？</div>
+  <p>CPU 密集 <code class="inl">N+1</code>；IO 密集 <code class="inl">N × (1 + 等待/计算)</code>。
+  但<strong>上限由下游连接池决定</strong>——线程池 200 而连接池 10，多出来的 190 个线程全在 <code class="inl">getConnection</code> 上排队，等于白开。</p></div>
+
+  <div class="qa"><div class="qq">接口超时，怎么区分慢 SQL 和连接池耗尽？</div>
+  <p>看应用线程栈：栈里是 <code class="inl">HikariPool.getConnection</code> → 连接池问题；是 <code class="inl">socketRead0</code> 且没有 getConnection → 下游问题。
+  再看 DB 侧：<code class="inl">processlist</code> 连接少 + DB 空闲 → <strong>连接没还</strong>；<code class="inl">active</code> 高 + 慢日志有记录 → <strong>慢 SQL</strong>。
+  <strong>两边一起看</strong>才不会误判。</p></div>
+
+  <div class="qa"><div class="qq">为什么 <code>@Transactional</code> 里调 HTTP 会导致雪崩？</div>
+  <p>事务开启即占用连接，直到方法返回才提交归还。一次 HTTP 3 秒 = 这个连接 3 秒不可用。
+  200 QPS × 3s = 600 个连接需求，池 10 个 → 排队 30s 超时 → 线程池被打满 → 整个服务不可用。
+  解药：事务只包 DB 操作，远程调用移出事务。</p></div>
+
+  <div class="qa"><div class="qq">arthas 的 trace 会不会影响性能？</div>
+  <p>会。它做的是<strong>字节码增强</strong>，每次命中方法都要走增强逻辑。
+  生产必须 <code class="inl">-n</code>（采样次数）+ <code class="inl">#cost</code>（耗时过滤）。用完 <code class="inl">stop</code> 或 <code class="inl">reset</code> 撤销增强。
+  超高 QPS 接口用 <code class="inl">watch</code> 加条件比 <code class="inl">trace</code> 更安全。</p></div>
+
+  <div class="qa"><div class="qq">怎么证明「不是我们的问题」？</div>
+  <p>用数据把链路切开：本服务 RT（trace）、下游 RT（<code class="inl">socketRead0</code> 耗时）、连接池指标、DB 慢日志、出口 QPS。
+  <strong>只说自己没问题不算证据</strong>，能指出「在我们这里耗时 3ms，调用下游耗时 1200ms」才算。
+  顺手检查重试放大：3 层 × 3 次 = 27 倍，可能真是你把下游打挂的。</p></div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L8</span><em>模拟面试 · 3 道</em></div>
+  <h2>场景题：考的是顺序，不是知识量</h2>
+
+  <div class="q">
+    <h4><span>题一</span>凌晨 3 点告警「核心接口 CPU 100%、全部超时」。你只有一台跳板机和 5 分钟，怎么办？</h4>
+    <div class="lab">考察点</div>
+    <p>止血与取证的优先级 + 是否知道「重启会销毁现场」+ 命令是否真的敲过。</p>
+    <div class="lab g">参考答案骨架</div>
+    <p><strong>1. 第一分钟判断影响面，不是先看 CPU。</strong><code>curl</code> 一下接口、看监控大盘的 QPS 与错误率。全挂还是部分挂？一台还是一批？
+    <strong>这决定你是「摘这一台」还是「回滚整个版本」</strong>。</p>
+    <p><strong>2. 第二步止血（1 分钟内可完成）。</strong>只有一台异常 → 从负载均衡摘掉，业务立刻恢复，再从容排查；全集群 → 先限流（网关降到 30%），保住核心链路，避免雪崩到 DB。</p>
+    <p><strong>3. 第三步并行取证（必须只读）。</strong></p>
+    <pre>top -Hp &lt;pid&gt;                    # 找线程
+printf '%x\n' &lt;tid&gt;
+jstack &lt;pid&gt; &gt; /tmp/t1.log
+jstack &lt;pid&gt; &gt; /tmp/t2.log       # 隔 5 秒再打一次
+jstat -gcutil &lt;pid&gt; 1000 5</pre>
+    <p><strong>打两次 jstack 是关键技巧</strong>：对比两次之间哪个线程的位置没变 → 那就是卡住的地方（死循环 / 阻塞点）。</p>
+    <p><strong>4. 按栈定性。</strong>GC 线程高 → 转内存；业务代码 → 死循环/正则；大量 BLOCKED → 锁。
+    <strong>没有 dump / jstack 之前不要重启。</strong></p>
+    <p><strong>5. 根因与修复。</strong>判断是「代码缺陷」还是「容量不足」——前者改代码 + 回归，后者扩容 + 加限流。</p>
+    <div class="lab r">常见坑</div>
+    <p><code>top</code> 看到 100% 就重启；或者盯着 400 行线程栈从头读，5 分钟过去还没定位。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题二</span>服务运行 3 天必 OOM，重启就恢复。给你一份 4G 的 dump，怎么定位到那一行代码？</h4>
+    <div class="lab">考察点</div>
+    <p>是否真的打开过 MAT + 是否理解「引用链」+ 是否知道常见泄漏模式。</p>
+    <div class="lab g">参考答案骨架</div>
+    <p><strong>1. 先看 OOM 报错类型</strong>：<code class="inl">Java heap space</code> → 堆内泄漏；<code class="inl">Metaspace</code> → 类加载泄漏；<code class="inl">Direct buffer</code> → 堆外。
+    「3 天必挂」这个时间特征说明是<strong>缓慢累积型</strong>，不是突发流量尖峰。</p>
+    <p><strong>2. MAT 三看</strong>（说清顺序，别说「我一般随便点」）：
+    ① Leak Suspects 直接给「某实例占 68%」；② Dominator Tree 按「回收它能释放多少」排序，<strong>不是按对象大小</strong>；
+    ③ Path to GC Roots，<strong>必须 exclude 弱/软引用</strong>，否则会看到一堆无关的 <code>WeakReference</code> 干扰。</p>
+    <p><strong>3. 三种最可能的模式（按概率排）</strong>：ThreadLocal 没 remove（线程池线程永生）；静态 Map 无上限无过期；监听器/连接/流没关。</p>
+    <p><strong>4. 从 dump 到代码行</strong>：找到持有者对象 → 看它是哪个类的哪个字段 → 判断「这个对象本来该活多久」→ 找出「谁忘了清理」。
+    典型答案形态：「<code>OrderService</code> 的静态 <code>Map&lt;String, OrderContext&gt;</code> 堆了 120 万个 <code>OrderContext</code>，因为下单成功后没有 remove」。</p>
+    <p><strong>5. 验证与修复</strong>：本地用同样流量跑 3 小时复现曲线 → 改完后压测 24 小时，看堆曲线是否<strong>走平</strong>（不是「涨得慢」，是要平）。</p>
+    <div class="lab r">常见坑</div>
+    <p>只看 Histogram 里最大的对象（往往是 <code>byte[]</code> / <code>char[]</code>，那是结果不是原因）；忘了 exclude 弱引用，被 <code>ThreadLocalMap</code> 的 null key 搞晕。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题三</span>下游团队投诉「你们把我们打挂了」，但你确信自己 QPS 没涨。怎么自证并定位？</h4>
+    <div class="lab">考察点</div>
+    <p>有没有「流量放大」概念 + 会不会用数据切链路 + 是否理解重试与超时的放大效应。</p>
+    <div class="lab g">参考答案骨架</div>
+    <p><strong>1. 先别急着否认，先算放大量。</strong>出口 QPS 才是证据，不是入口 QPS。
+    常见放大源：<strong>Feign/Ribbon 自动重试 × 网关重试 × 业务手动重试 = 3×3×3 = 27 倍</strong>。
+    入口 200 QPS → 出口 5400 QPS，你「没涨」，但下游被打爆了。</p>
+    <p><strong>2. 再查连接层放大。</strong>连接数可能比 QPS 更致命：短连接每次 TCP 握手 + TLS，SYN 队列打满看起来就像 DDoS。
+    检查 <code class="inl">TIME_WAIT</code> 数量、<code class="inl">CLOSE_WAIT</code>（后者说明对端关了你没关，是 bug）。</p>
+    <p><strong>3. 三个自证工具</strong>：全链路 Trace（你的 span 时长 vs 下游 span 时长）；出口 QPS 曲线 vs 入口 QPS 曲线（两条线重合 = 没放大）；
+    下游错误码分布（<code>429/503</code> = 限流过载，<code>connection reset</code> = 连接层）。</p>
+    <p><strong>4. 一种「无辜但确实是你」</strong>：慢请求 → 超时 → 重试 → 重试又慢 → 更多重试。<strong>你没增加流量，但你的超时设置制造了流量。</strong>
+    修复：缩短超时（3s → 800ms）、限制重试次数（最多 1 次）、只重试幂等接口、加重试预算（retry budget）。</p>
+    <p><strong>5. 收口</strong>：给出「入口 200 QPS，出口 5400 QPS，放大 27 倍，原因是三层重试叠加」这样的数字结论，而不是「我们真的没干什么」。</p>
+    <div class="lab r">常见坑</div>
+    <p>只拿入口监控截图自证；或只解释「我们代码没改」，而不去算出口流量。</p>
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">收口</span><em>12 条，背完能应付 90% 的排查追问</em></div>
+  <h2>本期结论</h2>
+
+  <ul class="check">
+    <li><b>① 顺序第一。</b>先止血、再取证、最后根因；取证必须只读——重启会销毁 jstack 里唯一的证据。</li>
+    <li><b>② CPU 100% 先看是不是 GC 线程。</b>是 → 转内存方向；不是 → 按栈定性（业务循环 / 正则 / 加解密 / 锁）。</li>
+    <li><b>③ RUNNABLE 不等于在烧 CPU。</b><code>socketRead0</code>、<code>epollWait</code> 也是 RUNNABLE，必须配合 <code>top -Hp</code> 的 %CPU。</li>
+    <li><b>④ 打两次 jstack 做 diff。</b>位置没变的那个线程就是卡住的地方，比读 400 行栈快十倍。</li>
+    <li><b>⑤ OOM 有八种，最高频的是第九种。</b>容器 OOMKilled（exit 137）没有异常也没有 dump，只能靠 <code>MaxRAMPercentage</code> 留出堆外余量。</li>
+    <li><b>⑥ 泄漏排查问的不是「谁大」，而是「谁让它活着」。</b>支配树排序 + Path to GC Roots exclude 弱引用，引用链终点就是那行代码。</li>
+    <li><b>⑦ ThreadLocal 泄漏的本质是「key 弱、value 强 + 线程永生」</b>，而且它还会串数据——<code>remove()</code> 是正确性要求，不是好习惯。</li>
+    <li><b>⑧ 死锁唯一可行的工程解是破「循环等待」</b>：全局锁顺序，或 <code>tryLock</code> 带超时。</li>
+    <li><b>⑨ 线程池打满有三种真相。</b>盲目加大队列只是把「秒级拒绝」拖成「分钟级超时」，让故障更糟。</li>
+    <li><b>⑩ 接口超时的分诊只有一个动作</b>：同时看应用线程栈和 DB <code>processlist</code>。池满而 DB 闲 = 连接没还；DB active 高 + 慢日志有 = 慢 SQL。</li>
+    <li><b>⑪ <code>@Transactional</code> 里调外部接口是雪崩头号写法。</b>持连接 3 秒 × 200 QPS = 600 个连接需求，池 10 个直接死。</li>
+    <li><b>⑫ 重试是放大器不是修复器。</b>3 层 × 3 次 = 27 倍流量；<strong>超时时间太长本身就是流量放大器</strong>。</li>
+  </ul>
+
+  <div class="good"><b>下期预告 · 大厂场景设计题</b><br>
+  秒杀系统的四道闸门（页面静态化 / 库存预热 / Redis 原子扣减 / MQ 异步下单）、订单 30 分钟超时关闭的五种方案（扫表 / 延时消息 / Redis 过期 / 时间轮 / CDC）、
+  分布式 ID 五种发号器（UUID / 雪花 / 号段 / Redis / DB）、短链与 Feed 流的推拉模型。
+  前面把零件都拆完了，下一期开始组装成系统。</div>
+
+  <footer>
+    Java 面试深挖 · 第 09 期 · 线上问题排查实战<br>
+    配套纯文本版：<code class="inl">java_interview_09_troubleshooting.md</code> ｜ 已同步至腾讯文档
+  </footer>
+</section>
+
+</div>
+<script>
+(function(){
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  var RE = /(\/\/[^\n]*|(?:^|\s)#[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|\b(public|private|protected|static|final|void|class|interface|new|return|if|else|for|while|do|try|catch|finally|throw|throws|synchronized|volatile|transient|extends|implements|int|long|byte|short|boolean|double|float|char|null|true|false|this|super|import|package|abstract|instanceof|break|continue|switch|case|default)\b|\b(\d[\d_.]*)\b/g;
+  document.querySelectorAll('pre').forEach(function(pre){
+    var t = esc(pre.textContent);
+    pre.innerHTML = t.replace(RE, function(m,g1,g2,g3,g4){
+      if(g1) return '<span class="c">'+m+'</span>';
+      if(g2) return '<span class="s">'+m+'</span>';
+      if(g3) return '<span class="k">'+m+'</span>';
+      return '<span class="n">'+m+'</span>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

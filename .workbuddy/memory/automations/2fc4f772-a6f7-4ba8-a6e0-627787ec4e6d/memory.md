@@ -64,3 +64,60 @@
   3. **新增检查**：`url(#xxx)` 引用是否都有对应 `<marker id="xxx">`。本期图 5 引用了未定义的 `#a4`，箭头不显示，靠此脚本抓出。
   4. 文本溢出估算脚本（CJK 1.0em / ASCII 0.55em）本次 10 图零溢出，说明先按坐标排版再写文本的做法有效。
 - 下期建议主题：消息队列与分布式事务（Kafka 顺序写+零拷贝+ISR/acks、重复消费与幂等、2PC/TCC/SAGA/本地消息表），已在文末做预告。
+
+## 2026-11-06 09:36（第 7 次执行）
+- 主题：第 07 期 消息队列与分布式事务（L0 三收益三账单+四个丢失位置 / L1 Segment 与稀疏索引 / L2 sendfile 零拷贝四种失效 / L3 LEO·HW·ISR 水位+acks 三档 / L4 位移语义+rebalance+幂等三写法 / L5 六种事务方案对比 / L6 速查+14 问答 / L7 3 模拟题）
+- 产出：`java_interview_07_mq_distributed_tx.html`（87.7KB，11 张手绘 SVG + 8 段代码 + 9 张表）、`java_interview_07_mq_distributed_tx.md`（40.7KB）
+- 云端：file_id `PEaOgnNvtclY`，url https://docs.qq.com/doc/DUEVhT2duTnZ0Y2xZ，回读 1 H1 / 10 H2 / 32 H3 齐全
+- 关键经验（**插件已升级到 5.9.3，CLI 变了**）：
+  1. 5.9.3 版 `tencentdocs.py` 不再是 `m.main(["doc", "create_..."])`，改为统一入口 **`m.main(["tdoc_call", "<service>", "<tool>", json_args])`**，service 取值 `tencent-docs / slide-mcp / doc-mcp / sheet-mcp`（**没有 "doc"**，写 doc 会报 invalid choice）。
+  2. 查工具名和参数用 `python tencentdocs.py tdoc_list doc-mcp`（输出巨大 200KB+，会被落盘，别直接 head 看全量）与 `tdoc_schema doc-mcp <tool>`。C 端 doc 工具名不带 `doc.` 前缀（SaaS 端才带）。
+  3. `create_with_markdown` 参数仍是 `base64_markdown` + `title`，54KB base64 一次通过，无 WAF 拦截——第 5、6 期的 base64 结论继续成立。
+  4. `get_outline` 返回结构是 `{"outlines":[{title,level,children:[...]}]}`，递归键是 **`outlines` / `children`**（不是 nodes/items），level 形如 `HEADING_LEVEL_2`。
+  5. 校验脚本用 heredoc 写 `re` 正则会被 bash 吃掉反斜杠导致 PatternError → **含正则的 python 一律用 Write 落盘再执行**，别走 `<<'EOF'`。
+- 下期建议主题：Spring Cloud 与微服务治理（注册发现 AP/CP、Feign 与负载均衡、Sentinel 滑动窗口 vs 令牌桶、网关限流、TraceId 跨线程丢失、灰度流量染色），已在文末做预告。
+
+## 2026-11-06 11:41（第 8 次执行）
+- 主题：第 08 期 Spring Cloud 与微服务治理（L0 微服务契约·治理成本 O(N²) / L1 注册发现本质是带推送的缓存·Eureka 三级缓存 90~180s·Nacos1.x vs 2.x·临时/持久实例 AP/CP 分流·ZK 三硬伤·优雅下线 / L2 客户端 vs 服务端 LB·五种算法·摘流失败量 22500 / L3 四种限流算法·LeapArray 2 格环形数组·Warm Up·熔断三态·隔离方式·重试放大 27 倍 / L4 Gateway 过滤器链·必做/禁做·Redis+Lua 令牌桶·网关无状态 / L5 TraceId 丢失六位置·TTL 三步·采样 / L6 灰度四要素·四种粒度·四次发布法·MQ 灰度 / L7 速查+14 问答 / L8 3 道场景题）
+- 产出：`java_interview_08_springcloud.html`（102.9KB，14 张手绘 SVG + 7 段代码 + 9 张表）、`java_interview_08_springcloud.md`（29.4k 字符）
+- 云端：`create_with_markdown` + base64（74KB）一次成功，file_id `PTcLcVIDELNJ`，url https://docs.qq.com/doc/DUFRjTGNWSURFTE5K，回读 1 H1 / 10 H2 / 35 H3 齐全
+- 关键经验：
+  1. 5.9.3 的 `tdoc_call doc-mcp create_with_markdown` 路径第四次验证稳定，base64 通道对体积几乎不敏感（74KB 无拦截）。
+  2. **md 里绝不能写 HTML 标签**（`<div class="qa">`、`<ol><li>`、`<table>`）——腾讯文档会吞掉或原样输出。这次先用 HTML 写再脚本批量转纯 markdown（qa→`**Qn：**`、ol→`1.`、table→管道表）才干净。**下次直接写纯 markdown，别绕这一圈**。
+  3. 校验脚本新增「text y 坐标 > viewBox 高度」检查，本期抓出 1 处（图 7 底部注释 y=270 而 viewBox 高 260），改 viewBox 即可。此检查应纳入固定脚本。
+  4. 本期内容规划上的有效手法：把「抽象概念」全部换成「可算的数字」（1 万倍、1225 对、22500 次、27 倍、2 个格子），面试类内容的说服力主要来自这些数，而不是定义。
+- 下期建议主题：线上问题排查实战（CPU 100% 六种真凶 / OOM 八种类型与 dump 分析 / 内存泄漏引用链 / 死锁与线程池打满取证 / arthas thread·heapdump·trace·watch / 慢 SQL 与连接池耗尽区分），已在文末做预告。
+
+## 2026-11-06 13:49（第 9 次执行）
+- 主题：第 09 期 线上问题排查实战（L0 三条铁律+双轨时间轴+五分钟分诊表 / L1 CPU 六真凶+取证三步 / L2 OOM 九种落点+dump 三取法+MAT 三看+ThreadLocal 泄漏时序 / L3 jstack 四指纹+死锁环+线程池三种真相 / L4 arthas 六命令+trace 耗时分解 / L5 Little's Law+@Transactional 雪崩+HikariCP / L6 命令速查 / L7 14 问答 / L8 3 模拟题）
+- 产出：`java_interview_09_troubleshooting.html`（109KB，10 张手绘 SVG + 26 段代码 + 5 张表）、`java_interview_09_troubleshooting.md`（25369 字符）
+- 云端：file_id `PwhyniaKgQbq`，url https://docs.qq.com/doc/DUHdoeW5pYUtnUWJx，回读 1 H1 / 10 H2 / 26 H3 与 md 完全一致
+- 关键经验：
+  1. 写 100KB 级 HTML 时，**分 5 块写入 `.build/p1..p5.html` 再 `cat` 合并**，比单次 Write 更稳（单次输出过大容易截断/丢块），合并后统一跑校验脚本即可。
+  2. 代码高亮用「单次正则 alternation + replacer 函数」（注释|字符串|关键字|数字四组），对 `esc(textContent)` 后一次性替换，避免多次 replace 造成的嵌套 span 污染。本轮 26 段代码零错位。
+  3. 校验脚本加了「`<script>/<div>/<section>` 开闭配平」与「text y > viewBox 高」两项，本轮 10 图 0 issue；配合已有的「SVG 内禁 HTML 标签」「url(#x) 必须有 marker」「文本按 CJK 1.0em/ASCII 0.55em 估宽」已能覆盖绝大多数视觉事故。
+  4. 5.9.3 的 `tdoc_call doc-mcp create_with_markdown` + base64 第五次验证稳定（57.7KB base64 无拦截），这条路径可以直接当默认。
+  5. 纯 markdown 直出（不经过 HTML→md 转换）后，云端 H1/H2/H3 与本地 md 计数**完全一致**，说明「直接写纯 md 再上传」是本系列的正确做法。
+- 下期建议主题：大厂场景设计题（秒杀四道闸门 / 订单 30 分钟超时关闭五方案 / 分布式 ID 五种发号器 / 短链与 Feed 推拉模型），已在文末做预告。
+
+## 2026-11-06 15:56（第 10 次执行）
+- 主题：第 10 期 大厂场景设计题（L0 四步骨架+单机容量汇率表 / L1 秒杀四道闸门漏斗 100万→30万→10万→1万→1000TPS / L2 超卖三成因+三层兜底 / L3 订单超时五方案+状态机乐观锁 / L4 分布式ID五发号器（雪花位图+号段双buffer）/ L5 短链（62进制+302+布隆）/ L6 Feed 推拉结合 / L7 速查12条+14问答 / L8 3 模拟面试）
+- 产出：`java_interview_10_scenario_design.html`（113KB，11 张手绘 SVG + 9 段代码 + 5 张表）、`java_interview_10_scenario_design.md`（24.5k 字符，1 H1 / 10 H2 / 41 H3 / 23 表）
+- 云端：file_id `PQbeFIsTlAVO`，url https://docs.qq.com/doc/DUFFiZUZJc1RsQVZP，回读 1/10/41 与本地 md 完全一致
+- 关键经验：
+  1. 5.9.3 的 `tdoc_call doc-mcp create_with_markdown` + base64 第六次验证稳定（64KB base64 无拦截）。driver 脚本改放 `.build/` 下，跑完整目录删除，比之前散在 /tmp 更干净。
+  2. 本期 Figma 无、纯 SVG 手绘：11 张图全部一次通过校验脚本（0 issue），说明「先按坐标排版再填文本」的流程已稳定。
+  3. 校验脚本新增有效：本轮报出 1 个「定义了但未使用的 marker（a3）」，虽不影响渲染，但说明脚本能反查冗余 defs。
+  4. 场景题内容的组织手法：把「架构名词」全部换成「漏斗上的数字」，并在每个框旁标注该跳天花板（图 2 右侧面板），比单纯画框图说服力强得多。这期的「四档回答对照」（不及格/及格/良好/优秀）是新增的有效表达形式，可作为后续模板。
+- 下期建议主题：设计模式与代码品味（策略替 if-else 不类爆炸 / 模板方法 / 责任链 vs 过滤器链 / 单例五种写法与枚举 / 「项目里用过什么模式」怎么答），已在文末做预告。
+
+## 2026-11-06 17:05（第 11 次执行）
+- 主题：第 11 期 设计模式与代码品味（L0 三层考点+高频8模式 / L1 策略替 if-else 四阶段与 Spring Map 注入 / L2 模板方法 final 契约与钩子 / L3 责任链三变形+Filter·Interceptor·AOP 能力边界 / L4 单例六写法坐标+DCL 重排 / L5 工厂三兄弟+建造者 @Builder 三坑 / L6 装饰器·代理·适配器判别 / L7 观察者 vs 发布订阅+AFTER_COMMIT 时序 / L8 四档回答对照 / L9 决策树+12 速查 / L10 14 问答 / L11 3 模拟题）
+- 产出：`java_interview_11_design_patterns.html`（84KB，10 图 + 10 段代码 + 11 表）、`java_interview_11_design_patterns.md`（34041 字符，1 H1 / 14 H2 / 35 H3）
+- 云端：file_id `PGUutqOSwmCy`，url https://docs.qq.com/doc/DUEdVdXRxT1N3bUN5，回读 1/14/35 与本地完全一致
+- 关键经验：
+  1. **新坑（本轮踩了 3 次上传）**：md 中「以 `**标签（括号）**：` 开头的整段正文 + 紧跟在表格后」会被腾讯文档解析成 H2。4 组探针（长度/表格/行内加粗/列表与引用块）都**无法复现**，判定为文档级上下文触发。**规避法：此类提示段落一律写成 `- **标签**：正文` 列表项**，实测稳定。上传后务必回读 outline 比对 H1/H2/H3 计数，不要只看 file_id 成功。
+  2. 探测一律用独立小文档 + `create_with_markdown` + `get_outline`，完事 `tencent-docs manage.delete_file` 删净（删成功只返回 trace_id，无 error 字段即成功）。
+  3. 校验脚本沿用：SVG 禁 HTML 标签（`<b>` 必须换 `<tspan>`）、url(#id) 必须有 marker、CJK 1.0em·ASCII 0.55em 估宽、text y 越界、标签配平；本轮 10 图 0 issue。
+  4. base64 通道第 7 次验证稳定（81.8KB 无拦截）。
+- 下期建议主题：JVM 调优与性能压测（堆参数推导 / GC 日志解读 / 压测模型与瓶颈定位），已在文末做预告。

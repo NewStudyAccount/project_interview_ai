@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 08 · Spring Cloud 与微服务治理：注册发现 / 负载均衡 / 限流熔断 / 网关 / 链路追踪 / 灰度</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:29px; line-height:1.3; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:770px}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.8px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .an{color:#0369a1; font-weight:600}
+  pre .e{color:#be123c; font-weight:600}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #bcdcf2}
+  .check li b{color:#075985}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">每 2 小时 · Java 面试深挖 · 第 08 期</div>
+  <h1>注册发现<span class="arrow">→</span>负载均衡<span class="arrow">→</span>限流熔断<span class="arrow">→</span>网关<span class="arrow">→</span>链路追踪<span class="arrow">→</span>灰度</h1>
+  <p class="sub">「你们怎么拆服务的？」——答「按业务拆、高内聚低耦合」，面试官点点头，再问一句「那服务地址变了怎么办」，空气突然安静。因为大部分人只背了「拆」，没算过拆完之后要自己造多少基础设施。这一期把账算清楚：一次 RPC 比本地调用慢<strong>一万倍</strong>，Eureka 为什么要忍到 <code class="inl">90 秒</code> 才知道实例挂了，Sentinel 那 <code class="inl">2 个格子</code> 怎么撑起 1 秒的滑动窗口，TraceId 又在线程池里怎么消失的。</p>
+  <div class="meta">
+    <div><strong>8</strong>层递进</div>
+    <div><strong>13</strong>张原理图</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span>01 HashMap</span><span>02 JVM/GC</span><span>03 并发</span>
+  <span>04 Spring</span><span>05 MySQL</span><span>06 Redis</span>
+  <span>07 MQ · 分布式事务</span><span class="on">08 微服务治理</span>
+</div>
+
+<!-- ============ L0 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>契约层 · 你买到了什么，又卖掉了什么</em></div>
+  <h2>一次「拆」，把方法调用换成了网络调用</h2>
+
+  <p>先看这张图。左边是单体，三个 service 在同一个 JVM 里互相调用；右边是微服务，同样的代码，但每次调用都要出一次网卡。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 270" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m1" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <rect x="24" y="14" width="412" height="242" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="38" font-size="12.5" font-weight="700" fill="#3b4252">A · 单体：进程内调用（ns 级）</text>
+
+      <rect x="42" y="52" width="176" height="140" rx="8" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="130" y="74" font-size="11.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">1 个 JVM / 1 个 jar</text>
+
+      <rect x="56" y="84" width="148" height="26" rx="5" fill="#fff" stroke="#bcdcf2"/>
+      <text x="130" y="102" font-size="10.5" text-anchor="middle" fill="#0c4a6e">stockService.deduct()</text>
+      <line x1="130" y1="112" x2="130" y2="118" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m1)"/>
+
+      <rect x="56" y="120" width="148" height="26" rx="5" fill="#fff" stroke="#bcdcf2"/>
+      <text x="130" y="138" font-size="10.5" text-anchor="middle" fill="#0c4a6e">userService.getPoints()</text>
+      <line x1="130" y1="148" x2="130" y2="154" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m1)"/>
+
+      <rect x="56" y="156" width="148" height="26" rx="5" fill="#fff" stroke="#bcdcf2"/>
+      <text x="130" y="174" font-size="10.5" text-anchor="middle" fill="#0c4a6e">orderDao.insert()</text>
+
+      <text x="230" y="72" font-size="10.5" fill="#3b4252">① 调用 10~50ns</text>
+      <text x="230" y="96" font-size="10.5" fill="#3b4252">② 异常栈一眼到底</text>
+      <text x="230" y="120" font-size="10.5" fill="#3b4252">③ 事务 ACID 免费送</text>
+      <text x="230" y="144" font-size="10.5" fill="#3b4252">④ 一个 jar 一次发布</text>
+      <text x="230" y="174" font-size="10.5" fill="#be123c">⑤ 但 50 人改一个仓库</text>
+      <text x="230" y="192" font-size="10.5" fill="#be123c">　 一出冲突全组等</text>
+
+      <rect x="464" y="14" width="412" height="242" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="482" y="38" font-size="12.5" font-weight="700" fill="#3b4252">B · 微服务：跨进程调用（ms 级）</text>
+
+      <rect x="490" y="52" width="130" height="38" rx="7" fill="#eaf7f0" stroke="#047857"/>
+      <text x="555" y="70" font-size="11.5" text-anchor="middle" font-weight="700" fill="#065f46">Order 服务 :8080</text>
+      <text x="555" y="84" font-size="9.5" text-anchor="middle" fill="#5d6675">192.168.1.7</text>
+      <line x1="555" y1="92" x2="555" y2="98" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m1)"/>
+      <text x="604" y="99" font-size="9" fill="#be123c">HTTP</text>
+
+      <rect x="490" y="100" width="130" height="38" rx="7" fill="#eaf7f0" stroke="#047857"/>
+      <text x="555" y="118" font-size="11.5" text-anchor="middle" font-weight="700" fill="#065f46">Stock 服务 :8081</text>
+      <text x="555" y="132" font-size="9.5" text-anchor="middle" fill="#5d6675">192.168.1.8</text>
+      <line x1="555" y1="140" x2="555" y2="146" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m1)"/>
+      <text x="604" y="147" font-size="9" fill="#be123c">HTTP</text>
+
+      <rect x="490" y="148" width="130" height="38" rx="7" fill="#eaf7f0" stroke="#047857"/>
+      <text x="555" y="166" font-size="11.5" text-anchor="middle" font-weight="700" fill="#065f46">User 服务 :8082</text>
+      <text x="555" y="180" font-size="9.5" text-anchor="middle" fill="#5d6675">192.168.1.9</text>
+
+      <text x="640" y="66" font-size="10.5" fill="#3b4252">① RPC 0.3~1ms（同机房）</text>
+      <text x="640" y="88" font-size="10.5" fill="#be123c">② 超时 / 重试 / 序列化</text>
+      <text x="640" y="110" font-size="10.5" fill="#be123c">③ IP 变了 → 要注册中心</text>
+      <text x="640" y="132" font-size="10.5" fill="#be123c">④ 分布式事务 / 链路追踪</text>
+      <text x="640" y="154" font-size="10.5" fill="#047857">⑤ 独立发布、独立扩容</text>
+      <text x="640" y="176" font-size="10.5" fill="#047857">⑥ 技术栈可异构</text>
+      <text x="640" y="204" font-size="10.5" fill="#b45309">代价：N(N-1)/2 条链路</text>
+      <text x="640" y="224" font-size="10.5" fill="#b45309">都要配超时/重试/熔断</text>
+    </svg>
+    <figcaption>同一个 <code class="inl">deduct()</code>，左边 10~50 纳秒，右边 0.3~1 毫秒——<b>慢了 1 万倍以上</b>。差的这 1ms 不是网络的锅，是你主动买下了「独立发布」这张票。</figcaption>
+  </figure>
+
+  <table>
+    <tr><th style="width:30%">单体免费送</th><th style="width:35%">微服务要自己造</th><th>造不好的后果</th></tr>
+    <tr><td>方法调用（ns 级）</td><td>序列化 + 网络 + 反序列化</td><td>RT 从 5ms 涨到 50ms，链路一长就爆</td></tr>
+    <tr><td>本地事务</td><td>分布式事务（TCC / SAGA / 消息表）</td><td>订单成功、扣库存失败，超卖</td></tr>
+    <tr><td>异常栈一眼看到底</td><td>链路追踪（TraceId / SpanId）</td><td>线上报错只能靠用户截图</td></tr>
+    <tr><td>改完重启一个进程</td><td>服务发现 + 灰度 + 版本兼容</td><td>发布即事故，回滚靠祈祷</td></tr>
+  </table>
+
+  <h3>治理成本是 O(N²)，这就是注册中心存在的唯一理由</h3>
+
+  <p>服务数量一涨，可能的两两调用关系是平方级增长的。而这平方级的链路，每一条都要单独配地址、超时、重试、熔断——所以靠人肉配置文件是不可能的。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg">
+      <line x1="70" y1="190" x2="600" y2="190" stroke="#c7ccd8" stroke-width="1.2"/>
+      <line x1="70" y1="190" x2="70" y2="34" stroke="#c7ccd8" stroke-width="1.2"/>
+      <text x="335" y="216" font-size="10.5" text-anchor="middle" fill="#5d6675">服务数量 N</text>
+      <text x="60" y="30" font-size="10.5" text-anchor="middle" fill="#5d6675">链路数</text>
+
+      <line x1="70" y1="115" x2="600" y2="115" stroke="#eef1f7" stroke-width="1"/>
+      <text x="62" y="119" font-size="9" text-anchor="end" fill="#9aa2b1">2500</text>
+      <line x1="70" y1="40" x2="600" y2="40" stroke="#eef1f7" stroke-width="1"/>
+      <text x="62" y="44" font-size="9" text-anchor="end" fill="#9aa2b1">4950</text>
+
+      <polyline points="96,190 176,184 335,153 600,40" fill="none" stroke="#0369a1" stroke-width="2.4"/>
+      <circle cx="96" cy="190" r="4" fill="#0369a1"/>
+      <circle cx="176" cy="184" r="4" fill="#0369a1"/>
+      <circle cx="335" cy="153" r="4" fill="#0369a1"/>
+      <circle cx="600" cy="40" r="4" fill="#be123c"/>
+
+      <text x="96" y="208" font-size="9" text-anchor="middle" fill="#5d6675">5</text>
+      <text x="176" y="208" font-size="9" text-anchor="middle" fill="#5d6675">20</text>
+      <text x="335" y="208" font-size="9" text-anchor="middle" fill="#5d6675">50</text>
+      <text x="600" y="208" font-size="9" text-anchor="middle" fill="#5d6675">100</text>
+
+      <text x="104" y="180" font-size="9.5" fill="#5d6675">10 对</text>
+      <text x="184" y="176" font-size="9.5" fill="#5d6675">190 对</text>
+      <text x="343" y="145" font-size="9.5" fill="#5d6675">1225 对</text>
+      <text x="520" y="34" font-size="10" font-weight="700" fill="#be123c">4950 对</text>
+
+      <line x1="620" y1="30" x2="620" y2="226" stroke="#e3e7ef" stroke-width="1" stroke-dasharray="3 3"/>
+
+      <text x="640" y="50" font-size="11" font-weight="700" fill="#be123c">地址硬编码的代价</text>
+      <text x="640" y="72" font-size="10.5" fill="#3b4252">1 个服务扩容 8 → 12 实例</text>
+      <text x="640" y="92" font-size="10.5" fill="#3b4252">→ 要改 30 个调用方的配置</text>
+
+      <text x="640" y="124" font-size="11" font-weight="700" fill="#047857">注册中心的代价</text>
+      <text x="640" y="146" font-size="10.5" fill="#3b4252">1 行变更</text>
+      <text x="640" y="166" font-size="10.5" fill="#3b4252">→ 所有调用方自动生效</text>
+
+      <text x="640" y="198" font-size="10.5" fill="#b45309">50 个服务 = 1225 对链路</text>
+      <text x="640" y="218" font-size="10.5" fill="#b45309">每对都要配超时/重试/熔断</text>
+    </svg>
+    <figcaption>微服务不是「把代码拆小」，而是<b>用运维复杂度换组织扩展性</b>。拆之前先问：团队真的到了 30 人改同一个仓库就打架吗？如果没到，单体 + 模块化更划算。</figcaption>
+  </figure>
+
+  <h3>按技术分层拆服务 = 分布式单体（高频反面案例）</h3>
+
+  <p>最常见的错误拆法，是把单体按 Controller / Service / Dao 三层拆成三个服务。这不是微服务，这是<b>把方法调用换成了网络调用，却保留了所有的耦合</b>——一次需求改三个服务、必须同时上线、共享一个库，比单体还难维护。</p>
+
+  <div class="warn">
+    <b>判断自己是不是分布式单体的三个信号</b><br>
+    ① 一次需求要改 3 个以上服务，且必须同时上线；<br>
+    ② 多个服务共享同一个数据库（共享库 = 隐性耦合，改表就是改契约）；<br>
+    ③ 服务间调用形成环（A→B→C→A），一个抖动全链路雪崩。
+  </div>
+
+  <div class="oneline">
+    <b>一句话契约</b>
+    微服务用「运维复杂度」换「组织扩展性」。所以注册中心、网关、链路追踪、配置中心这些不是「锦上添花的中间件」，而是<b>拆分的必要成本</b>——不建这些，拆了就是给自己挖坑。
+  </div>
+</section>
+
+<!-- ============ L1 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>服务注册与发现 · 本质是「带推送的分布式缓存」</em></div>
+  <h2>三个角色、四步数据流</h2>
+
+  <figure>
+    <svg viewBox="0 0 900 310" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m2" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+        <marker id="m2b" markerWidth="9" markerHeight="7" refX="1" refY="3.5" orient="auto">
+          <path d="M8,0 L0,3.5 L8,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <rect x="40" y="80" width="150" height="62" rx="9" fill="#eaf7f0" stroke="#047857"/>
+      <text x="115" y="104" font-size="12" text-anchor="middle" font-weight="700" fill="#065f46">Provider</text>
+      <text x="115" y="124" font-size="10" text-anchor="middle" fill="#5d6675">192.168.1.7:8080</text>
+
+      <rect x="370" y="64" width="170" height="94" rx="9" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="455" y="90" font-size="12" text-anchor="middle" font-weight="700" fill="#5b21b6">Registry（Nacos）</text>
+      <text x="455" y="110" font-size="10" text-anchor="middle" fill="#5d6675">实例表 + 健康状态</text>
+      <text x="455" y="130" font-size="10" text-anchor="middle" fill="#5d6675">变更 → 推送给订阅者</text>
+      <text x="455" y="148" font-size="10" text-anchor="middle" fill="#5d6675">写少读多 → AP 优先</text>
+
+      <rect x="680" y="80" width="170" height="62" rx="9" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="765" y="104" font-size="12" text-anchor="middle" font-weight="700" fill="#0c4a6e">Consumer</text>
+      <text x="765" y="124" font-size="10" text-anchor="middle" fill="#5d6675">订阅 + 只读本地缓存</text>
+
+      <line x1="192" y1="100" x2="366" y2="100" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#m2)"/>
+      <text x="200" y="92" font-size="9.5" fill="#047857">① 注册</text>
+      <text x="200" y="120" font-size="9.5" fill="#5d6675">② 心跳 5s</text>
+
+      <line x1="542" y1="100" x2="676" y2="100" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#m2)"/>
+      <text x="556" y="92" font-size="9.5" fill="#0369a1">③ 订阅 + 推送</text>
+      <text x="556" y="120" font-size="9.5" fill="#5d6675">变更 ~50ms</text>
+
+      <line x1="765" y1="144" x2="765" y2="186" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#m2)"/>
+      <rect x="660" y="190" width="210" height="52" rx="8" fill="#fff" stroke="#0369a1" stroke-dasharray="4 3"/>
+      <text x="765" y="212" font-size="10.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">④ 本地缓存（内存 Map）</text>
+      <text x="765" y="230" font-size="9.5" text-anchor="middle" fill="#5d6675">发请求前读这里，不查注册中心</text>
+
+      <rect x="40" y="196" width="580" height="88" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="58" y="220" font-size="11" font-weight="700" fill="#3b4252">为什么必须本地缓存？</text>
+      <text x="58" y="242" font-size="10.5" fill="#3b4252">100 个 Consumer × 2000 QPS = 20 万次/秒 的地址查询</text>
+      <text x="58" y="262" font-size="10.5" fill="#3b4252">而实例变更可能一分钟才 1 次 → 典型的写少读多</text>
+      <text x="58" y="280" font-size="10.5" fill="#be123c">推论：注册中心挂了，只要缓存还在，业务照跑（这是设计，不是 bug）</text>
+    </svg>
+    <figcaption>注册中心不是「数据库」，是<b>带订阅推送的分布式缓存</b>。这个认知直接推出「AP 优先」——牺牲强一致，换「注册中心挂了也不影响调用」。</figcaption>
+  </figure>
+
+  <h3>Eureka 为什么「下线了还在被打」：三层缓存，最长 180 秒</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 310" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m3" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <rect x="60" y="48" width="260" height="42" rx="8" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="190" y="68" font-size="10.5" text-anchor="middle" font-weight="700" fill="#5b21b6">registry（真实数据，实时更新）</text>
+      <text x="190" y="82" font-size="9" text-anchor="middle" fill="#5d6675">ConcurrentHashMap</text>
+
+      <line x1="190" y1="92" x2="190" y2="106" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m3)"/>
+      <text x="200" y="104" font-size="9" fill="#be123c">30s</text>
+
+      <rect x="60" y="110" width="260" height="42" rx="8" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="190" y="130" font-size="10.5" text-anchor="middle" font-weight="700" fill="#5b21b6">readWriteCacheMap（30s 过期）</text>
+      <text x="190" y="144" font-size="9" text-anchor="middle" fill="#5d6675">Guava Cache</text>
+
+      <line x1="190" y1="154" x2="190" y2="168" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m3)"/>
+      <text x="200" y="166" font-size="9" fill="#be123c">30s</text>
+
+      <rect x="60" y="172" width="260" height="42" rx="8" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="190" y="192" font-size="10.5" text-anchor="middle" font-weight="700" fill="#5b21b6">readOnlyCacheMap（只读）</text>
+      <text x="190" y="206" font-size="9" text-anchor="middle" fill="#5d6675">默认开启</text>
+
+      <line x1="322" y1="193" x2="392" y2="193" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m3)"/>
+      <text x="316" y="182" font-size="9" fill="#be123c">每 30s 拉取</text>
+
+      <rect x="396" y="172" width="190" height="42" rx="8" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="491" y="192" font-size="10.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">Consumer 本地缓存</text>
+      <text x="491" y="206" font-size="9" text-anchor="middle" fill="#5d6675">Eureka Client</text>
+
+      <text x="60" y="248" font-size="10.5" fill="#3b4252">① 心跳 30s 一次，90s 未续约才剔除</text>
+      <text x="60" y="270" font-size="10.5" fill="#3b4252">② 三级缓存各 30s，客户端再 30s</text>
+      <text x="60" y="292" font-size="10.5" font-weight="700" fill="#be123c">③ 最坏 = 90 + 30×3 = 180 秒仍在被调用</text>
+
+      <line x1="620" y1="230" x2="860" y2="230" stroke="#c7ccd8" stroke-width="1"/>
+      <line x1="620" y1="224" x2="620" y2="236" stroke="#c7ccd8" stroke-width="1"/>
+      <text x="620" y="252" font-size="9" text-anchor="middle" fill="#9aa2b1">0s</text>
+      <line x1="660" y1="224" x2="660" y2="236" stroke="#c7ccd8" stroke-width="1"/>
+      <text x="660" y="252" font-size="9" text-anchor="middle" fill="#9aa2b1">30</text>
+      <line x1="700" y1="224" x2="700" y2="236" stroke="#c7ccd8" stroke-width="1"/>
+      <text x="700" y="252" font-size="9" text-anchor="middle" fill="#9aa2b1">60</text>
+      <line x1="740" y1="224" x2="740" y2="236" stroke="#c7ccd8" stroke-width="1"/>
+      <text x="740" y="252" font-size="9" text-anchor="middle" fill="#9aa2b1">90</text>
+      <line x1="820" y1="224" x2="820" y2="236" stroke="#c7ccd8" stroke-width="1"/>
+      <text x="820" y="252" font-size="9" text-anchor="middle" fill="#9aa2b1">180</text>
+
+      <path d="M740,214 L740,206 L860,206 L860,214" fill="none" stroke="#be123c" stroke-width="1.4"/>
+      <text x="800" y="198" font-size="9.5" text-anchor="middle" font-weight="700" fill="#be123c">仍在打已死实例</text>
+
+      <text x="620" y="278" font-size="10.5" fill="#3b4252">实例宕机 ≠ 立刻被摘除</text>
+      <text x="620" y="298" font-size="10.5" fill="#3b4252">这是「发布 30% 报错」的根因</text>
+    </svg>
+    <figcaption>Eureka 不推送、只让客户端定时拉——这是 2012 年为了<b>极简 + 分区容忍</b>做的取舍。代价就是这段 90~180 秒的「幽灵窗口」。</figcaption>
+  </figure>
+
+  <div class="good">
+    <b>自我保护（Self Preservation）：不是 bug，是刻意设计</b><br>
+    15 分钟内如果续约成功率 &lt; 85%，Eureka <b>停止剔除任何实例</b>。理由很粗暴但很对：大面积心跳丢失，更可能是网络或注册中心自己出问题，而不是 85% 的机器同时死。<b>宁可保留一堆错误实例</b>（调用失败可重试），<b>也不能剔除正确实例</b>（那叫服务全挂）。生产上不要关它。
+  </div>
+
+  <h3>Nacos 1.x vs 2.x：一次通信模型的换代</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m4" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+        <marker id="m4s" markerWidth="9" markerHeight="7" refX="1" refY="3.5" orient="auto">
+          <path d="M8,0 L0,3.5 L8,7 z" fill="#0369a1"/>
+        </marker>
+      </defs>
+
+      <rect x="24" y="14" width="412" height="228" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="38" font-size="12" font-weight="700" fill="#3b4252">Nacos 1.x · HTTP 短连接 + 长轮询</text>
+
+      <rect x="42" y="56" width="120" height="42" rx="7" fill="#eaf7f0" stroke="#047857"/>
+      <text x="102" y="82" font-size="10.5" text-anchor="middle" fill="#065f46">Provider</text>
+      <rect x="262" y="56" width="150" height="42" rx="7" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="337" y="82" font-size="10.5" text-anchor="middle" fill="#5b21b6">Nacos Server</text>
+      <line x1="164" y1="77" x2="258" y2="77" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m4)"/>
+      <text x="170" y="70" font-size="9" fill="#5d6675">POST 心跳 5s</text>
+
+      <rect x="42" y="126" width="120" height="42" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="102" y="152" font-size="10.5" text-anchor="middle" fill="#0c4a6e">Consumer</text>
+      <line x1="164" y1="147" x2="258" y2="147" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#m4)"/>
+      <text x="170" y="140" font-size="9" fill="#5d6675">GET 拉取 10s</text>
+
+      <text x="42" y="196" font-size="10.5" fill="#be123c">变更延迟 ≤ 10s（长轮询 hold 30s）</text>
+      <text x="42" y="218" font-size="10.5" fill="#be123c">连接数随 QPS 涨，服务端压力大</text>
+
+      <rect x="464" y="14" width="412" height="228" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="482" y="38" font-size="12" font-weight="700" fill="#3b4252">Nacos 2.x · gRPC 长连接 + 主动推送</text>
+
+      <rect x="482" y="56" width="120" height="42" rx="7" fill="#eaf7f0" stroke="#047857"/>
+      <text x="542" y="82" font-size="10.5" text-anchor="middle" fill="#065f46">Provider</text>
+      <rect x="700" y="56" width="150" height="42" rx="7" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="775" y="82" font-size="10.5" text-anchor="middle" fill="#5b21b6">Nacos Server</text>
+      <line x1="604" y1="70" x2="698" y2="70" stroke="#0369a1" stroke-width="1.6" marker-end="url(#m4)" marker-start="url(#m4s)"/>
+      <text x="610" y="62" font-size="9" fill="#0369a1">双向流</text>
+
+      <rect x="482" y="126" width="120" height="42" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="542" y="152" font-size="10.5" text-anchor="middle" fill="#0c4a6e">Consumer</text>
+      <line x1="604" y1="140" x2="698" y2="140" stroke="#0369a1" stroke-width="1.6" marker-end="url(#m4)" marker-start="url(#m4s)"/>
+      <text x="610" y="132" font-size="9" fill="#0369a1">订阅</text>
+
+      <text x="482" y="196" font-size="10.5" fill="#047857">变更延迟 ~ 50ms（服务端主动 push）</text>
+      <text x="482" y="218" font-size="10.5" fill="#047857">连接数 = 实例数，单机可撑 3 万+</text>
+    </svg>
+    <figcaption>这不是「版本升级」，是<b>通信模型换代</b>：从「客户端问」变成「服务端喊」。延迟差 200 倍，是 Nacos 相对 Eureka 最本质的优势——比「AP/CP 标签」有说服力得多。</figcaption>
+  </figure>
+
+  <div class="trap">
+    <b>Nacos 2.x 上线第一大坑</b><br>
+    只放开了 8848，忘了 <code class="inl">9848 / 9849</code>（gRPC 端口），客户端全部连不上，报 <code class="inl">Client not connected, current status: STARTING</code>。排查半天以为是版本不兼容。
+  </div>
+
+  <h3>临时实例 vs 持久实例：Nacos 里最容易被忽略的分流</h3>
+
+  <table>
+    <tr><th style="width:22%"></th><th style="width:39%">临时实例（ephemeral=true，默认）</th><th>持久实例（ephemeral=false）</th></tr>
+    <tr><td>健康检查</td><td>客户端心跳，15s 不健康、30s 剔除</td><td>服务端主动探测（TCP / HTTP / MySQL）</td></tr>
+    <tr><td>一致性协议</td><td>Distro（AP，各节点各管一部分）</td><td>Raft（CP，Leader 写，多数派确认）</td></tr>
+    <tr><td>适用</td><td>普通微服务（挂了就该摘掉）</td><td>数据库、DNS 这类「不能因为心跳丢就被摘」</td></tr>
+    <tr><td>网络分区时</td><td>各节点仍可读写，可能短暂不一致</td><td>少数派不可写，保证不返回旧数据</td></tr>
+  </table>
+
+  <div class="oneline">
+    <b>所以「Nacos 是 AP 还是 CP」怎么答</b>
+    按实例类型分流：临时实例 AP（Distro），持久实例 CP（Raft），配置中心 CP（Raft）。只答「AP」或「CP」都是背的，答出「分流」才是读过源码或文档的。
+  </div>
+
+  <h3>ZK 为什么在注册中心这个场景输了</h3>
+
+  <p>ZK 的模型是「临时顺序节点 + Watch」，看起来完美，但有三个硬伤：</p>
+
+  <ul>
+    <li><b>Watch 是一次性的</b>：触发后必须重新注册，重新注册那一瞬间的变更会丢。要可靠就得轮询，轮询就退化成 Eureka 了。</li>
+    <li><b>CP 模型的代价</b>：Leader 选举期间（秒级到 30s）整个集群不可写，所有服务发现请求被阻塞——注册中心自己成了单点。而服务发现的诉求恰恰是「宁可拿到稍旧的列表，也不能拿不到」。</li>
+    <li><b>变更风暴</b>：大量长连接 + Watch，一次批量上下线会把 ZK 打满。</li>
+  </ul>
+
+  <p>结论：ZK 适合<b>强一致的元数据 / 选主 / 分布式锁</b>，不适合「高频变更 + 要求高可用」的服务注册。</p>
+
+  <h3>优雅下线：先摘流，再停进程（顺序反了就是事故）</h3>
+
+  <pre><span class="c">// ✗ 错误顺序：kill -9 → 注册中心 30s 后才发现 → 期间请求继续打 → 503</span>
+
+<span class="c">// ✓ 正确顺序：反注册 → 等缓存过期 → 等在途请求 → 停进程</span>
+<span class="an">@PreDestroy</span>
+<span class="k">public void</span> shutdown() {
+    namingService.deregisterInstance(<span class="s">"order-svc"</span>, ip, port);  <span class="c">// 1. 主动摘流</span>
+    sleep(<span class="s">90_000</span>);                                            <span class="c">// 2. 等 Eureka 缓存窗口（Nacos 5s 即可）</span>
+    <span class="c">// 3. Spring 的 graceful shutdown 会拒绝新连接、处理完在途请求</span>
+}
+
+<span class="c"># application.yml —— 优雅停机三件套</span>
+server:
+  shutdown: graceful                    <span class="c"># 停止接收新请求，等在途完成</span>
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s     <span class="c"># 最多等 30s</span></pre>
+
+  <p><b>算一笔账</b>：8 个实例、总 QPS 2000，单实例 250 QPS。如果下线时 90 秒内还在被路由，就是 <b>250 × 90 = 22500 次失败请求</b>。这就是「一次发布 30% 报错、10 分钟后自愈」的标准剧本。</p>
+</section>
+
+<!-- ============ L2 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>负载均衡 · 客户端选还是服务端选</em></div>
+  <h2>两种位置的取舍</h2>
+
+  <figure>
+    <svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m5" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <rect x="24" y="14" width="412" height="228" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="38" font-size="12" font-weight="700" fill="#3b4252">A · 客户端 LB（LoadBalancer / Dubbo）</text>
+
+      <rect x="42" y="58" width="112" height="50" rx="8" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="98" y="78" font-size="10.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">Consumer</text>
+      <text x="98" y="96" font-size="9" text-anchor="middle" fill="#5d6675">自己算下标</text>
+
+      <line x1="156" y1="72" x2="292" y2="58" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m5)"/>
+      <line x1="156" y1="83" x2="292" y2="104" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m5)"/>
+      <line x1="156" y1="94" x2="292" y2="148" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m5)"/>
+
+      <rect x="296" y="44" width="118" height="30" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <text x="355" y="63" font-size="10" text-anchor="middle" fill="#065f46">实例 1</text>
+      <rect x="296" y="90" width="118" height="30" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <text x="355" y="109" font-size="10" text-anchor="middle" fill="#065f46">实例 2</text>
+      <rect x="296" y="134" width="118" height="30" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <text x="355" y="153" font-size="10" text-anchor="middle" fill="#065f46">实例 3</text>
+
+      <text x="42" y="186" font-size="10.5" fill="#047857">少一跳；策略分散在各服务配置里</text>
+      <text x="42" y="208" font-size="10.5" fill="#3b4252">感知变化快（本地缓存 35s）</text>
+      <text x="42" y="228" font-size="10.5" fill="#be123c">每种语言都要实现一遍 SDK</text>
+
+      <rect x="464" y="14" width="412" height="228" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="482" y="38" font-size="12" font-weight="700" fill="#3b4252">B · 服务端 LB（Nginx / K8s Service / SLB）</text>
+
+      <rect x="482" y="58" width="112" height="50" rx="8" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="538" y="78" font-size="10.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">Consumer</text>
+      <text x="538" y="96" font-size="9" text-anchor="middle" fill="#5d6675">只认 VIP</text>
+
+      <line x1="596" y1="83" x2="636" y2="83" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m5)"/>
+
+      <rect x="640" y="52" width="98" height="86" rx="8" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="689" y="78" font-size="10.5" text-anchor="middle" font-weight="700" fill="#5b21b6">LB / VIP</text>
+      <text x="689" y="98" font-size="9" text-anchor="middle" fill="#5d6675">集中选实例</text>
+      <text x="689" y="116" font-size="9" text-anchor="middle" fill="#5d6675">健康检查 2~5s</text>
+
+      <line x1="740" y1="66" x2="776" y2="66" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m5)"/>
+      <line x1="740" y1="95" x2="776" y2="95" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m5)"/>
+      <line x1="740" y1="124" x2="776" y2="124" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m5)"/>
+
+      <rect x="780" y="52" width="90" height="28" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <text x="825" y="70" font-size="9.5" text-anchor="middle" fill="#065f46">实例 1</text>
+      <rect x="780" y="81" width="90" height="28" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <text x="825" y="99" font-size="9.5" text-anchor="middle" fill="#065f46">实例 2</text>
+      <rect x="780" y="110" width="90" height="28" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <text x="825" y="128" font-size="9.5" text-anchor="middle" fill="#065f46">实例 3</text>
+
+      <text x="482" y="186" font-size="10.5" fill="#047857">策略集中、语言无关、可灰度权重</text>
+      <text x="482" y="208" font-size="10.5" fill="#3b4252">健康检查 2~5s，比客户端缓存更快</text>
+      <text x="482" y="228" font-size="10.5" fill="#be123c">多一跳（0.2~0.5ms）+ LB 自己成单点</text>
+    </svg>
+    <figcaption>客户端 LB 把选择逻辑下沉到每个服务，服务端 LB 把它集中到基础设施。<b>K8s 时代大多选后者</b>——因为 Service 本身就是个分布式 LB，还免费送健康检查。</figcaption>
+  </figure>
+
+  <h3>算法：从轮询到一致性哈希</h3>
+
+  <table>
+    <tr><th style="width:22%">算法</th><th style="width:34%">行为</th><th>适用 / 坑</th></tr>
+    <tr><td>轮询 / 加权轮询</td><td>A B C A B C；权重 2 时 A A B C</td><td>实例同构、无状态。要用<b>平滑加权轮询</b>（Nginx 的实现），否则会出现 A A A B 的突发</td></tr>
+    <tr><td>随机 / 加权随机</td><td>按概率选</td><td>实例多时天然均匀，比轮询少一次计数，无状态</td></tr>
+    <tr><td>最少活跃连接</td><td>选当前在途请求最少的</td><td>请求耗时方差大时最有用（自动避开慢实例），但需要维护连接数</td></tr>
+    <tr><td>一致性哈希</td><td><code>hash(uid)</code> 顺时针找第一个节点</td><td>提高本地缓存命中率；坑是<b>数据倾斜</b>（虚拟节点缓解）与<b>扩缩容迁移</b>（1/N 数据要重新预热）</td></tr>
+    <tr><td>区域感知（ZoneAvoidance）</td><td>优先同可用区，同区全挂才跨区</td><td>Ribbon 的默认策略；省跨区流量费 + 降延迟，云上很实用</td></tr>
+  </table>
+
+  <pre><span class="c">// Spring Cloud LoadBalancer：自定义一致性哈希（按 uid 粘住同一实例）</span>
+<span class="an">@Bean</span>
+<span class="k">public</span> ReactorLoadBalancer&lt;ServiceInstance&gt; hashBalancer(
+        Environment env, LoadBalancerClientFactory factory) {
+    <span class="k">return new</span> HashLoadBalancer(factory.getLazyProvider(
+            env.getProperty(LoadBalancerClientFactory.PROPERTY_NAME),
+            ServiceInstanceListSupplier.<span class="k">class</span>));
+}
+
+<span class="c">// 关键：Request 里的 uid 作为哈希 key，而不是随机</span>
+<span class="k">private</span> ServiceInstance pick(List&lt;ServiceInstance&gt; list, String uid) {
+    <span class="k">int</span> idx = Math.floorMod(uid.hashCode(), list.size());
+    <span class="k">return</span> list.get(idx);          <span class="c">// 真要抗倾斜，得用 TreeMap 的 ceilingEntry</span>
+}
+
+<span class="c">// 默认值（面试常问）：RoundRobinLoadBalancer + 实例缓存 35s</span>
+spring.cloud.loadbalancer.cache.ttl=35s</pre>
+
+  <div class="warn">
+    <b>面试常问的两个默认值</b><br>
+    Spring Cloud LoadBalancer：默认 <code class="inl">RoundRobinLoadBalancer</code>，实例列表缓存 <code class="inl">35s</code>（<code class="inl">spring.cloud.loadbalancer.cache.ttl</code>）。<br>
+    Ribbon（老版本）：默认 <code class="inl">ZoneAvoidanceRule</code>（区域感知 + 可用性过滤）。
+  </div>
+
+  <h3>一个必须会算的题：摘流窗口内的失败量</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 286" xmlns="http://www.w3.org/2000/svg">
+      <text x="60" y="34" font-size="11.5" font-weight="700" fill="#3b4252">摘流窗口内的失败请求量（单实例 250 QPS）</text>
+
+      <line x1="60" y1="200" x2="400" y2="200" stroke="#c7ccd8" stroke-width="1.2"/>
+      <line x1="60" y1="200" x2="60" y2="44" stroke="#c7ccd8" stroke-width="1.2"/>
+
+      <rect x="80" y="192" width="56" height="8" fill="#8b93a5"/>
+      <text x="108" y="186" font-size="10" text-anchor="middle" fill="#5d6675">1250</text>
+      <text x="108" y="218" font-size="9.5" text-anchor="middle" fill="#5d6675">T=5s</text>
+      <text x="108" y="234" font-size="8.5" text-anchor="middle" fill="#9aa2b1">Nacos</text>
+
+      <rect x="160" y="142" width="56" height="58" fill="#b45309"/>
+      <text x="188" y="136" font-size="10" text-anchor="middle" fill="#5d6675">8750</text>
+      <text x="188" y="218" font-size="9.5" text-anchor="middle" fill="#5d6675">T=35s</text>
+      <text x="188" y="234" font-size="8.5" text-anchor="middle" fill="#9aa2b1">SC LoadBalancer</text>
+
+      <rect x="240" y="50" width="56" height="150" fill="#be123c"/>
+      <text x="268" y="44" font-size="10" text-anchor="middle" font-weight="700" fill="#be123c">22500</text>
+      <text x="268" y="218" font-size="9.5" text-anchor="middle" fill="#5d6675">T=90s</text>
+      <text x="268" y="234" font-size="8.5" text-anchor="middle" fill="#9aa2b1">Eureka</text>
+
+      <text x="320" y="120" font-size="10" fill="#be123c">一个实例下线</text>
+      <text x="320" y="140" font-size="10" fill="#be123c">= 两万多次</text>
+      <text x="320" y="160" font-size="10" fill="#be123c">用户看到 503</text>
+
+      <circle cx="660" cy="130" r="72" fill="none" stroke="#c7ccd8" stroke-width="1.4" stroke-dasharray="5 4"/>
+      <circle cx="732" cy="130" r="7" fill="#0369a1"/>
+      <circle cx="660" cy="58" r="7" fill="#0369a1"/>
+      <circle cx="588" cy="130" r="7" fill="#0369a1"/>
+      <circle cx="660" cy="202" r="7" fill="#0369a1"/>
+      <text x="744" y="134" font-size="10" fill="#0c4a6e">A</text>
+      <text x="660" y="50" font-size="10" text-anchor="middle" fill="#0c4a6e">B</text>
+      <text x="574" y="134" font-size="10" text-anchor="end" fill="#0c4a6e">C</text>
+      <text x="660" y="224" font-size="10" text-anchor="middle" fill="#0c4a6e">D</text>
+
+      <path d="M700,76 A 72 72 0 0 1 700,184" fill="none" stroke="#7c3aed" stroke-width="1.4" marker-end="url(#m5)"/>
+      <text x="556" y="34" font-size="11" font-weight="700" fill="#3b4252">一致性哈希环</text>
+      <text x="556" y="252" font-size="9.5" fill="#5d6675">hash(uid) 顺时针找第一个节点</text>
+      <text x="556" y="270" font-size="9.5" fill="#5d6675">→ 相同 uid 永远同一实例</text>
+    </svg>
+    <figcaption>摘流窗口越长，失败量越大——<b>这是「秒」为单位的运维细节，也是面试里最能区分「做过」和「背过」的一个数字</b>。</figcaption>
+  </figure>
+
+  <p><b>重试能救吗？</b>能，但有代价。开 <code class="inl">maxAttempts=2</code>（再试 1 次）可以把失败率从 12.5% 降到约 1.5%，但下游瞬时流量也 ×2——如果剩下的 7 个实例本来就在 80% 负载，这一下就集体雪崩。<b>所以重试规则只有三条</b>：只重试幂等接口、只在最外层重试、重试预算受总超时约束。</p>
+</section>
+
+<!-- ============ L3 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>限流与熔断 · 四种算法、三态状态机、一个环形数组</em></div>
+  <h2>四种限流算法，四种性格</h2>
+
+  <figure>
+    <svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m6" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <rect x="30" y="30" width="200" height="140" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="44" y="50" font-size="10.5" font-weight="700" fill="#be123c">① 固定窗口计数器</text>
+      <rect x="46" y="60" width="76" height="46" rx="4" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="84" y="88" font-size="9.5" text-anchor="middle" fill="#9f1239">窗口 1：100</text>
+      <rect x="124" y="60" width="76" height="46" rx="4" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="162" y="88" font-size="9.5" text-anchor="middle" fill="#9f1239">窗口 2：100</text>
+      <line x1="122" y1="52" x2="122" y2="114" stroke="#be123c" stroke-width="1.4" stroke-dasharray="3 2"/>
+      <text x="44" y="132" font-size="9" fill="#be123c">0.9s 打满 + 1.1s 打满</text>
+      <text x="44" y="150" font-size="9" fill="#be123c">= 0.2 秒内过了 200（边界双倍）</text>
+
+      <rect x="250" y="30" width="200" height="140" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="264" y="50" font-size="10.5" font-weight="700" fill="#0369a1">② 滑动窗口</text>
+      <rect x="264" y="62" width="17" height="22" fill="#e8f2fb" stroke="#bcdcf2"/>
+      <rect x="281" y="62" width="17" height="22" fill="#e8f2fb" stroke="#bcdcf2"/>
+      <rect x="298" y="62" width="17" height="22" fill="#e8f2fb" stroke="#bcdcf2"/>
+      <rect x="315" y="62" width="17" height="22" fill="#e8f2fb" stroke="#bcdcf2"/>
+      <rect x="332" y="62" width="17" height="22" fill="#e8f2fb" stroke="#bcdcf2"/>
+      <rect x="349" y="62" width="17" height="22" fill="#0369a1" stroke="#0369a1"/>
+      <rect x="366" y="62" width="17" height="22" fill="#0369a1" stroke="#0369a1"/>
+      <rect x="383" y="62" width="17" height="22" fill="#0369a1" stroke="#0369a1"/>
+      <rect x="400" y="62" width="17" height="22" fill="#0369a1" stroke="#0369a1"/>
+      <rect x="417" y="62" width="17" height="22" fill="#0369a1" stroke="#0369a1"/>
+      <text x="264" y="102" font-size="9" fill="#5d6675">1 秒切 10 格，统计最近 1s 总和</text>
+      <text x="264" y="132" font-size="9" fill="#047857">无边界双倍，统计 O(1)</text>
+      <text x="264" y="150" font-size="9" fill="#047857">内存固定，工业界主流</text>
+
+      <rect x="470" y="30" width="200" height="140" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="484" y="50" font-size="10.5" font-weight="700" fill="#b45309">③ 漏桶</text>
+      <path d="M490,62 L570,62 L544,104 L516,104 Z" fill="#fff5e6" stroke="#b45309"/>
+      <circle cx="530" cy="116" r="3" fill="#b45309"/>
+      <circle cx="530" cy="128" r="3" fill="#b45309"/>
+      <circle cx="530" cy="140" r="3" fill="#b45309"/>
+      <text x="484" y="158" font-size="9" fill="#b45309">恒定速率流出：绝对平滑</text>
+      <text x="484" y="174" font-size="9" fill="#b45309">代价：排队延迟，桶满即拒</text>
+
+      <rect x="690" y="30" width="200" height="140" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="704" y="50" font-size="10.5" font-weight="700" fill="#047857">④ 令牌桶</text>
+      <rect x="712" y="72" width="80" height="52" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <circle cx="728" cy="86" r="4" fill="#047857"/>
+      <circle cx="750" cy="86" r="4" fill="#047857"/>
+      <circle cx="772" cy="86" r="4" fill="#047857"/>
+      <circle cx="728" cy="106" r="4" fill="#047857"/>
+      <circle cx="750" cy="106" r="4" fill="#047857"/>
+      <line x1="752" y1="52" x2="752" y2="68" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m6)"/>
+      <text x="762" y="62" font-size="8.5" fill="#5d6675">rate/s</text>
+      <line x1="794" y1="98" x2="826" y2="98" stroke="#8b93a5" stroke-width="1.3" marker-end="url(#m6)"/>
+      <text x="704" y="146" font-size="9" fill="#047857">容量 = burst，允许一次性取走</text>
+      <text x="704" y="162" font-size="9" fill="#047857">网关限流首选（Guava / Lua）</text>
+
+      <text x="30" y="200" font-size="11" font-weight="700" fill="#3b4252">选择口诀</text>
+      <text x="30" y="222" font-size="10.5" fill="#3b4252">下游吃不了突发（第三方 API 有硬 TPS）→ 漏桶</text>
+      <text x="30" y="244" font-size="10.5" fill="#3b4252">下游能扛突发、要好体验 → 令牌桶</text>
+      <text x="30" y="266" font-size="10.5" fill="#3b4252">只要「每秒不超过 N」且实现要简单 → 滑动窗口</text>
+      <text x="30" y="288" font-size="10.5" fill="#7c3aed" font-weight="700">固定窗口唯一的价值：够简单。生产上别用它做核心限流</text>
+    </svg>
+    <figcaption>四种算法没有优劣，只有「能不能吃突发」。<b>令牌桶允许突发是因为桶里攒了令牌，漏桶不允许是因为出口孔径固定</b>——记住这两句物理图像，比背定义强。</figcaption>
+  </figure>
+
+  <h3>Sentinel 的 LeapArray：2 个格子怎么撑起 1 秒的滑动窗口</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m7" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <text x="60" y="34" font-size="11" font-weight="700" fill="#3b4252">默认 windowLengthInMs=500，sampleCount=2 → 环形数组长度 2</text>
+
+      <rect x="60" y="70" width="150" height="46" rx="6" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="135" y="90" font-size="10.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">W0</text>
+      <text x="135" y="106" font-size="9" text-anchor="middle" fill="#5d6675">start=0, val=42</text>
+
+      <rect x="210" y="70" width="150" height="46" rx="6" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="285" y="90" font-size="10.5" text-anchor="middle" font-weight="700" fill="#5b21b6">W1</text>
+      <text x="285" y="106" font-size="9" text-anchor="middle" fill="#5d6675">start=500, val=41</text>
+
+      <rect x="360" y="70" width="150" height="46" rx="6" fill="#e8f2fb" stroke="#0369a1" stroke-dasharray="4 3"/>
+      <text x="435" y="90" font-size="10.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">W0'（复用）</text>
+      <text x="435" y="106" font-size="9" text-anchor="middle" fill="#5d6675">start=1000, val=37</text>
+
+      <rect x="510" y="70" width="150" height="46" rx="6" fill="#f3ecfd" stroke="#7c3aed" stroke-dasharray="4 3"/>
+      <text x="585" y="90" font-size="10.5" text-anchor="middle" font-weight="700" fill="#5b21b6">W1'（复用）</text>
+      <text x="585" y="106" font-size="9" text-anchor="middle" fill="#5d6675">start=1500</text>
+
+      <line x1="60" y1="132" x2="660" y2="132" stroke="#c7ccd8" stroke-width="1"/>
+      <text x="60" y="150" font-size="9" text-anchor="middle" fill="#9aa2b1">0ms</text>
+      <text x="210" y="150" font-size="9" text-anchor="middle" fill="#9aa2b1">500ms</text>
+      <text x="360" y="150" font-size="9" text-anchor="middle" fill="#9aa2b1">1000ms</text>
+      <text x="510" y="150" font-size="9" text-anchor="middle" fill="#9aa2b1">1500ms</text>
+      <text x="660" y="150" font-size="9" text-anchor="middle" fill="#9aa2b1">2000ms</text>
+
+      <path d="M135,120 C135,172 435,172 435,122" fill="none" stroke="#be123c" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#m7)"/>
+      <text x="285" y="188" font-size="9.5" text-anchor="middle" fill="#be123c">过期 → CAS 重置 windowStart + value=0，不新建对象</text>
+
+      <rect x="60" y="204" width="230" height="46" rx="6" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="76" y="224" font-size="9.5" fill="#3b4252">index 0 → W0'（当前 1s 的前半段）</text>
+      <text x="76" y="240" font-size="9.5" fill="#3b4252">index 1 → W1（上一段的尾部）</text>
+
+      <rect x="310" y="204" width="200" height="46" rx="6" fill="#eaf7f0" stroke="#047857"/>
+      <text x="410" y="224" font-size="9.5" text-anchor="middle" font-weight="700" fill="#065f46">当前 1s 通过数</text>
+      <text x="410" y="240" font-size="9.5" text-anchor="middle" fill="#065f46">= 37 + 41 = 78</text>
+
+      <text x="60" y="278" font-size="10.5" fill="#3b4252">① 内存固定：不管 QPS 多高，永远 2 个对象</text>
+      <text x="60" y="298" font-size="10.5" fill="#3b4252">② 统计 O(1)：两次 AtomicLong 读 + 一次加法</text>
+      <text x="60" y="318" font-size="10.5" fill="#3b4252">③ 无锁：CAS 自旋 + 失败重试（比 synchronized 快一个量级）</text>
+
+      <text x="540" y="278" font-size="10.5" fill="#7c3aed">三个字段：windowStart</text>
+      <text x="540" y="298" font-size="10.5" fill="#7c3aed">value(AtomicLong) / passTime</text>
+      <text x="540" y="318" font-size="10.5" fill="#be123c">说得出这三个，就是读过源码</text>
+    </svg>
+    <figcaption>「滑动窗口」听起来很高级，落地就是<b>一个长度 2 的环形数组 + CAS 重置过期格子</b>。能把这张图讲出来，比背「滑动窗口算法」高一个档。</figcaption>
+  </figure>
+
+  <h3>流控的三种效果</h3>
+
+  <table>
+    <tr><th style="width:22%">效果</th><th style="width:38%">行为</th><th>参数 / 场景</th></tr>
+    <tr><td>快速失败（默认）</td><td>超阈值直接抛 <code>FlowException</code></td><td>大多数场景，最省资源</td></tr>
+    <tr><td>Warm Up 预热</td><td>从 <code>阈值/3</code> 开始，在预热时长内线性升到阈值</td><td><code>warmPeriod</code> 默认 10s，冷加载因子 3；用于冷启动的缓存类服务</td></tr>
+    <tr><td>排队等待</td><td>匀速放行，请求排队（本质是漏桶）</td><td><code>timeout</code> 最大排队时长；用于削峰、消息类处理</td></tr>
+  </table>
+
+  <p><b>Warm Up 的数学</b>：阈值 100、预热 10s，则起始允许 33 QPS，每秒 +6.7，10 秒后到 100。原理抄自 Guava <code class="inl">SmoothRateLimiter</code> 的冷启动模型——为什么需要它？因为一个刚启动的服务，JIT 没编译、连接池没建、本地缓存是空的，直接给它满额流量就是自杀。</p>
+
+  <h3>熔断：三态状态机</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 290" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m8" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+        <marker id="m8r" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#be123c"/>
+        </marker>
+        <marker id="m8g" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#047857"/>
+        </marker>
+      </defs>
+
+      <rect x="50" y="120" width="160" height="66" rx="10" fill="#eaf7f0" stroke="#047857" stroke-width="1.6"/>
+      <text x="130" y="146" font-size="12" text-anchor="middle" font-weight="700" fill="#065f46">CLOSED</text>
+      <text x="130" y="166" font-size="9.5" text-anchor="middle" fill="#5d6675">正常放行 + 统计</text>
+
+      <rect x="370" y="120" width="160" height="66" rx="10" fill="#fff5f6" stroke="#be123c" stroke-width="1.6"/>
+      <text x="450" y="146" font-size="12" text-anchor="middle" font-weight="700" fill="#9f1239">OPEN</text>
+      <text x="450" y="166" font-size="9.5" text-anchor="middle" fill="#5d6675">直接拒绝（不发请求）</text>
+
+      <rect x="690" y="120" width="160" height="66" rx="10" fill="#fff5e6" stroke="#b45309" stroke-width="1.6"/>
+      <text x="770" y="146" font-size="12" text-anchor="middle" font-weight="700" fill="#92400e">HALF_OPEN</text>
+      <text x="770" y="166" font-size="9.5" text-anchor="middle" fill="#5d6675">放 1 个请求探测</text>
+
+      <path d="M210,120 C255,58 315,58 368,120" fill="none" stroke="#be123c" stroke-width="1.6" marker-end="url(#m8r)"/>
+      <text x="290" y="62" font-size="9.5" text-anchor="middle" fill="#be123c">慢调用/异常 达阈值</text>
+
+      <line x1="532" y1="138" x2="686" y2="138" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#m8)"/>
+      <text x="609" y="130" font-size="9.5" text-anchor="middle" fill="#5d6675">熔断时长 10s 到</text>
+
+      <line x1="686" y1="172" x2="532" y2="172" stroke="#be123c" stroke-width="1.5" marker-end="url(#m8r)"/>
+      <text x="609" y="188" font-size="9.5" text-anchor="middle" fill="#be123c">探测失败 → 回到 OPEN</text>
+
+      <path d="M770,186 L770,236 L130,236 L130,188" fill="none" stroke="#047857" stroke-width="1.6" marker-end="url(#m8g)"/>
+      <text x="450" y="254" font-size="9.5" text-anchor="middle" fill="#047857">探测成功 → 关闭熔断，恢复正常</text>
+
+      <text x="50" y="278" font-size="10" fill="#5d6675">关键：OPEN 状态下请求【根本不发出去】，这才是「快速失败」——而超时是「等到 timeout 才知道失败」，两者成本差几十倍</text>
+    </svg>
+    <figcaption>熔断和超时的区别：<b>超时是「等到死」，熔断是「不等了」</b>。下游挂的时候，熔断能立刻释放线程，超时只能让线程干等 1 秒——这就是雪崩的第一张多米诺。</figcaption>
+  </figure>
+
+  <table>
+    <tr><th style="width:26%">触发策略</th><th style="width:30%">条件</th><th>Sentinel 默认值</th></tr>
+    <tr><td>慢调用比例</td><td>RT &gt; 阈值 且 慢调用比例 &gt; 0.5</td><td>最小请求数 5、统计窗口 1s、熔断 10s</td></tr>
+    <tr><td>异常比例</td><td>异常比例 &gt; 0.5</td><td>同上</td></tr>
+    <tr><td>异常数</td><td>异常数 &gt; 5</td><td>同上</td></tr>
+  </table>
+
+  <div class="warn">
+    <b>为什么「最小请求数 5」这么重要？</b><br>
+    如果只来 1 个请求而且失败了，异常比例 = 100%，但样本太小。5 是最小统计样本门槛，<b>防止「一个偶发失败把整个接口熔断」</b>。这是个典型的「统计显著性」问题——面试里能主动提这一点的候选人不多。
+  </div>
+
+  <h3>熔断 vs 降级 vs 限流：三个词别混着说</h3>
+
+  <pre><span class="c">// 三者是一条链路，不是三个并列的名词</span>
+<span class="c">// ① 限流：入口处「少进来一些」，保护自己</span>
+<span class="c">// ② 熔断：出口处「先别出去了」，保护自己不被下游拖死</span>
+<span class="c">// ③ 降级：结果上「给个兜底」，保护用户体验</span>
+
+<span class="an">@SentinelResource</span>(value = <span class="s">"queryRecommend"</span>,
+        blockHandler = <span class="s">"blocked"</span>,      <span class="c">// 限流/熔断触发时</span>
+        fallback = <span class="s">"fallback"</span>)          <span class="c">// 业务异常时（降级兜底）</span>
+<span class="k">public</span> List&lt;Item&gt; queryRecommend(<span class="k">long</span> uid) {
+    <span class="k">return</span> recommendClient.get(uid);   <span class="c">// 下游调用，可能被熔断</span>
+}
+
+<span class="k">public</span> List&lt;Item&gt; blocked(<span class="k">long</span> uid, BlockException e) {
+    <span class="k">return</span> hotCache.get(uid);           <span class="c">// 限流时：返回缓存，不查下游</span>
+}
+
+<span class="k">public</span> List&lt;Item&gt; fallback(<span class="k">long</span> uid, Throwable t) {
+    <span class="k">return</span> Collections.emptyList();     <span class="c">// 降级：给空列表，页面显示「暂无推荐」</span>
+}</pre>
+
+  <h3>隔离：线程池隔离 vs 信号量隔离</h3>
+
+  <pre><span class="c">// ✗ 线程池隔离（Hystrix 默认，每接口 10 线程）</span>
+Tomcat 线程 ──▶ 提交任务 ──▶ [线程池 10] ──▶ 调用下游
+     ↑ 多一次上下文切换（0.5~1ms）+ ThreadLocal 丢 + 线程数翻倍
+
+<span class="c">// ✓ 信号量隔离（Sentinel 的「并发线程数」流控）</span>
+Tomcat 线程 ──▶ 拿信号量（计数 -1）──▶ 调用下游 ──▶ 释放
+     ↑ 无线程切换、无池开销，但无法「异步超时中断」</pre>
+
+  <p><b>选型结论</b>：同步调用用<b>信号量</b>（Sentinel 的线程数模式），只有需要「超时后真正中断下游」或「异步」时才用线程池。Hystrix 被淘汰的一大原因就是默认线程池隔离——每个接口一个池，几百个池，上下文切换把 CPU 吃满，还顺带把 TraceId 搞丢了。</p>
+
+  <h3>超时与重试的雪崩放大（必须会算）</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 270" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m9" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <rect x="60" y="56" width="90" height="40" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="105" y="81" font-size="11" text-anchor="middle" font-weight="700" fill="#0c4a6e">A</text>
+      <rect x="230" y="56" width="90" height="40" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="275" y="81" font-size="11" text-anchor="middle" font-weight="700" fill="#0c4a6e">B</text>
+      <rect x="400" y="56" width="90" height="40" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="445" y="81" font-size="11" text-anchor="middle" font-weight="700" fill="#0c4a6e">C</text>
+      <rect x="570" y="56" width="90" height="40" rx="7" fill="#fff5f6" stroke="#be123c"/>
+      <text x="615" y="81" font-size="11" text-anchor="middle" font-weight="700" fill="#9f1239">D 慢</text>
+
+      <line x1="152" y1="76" x2="226" y2="76" stroke="#be123c" stroke-width="1.5" marker-end="url(#m9)"/>
+      <text x="189" y="70" font-size="9" text-anchor="middle" fill="#be123c">×3</text>
+      <line x1="322" y1="76" x2="396" y2="76" stroke="#be123c" stroke-width="1.5" marker-end="url(#m9)"/>
+      <text x="359" y="70" font-size="9" text-anchor="middle" fill="#be123c">×3</text>
+      <line x1="492" y1="76" x2="566" y2="76" stroke="#be123c" stroke-width="1.5" marker-end="url(#m9)"/>
+      <text x="529" y="70" font-size="9" text-anchor="middle" fill="#be123c">×3</text>
+
+      <text x="60" y="40" font-size="10.5" fill="#5d6675">用户 1 次请求，每层重试 2 次（= 3 次尝试）</text>
+
+      <rect x="60" y="120" width="600" height="46" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="76" y="140" font-size="11" font-weight="700" fill="#be123c">3 × 3 × 3 = 27 次请求打到 D</text>
+      <text x="76" y="158" font-size="10" fill="#3b4252">而 D 只是「慢」，不是「挂」——27 倍流量把它彻底打死，然后反向拖垮 C、B、A</text>
+
+      <text x="60" y="196" font-size="10.5" font-weight="700" fill="#047857">四条铁律</text>
+      <text x="60" y="216" font-size="10" fill="#3b4252">① 只在最外层（网关/BFF）重试，内层一律不重试</text>
+      <text x="60" y="236" font-size="10" fill="#3b4252">② 超时预算递减：A 给 1s → B 给 800ms → C 给 500ms</text>
+      <text x="60" y="256" font-size="10" fill="#3b4252">③ 重试次数 × 单次超时 &lt; 上游剩余超时，否则重试没意义</text>
+      <text x="480" y="236" font-size="10" fill="#be123c">④ 非幂等接口（下单/支付）</text>
+      <text x="480" y="256" font-size="10" fill="#be123c">　 绝对不重试，改成查询补偿</text>
+    </svg>
+    <figcaption>重试是<b>放大器，不是修复器</b>。它能把 0.1% 的抖动放大成 27 倍的流量洪峰——这就是「明明只挂了一个服务，为什么全站都挂了」的标准答案。</figcaption>
+  </figure>
+</section>
+
+<!-- ============ L4 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>网关 · 唯一该做「横切」的地方</em></div>
+  <h2>请求在 Gateway 里走的完整链路</h2>
+
+  <figure>
+    <svg viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ma" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <text x="30" y="30" font-size="10.5" fill="#5d6675">pre 阶段：order 升序（小的先跑）　|　post 阶段：order 降序（大的先回）</text>
+
+      <rect x="330" y="42" width="240" height="38" rx="8" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="450" y="66" font-size="11" text-anchor="middle" font-weight="700" fill="#5b21b6">Netty Server（Reactor 非阻塞）</text>
+      <line x1="450" y1="82" x2="450" y2="94" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#ma)"/>
+
+      <rect x="290" y="96" width="320" height="38" rx="8" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="450" y="120" font-size="10.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">RoutePredicateHandlerMapping · 匹配 Route</text>
+      <line x1="450" y1="136" x2="450" y2="148" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#ma)"/>
+
+      <rect x="290" y="150" width="320" height="38" rx="8" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="450" y="174" font-size="10.5" text-anchor="middle" font-weight="700" fill="#0c4a6e">FilteringWebHandler · 组装过滤器链</text>
+      <line x1="450" y1="190" x2="450" y2="202" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#ma)"/>
+
+      <rect x="130" y="204" width="640" height="86" rx="9" fill="#f8f9fc" stroke="#c7ccd8" stroke-dasharray="4 3"/>
+
+      <rect x="148" y="220" width="136" height="28" rx="5" fill="#eaf7f0" stroke="#047857"/>
+      <text x="216" y="238" font-size="9.5" text-anchor="middle" fill="#065f46">鉴权 JWT -100</text>
+      <rect x="298" y="220" width="136" height="28" rx="5" fill="#fff5e6" stroke="#b45309"/>
+      <text x="366" y="238" font-size="9.5" text-anchor="middle" fill="#92400e">StripPrefix 1</text>
+      <rect x="448" y="220" width="136" height="28" rx="5" fill="#fff5f6" stroke="#be123c"/>
+      <text x="516" y="238" font-size="9.5" text-anchor="middle" fill="#9f1239">限流 -50</text>
+      <rect x="598" y="220" width="154" height="28" rx="5" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="675" y="238" font-size="9.5" text-anchor="middle" fill="#0c4a6e">LoadBalancer 10150</text>
+
+      <text x="148" y="270" font-size="9.5" fill="#3b4252">RouteToRequestUrlFilter  10000　→　把 order-svc 换成真实 IP:port</text>
+      <text x="148" y="282" font-size="9.5" fill="#be123c">NettyWriteResponseFilter  -1　→　把响应写回客户端（post 阶段最先执行）</text>
+
+      <line x1="450" y1="292" x2="450" y2="306" stroke="#8b93a5" stroke-width="1.5" marker-end="url(#ma)"/>
+
+      <rect x="290" y="308" width="320" height="40" rx="8" fill="#eaf7f0" stroke="#047857"/>
+      <text x="450" y="333" font-size="10.5" text-anchor="middle" font-weight="700" fill="#065f46">NettyRoutingFilter → 转发下游</text>
+
+      <text x="30" y="370" font-size="9.5" fill="#5d6675">要点：整条链在同一个 EventLoop 上跑，不切线程 —— 这就是它能扛 1~2 万 QPS 的原因</text>
+    </svg>
+    <figcaption>「pre 升序、post 降序」不是随口说的规则，是 <code class="inl">FilteringWebHandler</code> 里对 pre 排序、再逆序调用的结果——本质是<b>递归调用的进出栈</b>。能讲出这层，说明真读过源码。</figcaption>
+  </figure>
+
+  <h3>网关必须做 / 绝对不能做的事</h3>
+
+  <table>
+    <tr><th style="width:50%">必须做</th><th>绝对不要做</th></tr>
+    <tr><td>统一鉴权（JWT 校验、白名单）</td><td>业务逻辑聚合（除 BFF 场景）</td></tr>
+    <tr><td>限流（IP / 用户 / API 三个维度）</td><td>数据库查询、缓存读写</td></tr>
+    <tr><td>路由与灰度染色</td><td>大报文转换（图片 / 文件流）</td></tr>
+    <tr><td>统一日志 + TraceId 注入</td><td>无限重试（网关重试是雪崩放大器）</td></tr>
+    <tr><td>协议转换（HTTP → gRPC）</td><td>长事务、同步等待多个下游</td></tr>
+  </table>
+
+  <h3>网关限流为什么是 Redis + Lua</h3>
+
+  <pre><span class="c">// 应用内限流是「单机口径」：4 个网关实例各限 1000 → 集群实际能过 4000</span>
+<span class="c">// Redis 是共享计数：4 个实例共用一个令牌桶 → 集群严格 1000</span>
+
+<span class="c">-- 令牌桶 Lua（原子执行，一次 RTT 完成「补令牌 + 取 + 写回」）</span>
+<span class="k">local</span> key    = KEYS[1]
+<span class="k">local</span> rate   = tonumber(ARGV[1])   <span class="c">-- 每秒补充速率</span>
+<span class="k">local</span> burst  = tonumber(ARGV[2])   <span class="c">-- 桶容量</span>
+<span class="k">local</span> now    = tonumber(ARGV[3])
+<span class="k">local</span> t      = redis.call(<span class="s">'HMGET'</span>, key, <span class="s">'tokens'</span>, <span class="s">'ts'</span>)
+<span class="k">local</span> tokens = tonumber(t[1]) <span class="k">or</span> burst
+<span class="k">local</span> ts     = tonumber(t[2]) <span class="k">or</span> now
+tokens = math.min(burst, tokens + (now - ts) * rate)   <span class="c">-- 按流逝时间补</span>
+<span class="k">if</span> tokens &gt;= 1 <span class="k">then</span>
+    redis.call(<span class="s">'HMSET'</span>, key, <span class="s">'tokens'</span>, tokens - 1, <span class="s">'ts'</span>, now)
+    <span class="k">return</span> 1        <span class="c">-- 放行</span>
+<span class="k">else</span>
+    <span class="k">return</span> 0        <span class="c">-- 限流</span>
+<span class="k">end</span></pre>
+
+  <p><b>为什么必须 Lua</b>：如果拆成 <code class="inl">GET → 判断 → SET</code> 三步，并发下两个请求会同时读到 <code class="inl">tokens=1</code>，都放行 → 超卖。Redis 单线程 + Lua 原子性，是「分布式限流」唯一简单可靠的做法。</p>
+
+  <pre><span class="c">// KeyResolver 决定限流维度：生产上通常三层叠加</span>
+<span class="an">@Bean</span>
+<span class="k">public</span> KeyResolver ipKeyResolver() {
+    <span class="k">return</span> exchange -&gt; Mono.just(
+        exchange.getRequest().getRemoteAddress().getAddress().getHostAddress());  <span class="c">// ① 防刷</span>
+}
+
+<span class="an">@Bean</span>
+<span class="k">public</span> KeyResolver userKeyResolver() {
+    <span class="k">return</span> exchange -&gt; Mono.justOrEmpty(
+        exchange.getRequest().getHeaders().getFirst(<span class="s">"X-User-Id"</span>));             <span class="c">// ② 配额</span>
+}</pre>
+
+  <h3>网关是新的单点，必须无状态</h3>
+
+  <div class="trap">
+    <b>两个隐藏依赖，上线前必须确认</b><br>
+    ① 网关里存 Session 或本地缓存用户信息 → 重启全掉线、多副本状态不一致。<b>网关只做「解析 + 转发」</b>，状态放 Redis 或 JWT 自包含。<br>
+    ② 网关从注册中心拉实例列表 → <b>注册中心挂了网关也挂</b>。必须把路由表持久化到本地（Nacos 的本地 snapshot、RouteDefinition 存 DB），启动时加载。
+  </div>
+</section>
+
+<!-- ============ L5 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b1">L5</span><em>链路追踪 · TraceId 在线程池里是怎么消失的</em></div>
+  <h2>三个 ID 的关系</h2>
+
+  <pre><span class="c">// 一次用户请求（浏览器点「下单」）</span>
+TraceId = 7f3a9c2e1b4d          <span class="c">// 全局唯一，整条链路共享</span>
+  │
+  ├─ Span A (gateway)   spanId=01  parent=null   320ms
+  │   ├─ Span B (order) spanId=02  parent=01     280ms
+  │   │   ├─ Span C (stock) spanId=03  parent=02  60ms
+  │   │   └─ Span D (pay)   spanId=04  parent=02 150ms
+  │   └─ Span E (user)  spanId=05  parent=01      20ms
+  │
+  └─ W3C 标准 header（跨语言、跨厂商）
+     traceparent: 00-7f3a9c2e1b4d9a1c8e2f3b4a5c6d7e8f-0000000000000002-01
+                   │  └──── trace-id (32 hex) ─────┘ └─ parent-id ─┘ └flags</pre>
+
+  <p><b>为什么必须有 parent-id</b>：没有它，你只知道「这些 Span 属于同一次请求」，不知道<b>谁调用了谁</b>。有了父子关系才能画调用树、算每个节点的自身耗时（self time = 总耗时 − 子 Span 之和），才能定位「到底是谁慢」——否则你只能看到「整条链路 320ms」，毫无用处。</p>
+
+  <h3>TraceId 丢失的六个位置（面试就考这个）</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="mb" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#8b93a5"/>
+        </marker>
+      </defs>
+
+      <rect x="24" y="14" width="412" height="180" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="38" font-size="11.5" font-weight="700" fill="#be123c">✗ 直接把任务提交给线程池</text>
+
+      <rect x="42" y="52" width="128" height="46" rx="7" fill="#fff" stroke="#be123c"/>
+      <text x="106" y="72" font-size="9.5" text-anchor="middle" fill="#9f1239">Tomcat 线程</text>
+      <text x="106" y="88" font-size="9" text-anchor="middle" fill="#5d6675">MDC={traceId:7f3a}</text>
+
+      <line x1="172" y1="75" x2="244" y2="75" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#mb)"/>
+      <text x="208" y="68" font-size="8.5" text-anchor="middle" fill="#be123c">submit</text>
+
+      <rect x="248" y="52" width="150" height="46" rx="7" fill="#fff" stroke="#be123c"/>
+      <text x="323" y="72" font-size="9.5" text-anchor="middle" fill="#9f1239">线程池线程（复用）</text>
+      <text x="323" y="88" font-size="9" text-anchor="middle" fill="#be123c">MDC={} 空！</text>
+
+      <text x="42" y="126" font-size="10" fill="#3b4252">日志里 traceId=null，或者上一个任务的 traceId（串号）</text>
+      <text x="42" y="148" font-size="10" fill="#3b4252">根因：InheritableThreadLocal 只在 new Thread 时复制一次</text>
+      <text x="42" y="170" font-size="10" font-weight="700" fill="#be123c">串号比丢失更可怕：看起来有值，但指向错的链路</text>
+
+      <rect x="464" y="14" width="412" height="180" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="482" y="38" font-size="11.5" font-weight="700" fill="#047857">✓ TTL 装饰线程池（三步）</text>
+
+      <rect x="482" y="52" width="116" height="46" rx="7" fill="#fff" stroke="#047857"/>
+      <text x="540" y="70" font-size="9.5" text-anchor="middle" font-weight="700" fill="#065f46">① capture</text>
+      <text x="540" y="86" font-size="8.5" text-anchor="middle" fill="#5d6675">提交时快照</text>
+
+      <line x1="600" y1="75" x2="616" y2="75" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#mb)"/>
+
+      <rect x="618" y="52" width="116" height="46" rx="7" fill="#fff" stroke="#047857"/>
+      <text x="676" y="70" font-size="9.5" text-anchor="middle" font-weight="700" fill="#065f46">② replay</text>
+      <text x="676" y="86" font-size="8.5" text-anchor="middle" fill="#5d6675">执行前写入</text>
+
+      <line x1="736" y1="75" x2="752" y2="75" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#mb)"/>
+
+      <rect x="754" y="52" width="116" height="46" rx="7" fill="#fff" stroke="#047857"/>
+      <text x="812" y="70" font-size="9.5" text-anchor="middle" font-weight="700" fill="#065f46">③ restore</text>
+      <text x="812" y="86" font-size="8.5" text-anchor="middle" fill="#5d6675">执行后还原</text>
+
+      <text x="482" y="126" font-size="10" fill="#3b4252">TtlExecutors.getTtlExecutorService(pool)</text>
+      <text x="482" y="148" font-size="10" font-weight="700" fill="#be123c">只引 TTL 不包装线程池 = 完全无效</text>
+      <text x="482" y="170" font-size="10" fill="#5d6675">（这是最高频的实现错误，代码 review 必查）</text>
+
+      <rect x="24" y="208" width="852" height="112" rx="10" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="232" font-size="10.5" font-weight="700" fill="#3b4252">TraceId 会丢的六个位置</text>
+
+      <rect x="42" y="242" width="252" height="26" rx="5" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="168" y="259" font-size="9" text-anchor="middle" fill="#9f1239">① 线程池复用（最常见）</text>
+      <rect x="312" y="242" width="252" height="26" rx="5" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="438" y="259" font-size="9" text-anchor="middle" fill="#9f1239">② @Async</text>
+      <rect x="582" y="242" width="280" height="26" rx="5" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="722" y="259" font-size="9" text-anchor="middle" fill="#9f1239">③ CompletableFuture.supplyAsync</text>
+
+      <rect x="42" y="278" width="252" height="26" rx="5" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="168" y="295" font-size="9" text-anchor="middle" fill="#9f1239">④ MQ 生产 / 消费</text>
+      <rect x="312" y="278" width="252" height="26" rx="5" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="438" y="295" font-size="9" text-anchor="middle" fill="#9f1239">⑤ @Scheduled 定时任务</text>
+      <rect x="582" y="278" width="280" height="26" rx="5" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="722" y="295" font-size="9" text-anchor="middle" fill="#9f1239">⑥ Reactor 的 Context（不是 ThreadLocal）</text>
+    </svg>
+    <figcaption>注意：<b>MDC 底层就是 InheritableThreadLocal</b>。它只在创建子线程那一刻复制，之后父线程怎么改都不同步——线程池把「创建」这一步省了，于是它彻底失效。</figcaption>
+  </figure>
+
+  <h3>TTL 的三步，和真正的代码</h3>
+
+  <pre><span class="c">// 1. 线程池装饰（少了这一行，后面全白干）</span>
+<span class="an">@Bean</span>
+<span class="k">public</span> ExecutorService bizExecutor() {
+    ThreadPoolExecutor pool = <span class="k">new</span> ThreadPoolExecutor(
+        8, 16, 60, TimeUnit.SECONDS,
+        <span class="k">new</span> LinkedBlockingQueue&lt;&gt;(200),
+        <span class="k">new</span> ThreadFactoryBuilder().setNameFormat(<span class="s">"biz-%d"</span>).build());
+    <span class="k">return</span> TtlExecutors.getTtlExecutorService(pool);   <span class="c">// ← 关键</span>
+}
+
+<span class="c">// 2. 业务侧：MDC 给日志用，TTL 给跨线程用，两个都 set</span>
+TransmittableThreadLocal&lt;String&gt; TRACE = <span class="k">new</span> TransmittableThreadLocal&lt;&gt;();
+<span class="k">public void</span> handle(String traceId) {
+    MDC.put(<span class="s">"traceId"</span>, traceId);
+    TRACE.set(traceId);
+    <span class="k">try</span> { bizExecutor.submit(<span class="k">this</span>::doWork); }   <span class="c">// 子线程里 TRACE.get() 仍有值</span>
+    <span class="k">finally</span> { MDC.clear(); TRACE.remove(); }        <span class="c">// 必须清，否则复用线程时串号</span>
+}
+
+<span class="c">// 3. MQ 生产端：把 traceId 塞进消息 header，消费端取出来重新 set</span>
+producer.send(<span class="k">new</span> ProducerRecord&lt;&gt;(<span class="s">"order-created"</span>, orderId, json,
+        Collections.singletonList(<span class="k">new</span> RecordHeader(<span class="s">"traceId"</span>, TRACE.get().getBytes()))));</pre>
+
+  <div class="good">
+    <b>TTL 的原理，一句话</b><br>
+    它在任务<b>提交时</b>（submit）把当前线程的值 capture 成快照，在任务<b>执行前</b> replay 到执行线程，在任务<b>执行后</b> restore 回去。<b>注意：它是「装饰线程池」而不是「改造线程」</b>——所以不包装线程池，TTL 等于没引。
+  </div>
+
+  <h3>采样率：1% 还是 100%</h3>
+
+  <table>
+    <tr><th style="width:20%">方案</th><th style="width:38%">做法</th><th>取舍</th></tr>
+    <tr><td>头部采样</td><td>请求入口按 1% 概率决定「这条链路要不要采」</td><td>实现简单、无状态；但<b>慢请求和异常大概率被丢</b>，恰好错过你要查的那条</td></tr>
+    <tr><td>尾部采样</td><td>先缓冲全部 Span，结束时按「是否异常/是否慢」决定上报</td><td>精准，异常必留；但需要缓冲与回传，实现复杂（需 Collector）</td></tr>
+  </table>
+
+  <p><b>生产常用组合</b>：默认 1% 头部采样 + <b>「错误和慢请求强制 100% 采样」</b>——在 Span 结束时判断 <code class="inl">status=ERROR</code> 或 <code class="inl">duration &gt; 1s</code> 就打标上报。既不炸存储，又能保住排障样本。</p>
+</section>
+
+<!-- ============ L6 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b2">L6</span><em>灰度发布 · 染色、路由、回退、数据兼容</em></div>
+  <h2>全链路灰度的四个要素</h2>
+
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="mc" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#0369a1"/>
+        </marker>
+        <marker id="mcg" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L8,3.5 L0,7 z" fill="#b6bcc9"/>
+        </marker>
+      </defs>
+
+      <rect x="30" y="128" width="86" height="46" rx="7" fill="#e8f2fb" stroke="#0369a1"/>
+      <text x="73" y="148" font-size="10" text-anchor="middle" font-weight="700" fill="#0c4a6e">用户 A</text>
+      <text x="73" y="164" font-size="8.5" text-anchor="middle" fill="#5d6675">uid=10086</text>
+
+      <line x1="118" y1="151" x2="146" y2="151" stroke="#8b93a5" stroke-width="1.4" marker-end="url(#mcg)"/>
+
+      <rect x="150" y="116" width="120" height="70" rx="8" fill="#f3ecfd" stroke="#7c3aed"/>
+      <text x="210" y="138" font-size="10" text-anchor="middle" font-weight="700" fill="#5b21b6">网关</text>
+      <text x="210" y="156" font-size="8.5" text-anchor="middle" fill="#5d6675">① 染色</text>
+      <text x="210" y="172" font-size="8.5" text-anchor="middle" fill="#be123c">x-gray: v2</text>
+
+      <rect x="296" y="36" width="560" height="86" rx="9" fill="#eaf2fd" stroke="#bcdcf2"/>
+      <text x="308" y="56" font-size="9.5" font-weight="700" fill="#0369a1">v2 泳道</text>
+      <rect x="318" y="72" width="120" height="34" rx="6" fill="#fff" stroke="#0369a1"/>
+      <text x="378" y="93" font-size="9.5" text-anchor="middle" fill="#0c4a6e">order v2</text>
+      <rect x="488" y="72" width="120" height="34" rx="6" fill="#fff" stroke="#0369a1"/>
+      <text x="548" y="93" font-size="9.5" text-anchor="middle" fill="#0c4a6e">stock v2</text>
+      <rect x="658" y="72" width="120" height="34" rx="6" fill="#fff" stroke="#0369a1"/>
+      <text x="718" y="93" font-size="9.5" text-anchor="middle" fill="#0c4a6e">pay v2</text>
+      <line x1="440" y1="89" x2="484" y2="89" stroke="#0369a1" stroke-width="1.3" marker-end="url(#mc)"/>
+      <line x1="610" y1="89" x2="654" y2="89" stroke="#0369a1" stroke-width="1.3" marker-end="url(#mc)"/>
+      <text x="790" y="93" font-size="8.5" fill="#0369a1">② 透传 header</text>
+
+      <rect x="296" y="168" width="560" height="86" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="308" y="188" font-size="9.5" font-weight="700" fill="#5d6675">v1 基线（回退用）</text>
+      <rect x="318" y="204" width="120" height="34" rx="6" fill="#fff" stroke="#c7ccd8"/>
+      <text x="378" y="225" font-size="9.5" text-anchor="middle" fill="#5d6675">order v1</text>
+      <rect x="488" y="204" width="120" height="34" rx="6" fill="#fff" stroke="#c7ccd8"/>
+      <text x="548" y="225" font-size="9.5" text-anchor="middle" fill="#5d6675">stock v1</text>
+      <rect x="658" y="204" width="120" height="34" rx="6" fill="#fff" stroke="#c7ccd8"/>
+      <text x="718" y="225" font-size="9.5" text-anchor="middle" fill="#5d6675">pay v1</text>
+
+      <path d="M270,130 L314,94" stroke="#0369a1" stroke-width="2" fill="none" marker-end="url(#mc)"/>
+      <path d="M270,172 L314,214" stroke="#b6bcc9" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#mcg)"/>
+
+      <text x="30" y="228" font-size="9.5" fill="#5d6675">③ 标签路由：优先同标签实例</text>
+      <text x="30" y="248" font-size="9.5" fill="#5d6675">④ 数据兼容：新旧代码同时在线</text>
+      <text x="30" y="268" font-size="9.5" font-weight="700" fill="#be123c">无 v2 实例？必须回退 v1</text>
+      <text x="30" y="288" font-size="9" fill="#9aa2b1">（这叫安全阀，忘了就是 30% 报错）</text>
+    </svg>
+    <figcaption>灰度的四要素：<b>入口染色 → 链路透传 → 标签路由 → 回退</b>。前三个做对了但忘了回退，就会出现「库存服务没有 v2 版本，所有灰度请求 503」的经典事故。</figcaption>
+  </figure>
+
+  <h3>四种灰度粒度</h3>
+
+  <table>
+    <tr><th style="width:22%">粒度</th><th style="width:34%">实现</th><th>风险</th></tr>
+    <tr><td>机器级（权重）</td><td>网关按权重把 5% 流量打到新版本实例</td><td>同一用户「忽新忽旧」，体验抖动</td></tr>
+    <tr><td>请求级（Header/Cookie）</td><td>指定 header 或 cookie 命中新版本</td><td>需要客户端或测试工具配合</td></tr>
+    <tr><td>用户级（uid 哈希）</td><td><code>hash(uid) % 100 &lt; 5</code></td><td>需要 uid 稳定；适合 C 端 A/B 实验</td></tr>
+    <tr><td>全链路（泳道）</td><td>染色 header 沿调用链透传，整条链路走 v2</td><td>实现复杂，<b>每层都要支持，漏一层就断链</b></td></tr>
+  </table>
+
+  <h3>数据库是灰度最大的障碍：四次发布法</h3>
+
+  <pre><span class="c">-- 需求：给 orders 加一个 biz_type 字段，代码要读写它</span>
+
+<span class="c">-- 发布 1：加列（nullable，带默认值）旧代码不感知，新代码可写</span>
+<span class="k">ALTER TABLE</span> orders <span class="k">ADD COLUMN</span> biz_type <span class="k">TINYINT NULL</span>;
+
+<span class="c">-- 发布 2：双写（新代码写 biz_type，也容忍 null）此时新旧代码共存</span>
+<span class="k">INSERT INTO</span> orders (id, amount, biz_type) <span class="k">VALUES</span> (?, ?, ?);
+<span class="k">UPDATE</span> orders <span class="k">SET</span> biz_type = ? <span class="k">WHERE</span> id = ? <span class="k">AND</span> biz_type <span class="k">IS NULL</span>;
+
+<span class="c">-- 发布 3：刷历史数据 + 读逻辑切到新列</span>
+<span class="k">UPDATE</span> orders <span class="k">SET</span> biz_type = 0 <span class="k">WHERE</span> biz_type <span class="k">IS NULL</span>;   <span class="c">-- 分批，别锁表</span>
+
+<span class="c">-- 发布 4：加约束（NOT NULL / 删旧列）—— 等全量稳定、观察一周后再做</span>
+<span class="k">ALTER TABLE</span> orders <span class="k">MODIFY</span> biz_type <span class="k">TINYINT NOT NULL DEFAULT</span> 0;</pre>
+
+  <div class="trap">
+    <b>铁律：灰度期间不做「不可逆 DDL」</b><br>
+    <code class="inl">DROP COLUMN</code> / <code class="inl">RENAME</code> / 改类型，都是不可逆的——回滚时代码回去了，<b>数据回不去</b>。所以线上变更永远是「加列 → 双写 → 刷数 → 加约束」四次发布，把风险摊开到两周。
+  </div>
+
+  <h3>消息队列的灰度：两个版本的消费者</h3>
+
+  <pre><span class="c">// ✗ 同一个 topic、同一个 consumer group，v1 和 v2 同时消费</span>
+<span class="c">//   → 消息随机分给 v1 或 v2，v1 不认识新字段 → 解析失败 / 静默丢消息</span>
+
+<span class="c">// ✓ 方案 A：v2 用独立 group，双消费（各自维护位移）</span>
+<span class="an">@KafkaListener</span>(topics = <span class="s">"order-created"</span>, groupId = <span class="s">"order-consumer-v2"</span>)
+
+<span class="c">// ✓ 方案 B：按 tag 分流（RocketMQ），v2 只订阅 tag=v2</span>
+consumer.subscribe(<span class="s">"order-created"</span>, <span class="s">"v2"</span>);
+
+<span class="c">// ✓ 方案 C：消息体只加字段不删字段，v1 反序列化时忽略未知字段</span>
+objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, <span class="k">false</span>);</pre>
+</section>
+
+<!-- ============ L7 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">L7</span><em>速查表 + 14 条高频问答</em></div>
+  <h2>速查表</h2>
+
+  <table>
+    <tr><th style="width:34%">主题</th><th>关键数字 / 结论</th></tr>
+    <tr><td>本地调用 vs RPC</td><td>10~50ns vs 0.3~1ms，<b>差 1 万倍以上</b></td></tr>
+    <tr><td>治理复杂度</td><td>N 个服务 → N(N-1)/2 条链路，50 个服务 = 1225 对</td></tr>
+    <tr><td>Eureka 感知延迟</td><td>心跳 90s + 三级缓存 30s×3 + 客户端 30s → 最坏 180s</td></tr>
+    <tr><td>Eureka 自我保护</td><td>15 分钟续约率 &lt; 85% → 停止剔除实例</td></tr>
+    <tr><td>Nacos 心跳</td><td>5s 一次，15s 不健康，30s 剔除</td></tr>
+    <tr><td>Nacos 2.x 端口</td><td>8848 + <b>9848/9849</b>（gRPC，最易漏）</td></tr>
+    <tr><td>ZK 会话超时</td><td>tickTime 2s × 15 = 30s</td></tr>
+    <tr><td>SC LoadBalancer 缓存</td><td>35s（<code>spring.cloud.loadbalancer.cache.ttl</code>）</td></tr>
+    <tr><td>摘流失败量</td><td>250 QPS × 90s = <b>22500 次</b>失败请求</td></tr>
+    <tr><td>Sentinel 窗口</td><td>1s 切 2 格（500ms），环形数组，CAS 更新</td></tr>
+    <tr><td>熔断默认值</td><td>最小请求数 5、比例 0.5、熔断 10s</td></tr>
+    <tr><td>Warm Up</td><td>冷加载因子 3，默认预热 10s</td></tr>
+    <tr><td>重试放大</td><td>3 层 × 3 次 = <b>27 倍</b>流量</td></tr>
+    <tr><td>Gateway 吞吐</td><td>单机 1~2 万 QPS，比 Zuul1 高 1.5~2 倍</td></tr>
+  </table>
+
+  <h2 style="margin-top:30px">14 条高频问答</h2>
+
+  <div class="qa"><div class="qq">Nacos 和 Eureka 最本质的区别是什么？</div><p>不是 AP/CP 标签，而是<b>通信模型</b>：Eureka 客户端定时拉（30s）+ 三级缓存，感知延迟秒级到分钟级；Nacos 2.x 是 gRPC 长连接 + 服务端主动推送，变更延迟约 50ms。次要是 Nacos 支持临时/持久实例分流（AP/CP 可选），且注册中心与配置中心合一。</p></div>
+
+  <div class="qa"><div class="qq">Eureka 的自我保护是 bug 还是特性？</div><p>刻意的设计。15 分钟内续约成功率 &lt; 85% 就停止剔除实例。理由是：大面积心跳丢失更可能是网络或注册中心自身故障，而不是 85% 的机器同时死。宁可保留错误实例（调用失败可重试），也不能剔除正确实例（等于服务全挂）。生产上<b>不要关</b>，正确做法是配合合理的超时与重试。</p></div>
+
+  <div class="qa"><div class="qq">服务已经下线了，为什么还在被调用？</div><p>三层原因叠加：① 注册中心剔除延迟（Eureka 90s）；② 客户端拉取间隔（30s）；③ 客户端本地 LB 缓存（Spring Cloud LoadBalancer 35s）。总延迟可达 90~180s。解法是优雅下线：先反注册 → sleep 一个缓存窗口 → 拒绝新请求并等在途请求完成 → 停进程。K8s 下配合 readinessProbe 提前摘流。</p></div>
+
+  <div class="qa"><div class="qq">光靠注册中心摘除不行吗，为什么还要优雅停机？</div><p>不行。反注册只是「通知」，生效需要时间；这几十秒内进程如果已经停了，打过来的请求全是 connection refused。优雅停机做两件事：① 给缓存窗口留时间（sleep）；② 让 Tomcat 停止接收新连接、把线程池里在途请求处理完（<code class="inl">server.shutdown=graceful</code> + <code class="inl">timeout-per-shutdown-phase=30s</code>）。</p></div>
+
+  <div class="qa"><div class="qq">一致性哈希在服务发现里怎么用？有什么坑？</div><p>目的：相同 key（如 uid）总是落到同一实例，提高本地缓存命中率。两个坑：① <b>数据倾斜</b>——节点少时环上分布不均，10 个实例可能某个承担 30% 流量，解法是虚拟节点（每个物理节点映射 150 个虚拟节点）；② <b>扩缩容迁移</b>——加一个节点只迁移 1/N 数据，但迁移期间缓存短暂失效（击穿风险），需要预热。</p></div>
+
+  <div class="qa"><div class="qq">Sentinel 的滑动窗口是怎么实现的？</div><p>LeapArray 环形数组 + WindowWrap。默认 1 秒切 2 格（500ms/格），数组长度 2。每次请求先算当前时间落在哪格：格子过期就 CAS 重置（<code class="inl">windowStart</code> 改为当前窗口起点、<code class="inl">value</code> 清零），没过期就 <code class="inl">AtomicLong.addAndGet</code>。统计时把有效格子求和。好处是内存固定、统计 O(1)、无锁。</p></div>
+
+  <div class="qa"><div class="qq">固定窗口的「边界双倍」问题，滑动窗口为什么能解决？</div><p>固定窗口按「整秒」划分，0.9s 和 1.1s 属于两个窗口，各放 100 个，0.2 秒内实际过了 200。滑动窗口永远统计「最近 1 秒」，0.9s 的 100 个在 1.1s 时仍在窗口内，所以第 200 个会被拒绝。代价是要存 N 个格子——内存换精度。</p></div>
+
+  <div class="qa"><div class="qq">令牌桶和漏桶的区别，什么时候用哪个？</div><p>漏桶：请求排队，恒定速率流出，<b>削峰但引入延迟</b>。令牌桶：恒定速率放令牌，桶容量允许一次取多个，<b>允许突发</b>。判断依据是「下游能不能吃突发」：能（写日志、异步任务）用令牌桶；不能（第三方 API 有硬 TPS 限制）用漏桶。</p></div>
+
+  <div class="qa"><div class="qq">Sentinel 和 Hystrix 的差别？</div><p>四个维度：① <b>隔离方式</b>：Hystrix 默认线程池隔离（多一层切换、ThreadLocal 丢、线程数膨胀），Sentinel 用信号量（并发线程数流控）；② <b>规则配置</b>：Sentinel 支持控制台动态推送（Nacos/Apollo），Hystrix 主要靠注解硬编码；③ <b>功能范围</b>：Sentinel 还有系统自适应限流、热点参数限流、集群限流；④ <b>维护状态</b>：Hystrix 2018 年起停止维护，Sentinel 活跃。</p></div>
+
+  <div class="qa"><div class="qq">熔断阈值（比例、最小请求数）怎么定？</div><p>从「可接受的错误预算」倒推。① 压测确定下游正常时的 RT 与错误率；② 慢调用 RT 阈值取 P99 的 1.5~2 倍（P99=200ms → 阈值 400ms）；③ 比例阈值从 0.5 起，观察误熔断率再调；④ 最小请求数至少设为「QPS × 统计窗口」的 10%，否则样本不足会误熔断；⑤ 熔断时长从 10s 起，靠半开探测自动恢复。</p></div>
+
+  <div class="qa"><div class="qq">网关限流为什么一定要 Redis + Lua？</div><p>两个原因：① <b>集群口径</b>——应用内限流是单机口径，4 个网关各限 1000 实际能过 4000；Redis 是共享计数，集群严格 1000。② <b>原子性</b>——读-判断-写三步并发下会超卖（两个请求同时读到 tokens=1），Lua 在 Redis 单线程内原子执行，一次 RTT 完成。另外要考虑降级：Redis 挂了是放行还是拒绝？一般选放行，因为限流是保护不是准入。</p></div>
+
+  <div class="qa"><div class="qq">Zuul 1 为什么被 Gateway 取代？</div><p>Zuul 1 是「一个请求一个线程」的同步阻塞模型（Servlet），线程数就是并发上限，撑不住；Gateway 基于 WebFlux + Reactor Netty，事件驱动、少量线程处理大量连接，同配置下吞吐高 1.5~2 倍。另外 Gateway 的「断言 + 过滤器」模型更符合「路由即配置」，动态路由更好实现。Zuul 2 是异步的，但 Spring Cloud 官方没集成。</p></div>
+
+  <div class="qa"><div class="qq">TraceId 为什么会丢？为什么说 InheritableThreadLocal 不够？</div><p>MDC 底层是 InheritableThreadLocal，只在 <code class="inl">new Thread()</code> 时从父线程复制一次。线程池的线程是复用的，创建时父线程没值，之后也不会再复制 → 拿到 null。<b>更严重的是串号</b>：线程复用时可能残留上一个任务的 traceId，日志看起来「有值」，但指向完全错误的链路，排查会被带偏。解法是 TTL：提交时 capture、执行前 replay、执行后 restore。</p></div>
+
+  <div class="qa"><div class="qq">全链路灰度最难的地方是什么？</div><p>不是染色也不是路由，是<b>数据兼容</b>。灰度期新旧代码同时在线、共享一个库：新代码写的新字段旧代码不认识、旧代码写的 null 新代码要能容忍、DDL 一旦不可逆就没法回滚。所以铁律是「灰度期只做可逆变更」，用「加列 → 双写 → 刷数 → 加约束」四次发布摊开风险。第二个难点是<b>回退策略</b>：某个服务没有灰度版本时必须回退基线，否则 503。</p></div>
+</section>
+
+<!-- ============ L8 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b4">L8</span><em>模拟面试 · 3 道场景题</em></div>
+
+  <div class="q">
+    <h4><span>题一</span>大促压测，网关 QPS 打满，下游大面积超时。你怎么定位、怎么治理？</h4>
+    <div class="lab">考察点</div>
+    <p>分层定位能力 + 是否知道「限流要在正确的层做」+ 超时预算与重试放大的概念。</p>
+    <div class="lab">参考答案骨架</div>
+    <ol>
+      <li><b>先看是哪一层慢</b>：网关自身 RT（是否在排队）→ 下游 RT 分位（P99 而不是平均值）→ DB / Redis 的 RT。用链路追踪按 Span 的 <b>self time</b> 排序，找出「自身耗时长」的节点，而不是被下游拖慢的节点。</li>
+      <li><b>判断是容量问题还是放大问题</b>：如果下游 QPS 是入口的 3~27 倍，那是重试放大，先关内层重试；如果下游 QPS 与入口一致但 RT 高，那是真容量不足。</li>
+      <li><b>限流要分层，不能只在网关</b>：网关做粗粒度（按用户/IP）准入保护总量；服务内做细粒度（按接口）并发线程数限流保护单个下游；最内层「信号量 + 短超时」兜底。只做网关限流的问题是：放进来 800 QPS，但某个慢接口只能吃 50，它照样被打死。</li>
+      <li><b>超时预算递减</b>：入口 1s，逐层递减 200ms，保证最内层有「来得及失败」的时间。最忌讳全层配 3s——一次慢请求能占住线程 9 秒。</li>
+      <li><b>熔断按下游而非按接口</b>：同一下游的多个接口共享熔断状态，否则一个接口挂了，其他接口还在傻等。</li>
+      <li><b>降级预案提前演练</b>：非核心链路（推荐、评论、积分）直接关闭或返回缓存，把资源让给下单支付。</li>
+    </ol>
+    <div class="lab g">满分线</div>
+    <p>主动说出「我会先确认是不是重试放大，因为 3 层各重试 2 次就是 27 倍流量，这种情况下扩容是无效的，必须先关重试」。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题二</span>一次正常发布，5 分钟后 30% 请求 503，又过 10 分钟自愈。复盘原因。</h4>
+    <div class="lab">考察点</div>
+    <p>是否真碰过发布事故 + 是否理解「摘流窗口」这个时间维度 + 能否给出机制性修复而不是「下次小心」。</p>
+    <div class="lab">参考答案骨架</div>
+    <ol>
+      <li><b>看时间特征</b>：「5 分钟后开始 + 10 分钟后自愈」是典型的<b>缓存过期窗口</b>特征，不是代码 bug（代码 bug 不会自愈）。30% ≈ 8 个实例挂 2~3 个，正好是一次滚动发布的批次。</li>
+      <li><b>还原时序</b>：要么新实例注册了但还没预热完（JIT 未编译、连接池未初始化、本地缓存空），流量打进来就超时；要么旧实例先被 kill、注册中心还没剔除，流量继续打 → connection refused。</li>
+      <li><b>三个机制性修复</b>：① <b>就绪探针</b>——readinessProbe 打业务健康检查（不只是端口存活），失败就不进 Endpoints；② <b>优雅停机</b>——<code class="inl">server.shutdown=graceful</code> + 反注册 + sleep 一个缓存窗口；③ <b>预热</b>——新实例前 60 秒限流（Sentinel Warm Up），别一上来就接满。</li>
+      <li><b>验证手段</b>：发布期间盯「实例级错误率」，而不是集群总错误率——总量会稀释掉 2/8 的异常。</li>
+      <li><b>根因收口</b>：不是「运维操作失误」，而是「发布流程缺少摘流与预热两个阶段」。补上后同类事故不可能再发生。</li>
+    </ol>
+    <div class="lab r">常见坑</div>
+    <p>只答「加机器」「加大超时」「重试一下」。加大超时会让线程占用更久，重试会把故障放大 2~3 倍，都是反向操作。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题三</span>设计一个支持「全链路灰度 + 多租户隔离」的微服务体系，说清每一层的取舍。</h4>
+    <div class="lab">考察点</div>
+    <p>综合设计 + 知道「染色」和「隔离」在资源有限时是矛盾的 + 数据层怎么落地。</p>
+    <div class="lab">参考答案骨架</div>
+    <table>
+      <tr><th style="width:14%">层</th><th style="width:44%">做法</th><th>取舍</th></tr>
+      <tr><td>入口</td><td>网关按 uid / header 染色，写 <code>x-gray: v2</code> 与 <code>x-tenant: t001</code></td><td>规则要能动态改（配置中心），不能硬编码</td></tr>
+      <tr><td>透传</td><td>TTL + Feign / MQ 拦截器，把两个 header 沿链路传下去</td><td>每层都要支持，漏一个就断链（用「染色丢失率」监控兜底）</td></tr>
+      <tr><td>路由</td><td>实例打标签（version=v2 / tenant=t001），LB 优先同标签，无同标签回退基线</td><td>回退保可用性，但灰度「不彻底」，需监控回退率</td></tr>
+      <tr><td>数据</td><td>小租户共享库 + tenant_id + 强制 SQL 拦截器加条件；大租户独立库</td><td>共享库省成本但隔离弱（一个慢 SQL 拖全部）</td></tr>
+      <tr><td>消息</td><td>按 tag 或独立 topic 隔离，消费端校验 tenant_id</td><td>独立 topic 隔离彻底但 topic 数量爆炸</td></tr>
+      <tr><td>兜底</td><td>染色丢失走基线；实例不足回退；数据不兼容拒绝发布</td><td>「宁可不灰度，不可不服务」</td></tr>
+    </table>
+    <div class="lab g">满分线</div>
+    <p>指出「灰度和多租户隔离本质是同一个机制（标签路由）的两种用法，可以复用一套基础设施：染色 → 透传 → 标签匹配 → 回退。区别只是标签的维度与生命周期不同——灰度是临时的，租户是永久的」。</p>
+  </div>
+</section>
+
+<!-- ============ 收口 ============ -->
+<section class="card">
+  <div class="lvl"><span class="badge b0">收口</span><em>八句话带走</em></div>
+  <h2>本期收口</h2>
+  <ul class="check">
+    <li><b>微服务是用运维复杂度换组织扩展性</b>，治理成本 O(N²)，所以注册中心 / 网关 / 链路追踪是拆分的必要成本，不是锦上添花。</li>
+    <li><b>注册中心本质是「带推送的分布式缓存」</b>，读远多于写，所以 AP 优先；「Nacos 是 AP 还是 CP」要按临时/持久实例分流来答。</li>
+    <li><b>Eureka 最长 90~180 秒感知下线</b>，这不是 bug 是设计；配合自我保护（85% 阈值）一起理解，才是真懂。</li>
+    <li><b>摘流窗口是发布事故的第一元凶</b>：250 QPS × 90s = 22500 次失败，优雅停机 + 就绪探针 + 预热三件套缺一不可。</li>
+    <li><b>Sentinel 的滑动窗口就是 2 个格子的环形数组</b>，内存固定、统计 O(1)、CAS 无锁——讲清这个比背「滑动窗口算法」强。</li>
+    <li><b>重试是放大器不是修复器</b>：3 层 × 3 次 = 27 倍流量。只在最外层重试，只重试幂等接口。</li>
+    <li><b>TraceId 丢在线程池里</b>，因为 InheritableThreadLocal 只在 new Thread 时复制；解药是 TTL，而且必须装饰线程池。</li>
+    <li><b>灰度的难点在数据兼容</b>，不在染色路由；「加列 → 双写 → 刷数 → 加约束」四次发布是标准答案。</li>
+  </ul>
+
+  <div class="oneline" style="margin-top:22px">
+    <b>下期预告 · 第 09 期</b>
+    线上问题排查实战 —— CPU 100% 的六种真凶（死循环 / 频繁 GC / 锁争用 / 正则回溯 / 序列化 / 加密）、OOM 八种类型与堆 dump 分析、内存泄漏的引用链定位、死锁与线程池打满的现场取证、arthas 的 <code class="inl">thread</code> / <code class="inl">heapdump</code> / <code class="inl">trace</code> / <code class="inl">watch</code> 实战、慢 SQL 与连接池耗尽的区分。
+  </div>
+</section>
+
+<footer>
+  Java 面试深水区 · 第 08 期 · Spring Cloud 与微服务治理<br>
+  每 2 小时一期 · 8 层递进 · 13 张原理图 · 14 条问答 · 3 道模拟面试
+</footer>
+
+</div>
+</body>
+</html>

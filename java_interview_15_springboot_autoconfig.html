@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 15 · Spring Boot 自动配置与启动流程</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:28px; line-height:1.34; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:780px}
+  .sub b{color:#be123c}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.7px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21; line-height:1.6}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #bcdcf2}
+  .check li b{color:#075985}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Java 面试深水区 · 第 15 期</div>
+  <h1>Spring Boot 自动配置<span class="arrow">→</span>从 153 个候选类到 11 步启动</h1>
+  <p class="sub">"Spring Boot 为什么能自动配置？"标准背法是"因为它有 <code class="inl">@EnableAutoConfiguration</code>，启动时读 <code class="inl">META-INF/spring.factories</code>"。这句话在 2019 年是满分，现在是<b>错的</b>——Boot 3.0 已经把 <code class="inl">spring.factories</code> 里的自动配置条目全部删了，改成一个名字长到看不全的 <code class="inl">AutoConfiguration.imports</code>。你背的口诀，指向一个不存在的文件。本期把启动拆成两张网（<code class="inl">run()</code> 11 步 / <code class="inl">refresh()</code> 12 步），把自动配置拆成六阶段流水线：153 条候选 → ASM 预过滤 → 条件装配 → 40 个生效。数字都给全，别再背形容词。</p>
+  <div class="meta">
+    <div><strong>13</strong>层递进</div>
+    <div><strong>10</strong>张原理图</div>
+    <div><strong>12</strong>段代码</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span class="on">L0 三大承诺与两张网</span>
+  <span>L1 三注解分工</span>
+  <span>L2 run() 11 步</span>
+  <span>L3 refresh() 三刀</span>
+  <span>L4 自动配置六阶段</span>
+  <span>L5 迁移与 starter</span>
+  <span>L6 条件装配陷阱</span>
+  <span>L7 启动耗时</span>
+  <span>L8 配置优先级</span>
+  <span>L9–L12 坑·速查·问答·模拟</span>
+</div>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>概念纠偏</em></div>
+  <h2>先把账算清：Boot 到底替你省了什么</h2>
+  <p>Spring Boot 不是一个新框架。它一行新的 IoC 能力都没有，全部能力来自 Spring Framework。它做的是<strong>三个工程约定</strong>：</p>
+
+  <table>
+    <tr><th>承诺</th><th>实现手段</th><th>你少写的东西</th></tr>
+    <tr><td>依赖不用写版本</td><td>starter = 一组库 + 一套验证过的版本组合</td><td>30 行 <code>dependencyManagement</code>、无数个版本冲突排查</td></tr>
+    <tr><td>容器不用手装配</td><td>自动配置 = 基于 classpath 的<strong>条件装配</strong></td><td>每个中间件一份 <code>@Configuration</code></td></tr>
+    <tr><td>部署不用装容器</td><td>内嵌 Tomcat / Jetty / Netty，<code>java -jar</code> 即服务</td><td>war 包、外部容器、<code>server.xml</code></td></tr>
+  </table>
+
+  <p>所以"Spring Boot 原理"这道题，本质只问两件事：<strong>启动时按什么顺序把东西装起来</strong>，以及<strong>装不装凭什么是条件说了算</strong>。前者是 L2/L3，后者是 L4/L6。</p>
+
+  <h3>启动是两张网，不是一条线</h3>
+  <p>绝大多数人答这题时会混着讲，结果听起来像一团麻。正确的切法是两张网：外层 <code class="inl">SpringApplication.run()</code> 管进程引导（11 步），内层 <code class="inl">refresh()</code> 管容器刷新（12 步）。<strong>外层第 ⑨ 步进去，就是内层的 12 步</strong>；内层跑完返回，外层继续走 ⑩。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 400" role="img" aria-label="Spring Boot 三大承诺与启动两张网">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">三个约定 · 两张网：能力全在 Spring Framework，Boot 只做约定</text>
+
+      <rect x="30" y="34" width="272" height="78" rx="9" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="46" y="58" font-size="13" fill="#075985" font-weight="700">① 依赖不用写版本</text>
+      <text x="46" y="80" font-size="11" fill="#475569">starter = 库 + 已验证的版本组合</text>
+      <text x="46" y="98" font-size="11" fill="#64748b">省掉一整段版本声明</text>
+
+      <rect x="312" y="34" width="272" height="78" rx="9" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="328" y="58" font-size="13" fill="#6d28d9" font-weight="700">② 容器不用手装配</text>
+      <text x="328" y="80" font-size="11" fill="#475569">自动配置 = 条件装配</text>
+      <text x="328" y="98" font-size="11" fill="#64748b">省掉每个中间件一份配置类</text>
+
+      <rect x="594" y="34" width="272" height="78" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="610" y="58" font-size="13" fill="#b45309" font-weight="700">③ 部署不用装容器</text>
+      <text x="610" y="80" font-size="11" fill="#475569">内嵌 Tomcat / Jetty / Netty</text>
+      <text x="610" y="98" font-size="11" fill="#64748b">java -jar 就是一个服务</text>
+
+      <polygon points="166,114 172,126 160,126" fill="#94a3b8"/>
+      <polygon points="448,114 454,126 442,126" fill="#94a3b8"/>
+      <polygon points="730,114 736,126 724,126" fill="#94a3b8"/>
+
+      <rect x="30" y="128" width="836" height="42" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+      <text x="46" y="154" font-size="12" fill="#334155" font-weight="700">Spring Boot = 三个工程约定。零新增 IoC 能力，所以"学 Boot"其实是"学 Spring 的装配时机"</text>
+
+      <rect x="30" y="190" width="836" height="196" rx="11" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="46" y="212" font-size="12.5" fill="#0369a1" font-weight="700">外层 · SpringApplication.run() —— 进程引导，11 步</text>
+
+      <rect x="46" y="222" width="186" height="50" rx="7" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="66" y="242" font-size="11.5" fill="#334155" font-weight="700">构造 ①②③</text>
+      <text x="66" y="260" font-size="10.5" fill="#64748b">推断类型·监听器·主类</text>
+
+      <rect x="240" y="222" width="330" height="50" rx="7" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="256" y="242" font-size="11.5" fill="#334155" font-weight="700">准备 ④⑤⑥⑦⑧</text>
+      <text x="256" y="260" font-size="10.5" fill="#64748b">Environment → 容器 → prepareContext（只注册主类）</text>
+
+      <rect x="578" y="222" width="120" height="50" rx="7" fill="#f5f3ff" stroke="#a78bfa" stroke-width="1.6"/>
+      <text x="596" y="242" font-size="11.5" fill="#6d28d9" font-weight="700">刷新 ⑨</text>
+      <text x="596" y="260" font-size="10.5" fill="#6d28d9">进入内层</text>
+
+      <rect x="706" y="222" width="144" height="50" rx="7" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="722" y="242" font-size="11.5" fill="#334155" font-weight="700">收尾 ⑩⑪</text>
+      <text x="722" y="260" font-size="10.5" fill="#64748b">Runner → ready</text>
+
+      <polygon points="638,274 645,286 631,286" fill="#a78bfa"/>
+
+      <rect x="46" y="292" width="804" height="78" rx="9" fill="#fafbfe" stroke="#c4b5fd" stroke-dasharray="5 4"/>
+      <text x="62" y="312" font-size="12" fill="#6d28d9" font-weight="700">内层 · AbstractApplicationContext.refresh() —— 容器刷新，12 步</text>
+      <text x="62" y="334" font-size="10.8" fill="#475569">⑤ 自动配置在这注册 BeanDefinition　⑨ new Tomcat（已 bind 端口，未 start）</text>
+      <text x="62" y="354" font-size="10.8" fill="#475569">⑪ 单例实例化，占刷新耗时 60%　⑫ Tomcat 才 start() —— readiness 必须等 ApplicationReadyEvent</text>
+    </svg>
+    <figcaption><b>图 1</b>　三大承诺与启动的两张网。记住嵌套关系：⑨ 进、⑫ 出，Bean 在 ⑪ 创建、端口在 ⑨ 绑定、服务在 ⑫ 可用。</figcaption>
+  </figure>
+
+  <h3>一次典型启动，钱花在哪</h3>
+  <p>一个 40 个 starter、600 个 Bean 的中型服务，冷启动约 2.4 秒，账单大致是：</p>
+
+  <table>
+    <tr><th>阶段</th><th>耗时</th><th>占比</th><th>主要成本</th></tr>
+    <tr><td>JVM 启动 + 类加载</td><td>620ms</td><td>26%</td><td>加载 1.2 万个类，其中 Spring 体系约 8000 个</td></tr>
+    <tr><td>自动配置解析 + 条件判定</td><td>120ms</td><td>5%</td><td>读 153 条候选、ASM 解析注解元数据</td></tr>
+    <tr><td>单例实例化 + 依赖注入</td><td>560ms</td><td>23%</td><td><code>finishBeanFactoryInitialization</code>，反射 + 代理生成</td></tr>
+    <tr><td>AOP 代理 + 数据源 + 连接池</td><td>200ms</td><td>8%</td><td>CGLIB 生成、HikariCP 建连</td></tr>
+    <tr><td>内嵌 Tomcat 启动</td><td>210ms</td><td>9%</td><td>端口绑定 + Servlet 容器初始化</td></tr>
+    <tr><td>Runner + 事件 + 其他</td><td>90ms</td><td>4%</td><td><code>@PostConstruct</code>、<code>CommandLineRunner</code></td></tr>
+  </table>
+
+  <div class="oneline">
+    <b>反直觉的数字</b>
+    自动配置的"解析"只占 5%，真正贵的是单例实例化和类加载。所以"启动慢"这件事，90% 的情况下优化方向不是"少几个自动配置类"，而是"少几个 Bean"和"少几个 starter"。这一点在 L7 展开。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>注解拆解</em></div>
+  <h2><code class="inl">@SpringBootApplication</code>：三个注解各干各的，别混着说</h2>
+  <p>这个复合注解拆开是三个，职责完全不重叠：</p>
+
+  <pre><code>@SpringBootConfiguration      // 本质就是 @Configuration，允许本类写 @Bean
+@EnableAutoConfiguration      // 本质是 @Import(AutoConfigurationImportSelector.class)
+@ComponentScan(               // 从主类所在包开始，向下扫
+    excludeFilters = {
+        @Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
+        @Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class)
+    }
+)
+public @interface SpringBootApplication {
+    boolean proxyBeanMethods() default false;   // 2.2 起默认 false
+}</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="SpringBootApplication 三注解与扫描范围">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">一个复合注解，三条互不重叠的链路</text>
+
+      <rect x="30" y="34" width="440" height="40" rx="8" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="46" y="60" font-size="13" fill="#075985" font-weight="700">@SpringBootApplication（复合注解）</text>
+
+      <line x1="46" y1="74" x2="46" y2="286" stroke="#9fcbe8" stroke-width="1.5"/>
+      <line x1="46" y1="114" x2="66" y2="114" stroke="#9fcbe8" stroke-width="1.5"/>
+      <line x1="46" y1="184" x2="66" y2="184" stroke="#9fcbe8" stroke-width="1.5"/>
+      <line x1="46" y1="254" x2="66" y2="254" stroke="#9fcbe8" stroke-width="1.5"/>
+
+      <rect x="66" y="88" width="160" height="52" rx="7" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="80" y="106" font-size="10.5" fill="#171a21" font-weight="700">@SpringBootConfiguration</text>
+      <text x="80" y="126" font-size="10.5" fill="#64748b">= @Configuration</text>
+
+      <rect x="66" y="158" width="160" height="52" rx="7" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="80" y="176" font-size="10.5" fill="#6d28d9" font-weight="700">@EnableAutoConfiguration</text>
+      <text x="80" y="196" font-size="10.5" fill="#7c3aed">自动配置唯一入口</text>
+
+      <rect x="66" y="228" width="160" height="52" rx="7" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="80" y="246" font-size="10.5" fill="#171a21" font-weight="700">@ComponentScan</text>
+      <text x="80" y="266" font-size="10.5" fill="#64748b">默认扫主类包子树</text>
+
+      <text x="242" y="108" font-size="10.5" fill="#475569">标记配置类，@Bean 的合法位置</text>
+      <text x="242" y="126" font-size="10.5" fill="#64748b">测试里靠它定位应用主类</text>
+
+      <text x="242" y="180" font-size="9.6" fill="#475569">= @Import(AutoConfigurationImportSelector)</text>
+      <text x="242" y="198" font-size="10.5" fill="#64748b">L4 整节都在拆这个类</text>
+
+      <text x="242" y="250" font-size="10.5" fill="#475569">excludeFilters 排掉自动配置类</text>
+      <text x="242" y="268" font-size="10.5" fill="#64748b">proxyBeanMethods 默认 false</text>
+
+      <rect x="504" y="34" width="366" height="262" rx="10" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="518" y="54" font-size="11.5" fill="#334155" font-weight="700">扫描范围 = 包，不是模块</text>
+
+      <text x="518" y="80" font-size="11" fill="#0369a1" font-weight="700">com.example/</text>
+      <line x1="524" y1="88" x2="524" y2="160" stroke="#94a3b8" stroke-width="1.2"/>
+      <line x1="524" y1="98" x2="538" y2="98" stroke="#94a3b8" stroke-width="1.2"/>
+      <line x1="524" y1="126" x2="538" y2="126" stroke="#94a3b8" stroke-width="1.2"/>
+      <line x1="524" y1="154" x2="538" y2="154" stroke="#94a3b8" stroke-width="1.2"/>
+
+      <text x="542" y="102" font-size="11" fill="#047857">├─ order/　✓ 被扫到</text>
+      <text x="542" y="130" font-size="11" fill="#047857">├─ user/　　✓ 被扫到</text>
+      <text x="542" y="158" font-size="11" fill="#047857">└─ DemoApplication　← 主类在这</text>
+
+      <rect x="518" y="176" width="338" height="52" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="530" y="196" font-size="11" fill="#be123c">com.other.pay/　✗ 永不扫到（同一个 jar 也一样）</text>
+      <text x="530" y="216" font-size="10.5" fill="#64748b">修：@Import 精确引入 &gt; scanBasePackages</text>
+
+      <text x="518" y="252" font-size="10.5" fill="#64748b">第三方 SDK 不该要求宿主改 scanBasePackages，</text>
+      <text x="518" y="272" font-size="10.5" fill="#64748b">它应该自己提供自动配置 —— 这是设计边界</text>
+    </svg>
+    <figcaption><b>图 2</b>　三注解分工与扫描范围。<code class="inl">@ComponentScan</code> 扫的是包树，跨包但同 jar 一样扫不到——这是"Bean 找不到"第一大原因。</figcaption>
+  </figure>
+
+  <h3>三种修正方式，说出第二种算合格</h3>
+
+  <pre><code>// 1. 扩大扫描范围（不推荐，容易扫进测试类和不该装配的组件）
+@SpringBootApplication(scanBasePackages = {"com.example", "com.other"})
+
+// 2. 用 @Import 精确引入，范围可控（推荐）
+@SpringBootApplication
+@Import(PayConfiguration.class)
+public class DemoApplication { }
+
+// 3. 第三方模块的正确姿势：不要去扫别人的包
+//    别人的包里应该有 META-INF/spring/...AutoConfiguration.imports</code></pre>
+
+  <div class="good">
+    <b>分水岭在这一句</b>
+    第三方库不应该要求宿主工程改 <code>scanBasePackages</code>，它应该提供自动配置。答出这句说明你理解 Boot 的设计边界：<code>scanBasePackages</code> 是给自家多模块用的补丁，不是给 SDK 用的接口。
+  </div>
+
+  <h3><code class="inl">proxyBeanMethods = false</code> 到底省了什么</h3>
+  <p><code class="inl">@Configuration(proxyBeanMethods = true)</code> 时，Spring 要为每个配置类生成一个 CGLIB 子类，重写 <code class="inl">@Bean</code> 方法，保证你两次调用 <code class="inl">userService()</code> 拿到的是同一个对象（从容器取，而不是 new）。设为 false 之后，代理不生成，配置类变成一个普通类。</p>
+
+  <table>
+    <tr><th></th><th><code>true</code>（老默认）</th><th><code>false</code>（Boot 2.2 起）</th></tr>
+    <tr><td>生成 CGLIB 类</td><td>每个配置类一个</td><td>无</td></tr>
+    <tr><td><code>@Bean</code> 方法互相调用</td><td>返回容器里的单例</td><td><strong>普通 Java 调用，会 new 新对象</strong></td></tr>
+    <tr><td>启动速度</td><td>慢一些（配置类越多越明显）</td><td>快 10% 上下（100+ 配置类的项目经验值）</td></tr>
+    <tr><td>Metaspace 占用</td><td>多一批代理类元数据</td><td>少</td></tr>
+    <tr><td>使用约束</td><td>随意</td><td>配置类之间<strong>用方法参数注入</strong></td></tr>
+  </table>
+
+  <pre><code>@Configuration(proxyBeanMethods = false)
+public class AppConfig {
+
+    @Bean
+    public OrderService orderService(UserService userService) {  // 参数注入，正确
+        return new OrderService(userService);
+    }
+
+    @Bean
+    public UserService userService() { return new UserService(); }
+
+    // 错误示范：直接调用 userService() 会 new 出第二个对象
+    // @Bean public OrderService bad() { return new OrderService(userService()); }
+}</code></pre>
+
+  <p>自动配置类统一用 <code class="inl">proxyBeanMethods = false</code>，这也是 <code class="inl">@AutoConfiguration</code> 内部定死的值——它的设计前提就是"自动配置类之间不互相调用方法，靠参数注入"。</p>
+
+  <div class="oneline">
+    <b>一句话答法</b>
+    <code>@SpringBootApplication</code> = <code>@SpringBootConfiguration</code>（配置类）+ <code>@EnableAutoConfiguration</code>（引入自动配置选择器）+ <code>@ComponentScan</code>（扫主类所在包及子包）。默认 <code>proxyBeanMethods=false</code>，不生成 CGLIB 代理，所以配置类之间必须用参数注入而不是方法调用。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>启动第一步网</em></div>
+  <h2><code class="inl">SpringApplication.run()</code> 的 11 步：哪一步失败，报什么错</h2>
+  <p><code class="inl">run()</code> 的源码一直是"看一眼就忘"，因为步骤平铺、没有分层。按<strong>构造</strong>和<strong>运行</strong>切成两段就清楚了：构造 3 步，运行 8 步。</p>
+
+  <pre><code>// 构造阶段：new SpringApplication(primarySources)
+public SpringApplication(ResourceLoader loader, Class&lt;?&gt;... primarySources) {
+    this.webApplicationType = WebApplicationType.deduceFromClasspath();  // ① 推断类型
+    this.bootstrapRegistryInitializers = getBootstrapRegistryInitializers(); // ② 引导期初始化器
+    setInitializers(getSpringFactoriesInstances(ApplicationContextInitializer.class));
+    setListeners(getSpringFactoriesInstances(ApplicationListener.class));
+    this.mainApplicationClass = deduceMainApplicationClass();            // ③ 推断主类
+}</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 448" role="img" aria-label="SpringApplication.run 的 11 个步骤">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">run() 的 11 步：构造 3 步定"是什么应用"，运行 8 步把它跑起来</text>
+
+      <circle cx="46" cy="62" r="11" fill="#6b7280"/>
+      <text x="42" y="66" font-size="10.5" fill="#ffffff" font-weight="700">1</text>
+      <text x="66" y="58" font-size="11.5" fill="#171a21" font-weight="700">推断应用类型</text>
+      <text x="66" y="78" font-size="10.5" fill="#64748b">classpath 有无 DispatcherServlet / DispatcherHandler</text>
+
+      <circle cx="46" cy="126" r="11" fill="#6b7280"/>
+      <text x="42" y="130" font-size="10.5" fill="#ffffff" font-weight="700">2</text>
+      <text x="66" y="122" font-size="11.5" fill="#171a21" font-weight="700">加载 Initializer / Listener</text>
+      <text x="66" y="142" font-size="10.5" fill="#64748b">走 spring.factories SPI（3.0 依然有效）</text>
+
+      <circle cx="46" cy="190" r="11" fill="#6b7280"/>
+      <text x="42" y="194" font-size="10.5" fill="#ffffff" font-weight="700">3</text>
+      <text x="66" y="186" font-size="11.5" fill="#171a21" font-weight="700">推断主类</text>
+      <text x="66" y="206" font-size="10.5" fill="#64748b">从调用栈里找带 main 的那一帧</text>
+
+      <circle cx="46" cy="254" r="11" fill="#0369a1"/>
+      <text x="42" y="258" font-size="10.5" fill="#ffffff" font-weight="700">4</text>
+      <text x="66" y="250" font-size="11.5" fill="#171a21" font-weight="700">启动监听器</text>
+      <text x="66" y="270" font-size="10.5" fill="#64748b">发 ApplicationStartingEvent</text>
+
+      <circle cx="46" cy="318" r="11" fill="#0369a1"/>
+      <text x="42" y="322" font-size="10.5" fill="#ffffff" font-weight="700">5</text>
+      <text x="66" y="314" font-size="11.5" fill="#171a21" font-weight="700">prepareEnvironment</text>
+      <text x="66" y="334" font-size="10.5" fill="#64748b">读 application.yml、激活 profile（ConfigData）</text>
+
+      <circle cx="46" cy="382" r="11" fill="#0369a1"/>
+      <text x="42" y="386" font-size="10.5" fill="#ffffff" font-weight="700">6</text>
+      <text x="66" y="378" font-size="11.5" fill="#171a21" font-weight="700">printBanner</text>
+      <text x="66" y="398" font-size="10.5" fill="#64748b">打 Banner（可关，别花时间改它）</text>
+
+      <circle cx="470" cy="62" r="11" fill="#0369a1"/>
+      <text x="466" y="66" font-size="10.5" fill="#ffffff" font-weight="700">7</text>
+      <text x="490" y="58" font-size="11.5" fill="#171a21" font-weight="700">createApplicationContext</text>
+      <text x="490" y="78" font-size="10.5" fill="#64748b">反射 new 上表对应的容器实现</text>
+
+      <circle cx="470" cy="126" r="11" fill="#0369a1"/>
+      <text x="466" y="130" font-size="10.5" fill="#ffffff" font-weight="700">8</text>
+      <text x="490" y="122" font-size="11.5" fill="#171a21" font-weight="700">prepareContext</text>
+      <text x="490" y="142" font-size="10.5" fill="#64748b">只注册"主类"一个 BeanDefinition</text>
+
+      <circle cx="470" cy="190" r="11" fill="#7c3aed"/>
+      <text x="466" y="194" font-size="10.5" fill="#ffffff" font-weight="700">9</text>
+      <text x="490" y="186" font-size="11.5" fill="#6d28d9" font-weight="700">refreshContext</text>
+      <text x="490" y="206" font-size="10.5" fill="#64748b">进入 refresh() 的 12 步（L3）</text>
+
+      <circle cx="470" cy="254" r="11" fill="#b45309"/>
+      <text x="464" y="258" font-size="10.5" fill="#ffffff" font-weight="700">10</text>
+      <text x="490" y="250" font-size="11.5" fill="#171a21" font-weight="700">afterRefresh</text>
+      <text x="490" y="270" font-size="10.5" fill="#64748b">3.x 里是空实现，纯历史包袱</text>
+
+      <circle cx="470" cy="318" r="11" fill="#b45309"/>
+      <text x="464" y="322" font-size="10.5" fill="#ffffff" font-weight="700">11</text>
+      <text x="490" y="314" font-size="11.5" fill="#171a21" font-weight="700">started + Runner + ready</text>
+      <text x="490" y="334" font-size="10.5" fill="#64748b">Runner 抛异常 → handleRunFailure → 退出码 1</text>
+
+      <rect x="470" y="356" width="400" height="66" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="486" y="376" font-size="11" fill="#b45309" font-weight="700">失败报告的 Description / Action 是哪来的</text>
+      <text x="486" y="396" font-size="10.5" fill="#475569">FailureAnalyzer 拼的（PortInUse、BeanNotOfRequiredType…）</text>
+      <text x="486" y="414" font-size="10.5" fill="#475569">自定义 starter 可实现它，注册到 spring.factories</text>
+
+      <text x="30" y="430" font-size="10.5" fill="#94a3b8">灰＝构造期　蓝＝容器准备　紫＝刷新（嵌套层）　橙＝收尾与就绪事件</text>
+    </svg>
+    <figcaption><b>图 3</b>　<code class="inl">run()</code> 的 11 步。第 8 步只注册主类这一个 BeanDefinition——所以 <code class="inl">ApplicationContextInitializer</code> 里拿不到任何业务 Bean。</figcaption>
+  </figure>
+
+  <h3>第 1 步的类型判定，就三个类</h3>
+
+  <table>
+    <tr><th>classpath 里有</th><th>推出类型</th><th>用的容器实现</th></tr>
+    <tr><td><code>DispatcherServlet</code>（spring-webmvc）</td><td><code>SERVLET</code></td><td><code>AnnotationConfigServletWebServerApplicationContext</code></td></tr>
+    <tr><td><code>DispatcherHandler</code>（spring-webflux）且无 mvc</td><td><code>REACTIVE</code></td><td><code>AnnotationConfigReactiveWebServerApplicationContext</code></td></tr>
+    <tr><td>都没有</td><td><code>NONE</code></td><td><code>AnnotationConfigApplicationContext</code></td></tr>
+  </table>
+
+  <p>这就是"我只加了 <code class="inl">spring-boot-starter-webflux</code> 为什么起 Netty"的答案，也是"同时引入 web 和 webflux 时为什么默认是 Tomcat"的答案——<strong>SERVLET 判定优先</strong>。</p>
+
+  <h3>三个高价值细节</h3>
+
+  <div class="trap">
+    <b>① Runner 的异常会让启动失败，不是"启动成功但任务没跑"</b>
+    <code>CommandLineRunner</code> / <code>ApplicationRunner</code> 抛异常 → <code>callRunner</code> 包装成 <code>IllegalStateException</code> → 走 <code>handleRunFailure</code> → 进程退出码 1。K8s 里表现为 CrashLoopBackOff，而日志最后一行是业务异常，很多人误判成"代码 bug 导致启动不了"，其实是 Runner 干的。
+  </div>
+
+  <div class="trap">
+    <b>② <code>prepareContext</code> 只注册了一个 BeanDefinition</b>
+    就是主类本身。所以在此之前容器里除了主类什么都没有——这也是为什么在 <code>ApplicationContextInitializer</code> 里 <code>getBean</code> 必然失败，它只能操作 <code>Environment</code> 和 <code>BeanFactory</code> 的元信息。
+  </div>
+
+  <div class="good">
+    <b>③ 失败报告不是 Spring 硬编码的</b>
+    你看到的 "APPLICATION FAILED TO START / Description / Action" 三段，是 <code>FailureAnalyzer</code> 生成的。<code>PortInUseFailureAnalyzer</code> 负责端口占用，<code>NoSuchBeanDefinitionFailureAnalyzer</code> 负责缺 Bean。自定义 starter 想给用户友好提示，实现一个 <code>FailureAnalyzer</code> 并注册到 <code>spring.factories</code> 即可——注意<strong>这个 key 在 3.0 依然有效</strong>，被移除的只有 <code>EnableAutoConfiguration</code> 那一条。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>启动第二层网</em></div>
+  <h2><code class="inl">refresh()</code> 的 12 步：Boot 只插了三刀</h2>
+  <p><code class="inl">refresh()</code> 是 Spring Framework 的模板方法，Boot 一个字节都没改，只在三个位置做了扩展。这三个位置决定了"Bean 什么时候有""端口什么时候绑""服务什么时候可用"。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 500" role="img" aria-label="refresh 十二步与 Boot 的三个插入点">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">refresh() 12 步 · 紫框是 Boot 插的三刀，其余全是 Framework 原生</text>
+
+      <rect x="40" y="34" width="396" height="452" rx="10" fill="#ffffff" stroke="#e3e7ef"/>
+
+      <rect x="52" y="46" width="372" height="30" rx="6" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="64" y="66" font-size="10.5" fill="#334155"><tspan font-weight="700">①</tspan> prepareRefresh　校验必需属性</text>
+
+      <rect x="52" y="80" width="372" height="30" rx="6" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="64" y="100" font-size="10.5" fill="#334155"><tspan font-weight="700">②</tspan> obtainFreshBeanFactory　注解容器空转</text>
+
+      <rect x="52" y="114" width="372" height="30" rx="6" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="64" y="134" font-size="10.5" fill="#334155"><tspan font-weight="700">③</tspan> prepareBeanFactory　Environment + Aware</text>
+
+      <rect x="52" y="148" width="372" height="30" rx="6" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="64" y="168" font-size="10.5" fill="#334155"><tspan font-weight="700">④</tspan> postProcessBeanFactory　注册 request 作用域</text>
+
+      <rect x="52" y="182" width="372" height="34" rx="6" fill="#f5f3ff" stroke="#a78bfa" stroke-width="1.4"/>
+      <text x="64" y="204" font-size="10.5" fill="#6d28d9"><tspan font-weight="700">⑤</tspan> invokeBeanFactoryPostProcessors ★A</text>
+
+      <rect x="52" y="220" width="372" height="30" rx="6" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="64" y="240" font-size="10.5" fill="#334155"><tspan font-weight="700">⑥</tspan> registerBeanPostProcessors　AOP / 注入</text>
+
+      <rect x="52" y="254" width="372" height="30" rx="6" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="64" y="274" font-size="10.5" fill="#334155"><tspan font-weight="700">⑦</tspan> initMessageSource　国际化</text>
+
+      <rect x="52" y="288" width="372" height="30" rx="6" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="64" y="308" font-size="10.5" fill="#334155"><tspan font-weight="700">⑧</tspan> initApplicationEventMulticaster　广播器</text>
+
+      <rect x="52" y="326" width="372" height="34" rx="6" fill="#f5f3ff" stroke="#a78bfa" stroke-width="1.4"/>
+      <text x="64" y="348" font-size="10.5" fill="#6d28d9"><tspan font-weight="700">⑨</tspan> onRefresh → createWebServer() ★B</text>
+
+      <rect x="52" y="364" width="372" height="30" rx="6" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="64" y="384" font-size="10.5" fill="#334155"><tspan font-weight="700">⑩</tspan> registerListeners　监听器入广播器</text>
+
+      <rect x="52" y="398" width="372" height="34" rx="6" fill="#fdf2f8" stroke="#f0abfc" stroke-width="1.4"/>
+      <text x="64" y="420" font-size="10.5" fill="#a21caf"><tspan font-weight="700">⑪</tspan> finishBeanFactoryInitialization　单例 60%</text>
+
+      <rect x="52" y="436" width="372" height="34" rx="6" fill="#f5f3ff" stroke="#a78bfa" stroke-width="1.4"/>
+      <text x="64" y="458" font-size="10.5" fill="#6d28d9"><tspan font-weight="700">⑫</tspan> finishRefresh → tomcat.start() ★C</text>
+
+      <polygon points="464,199 454,193 454,205" fill="#a78bfa"/>
+      <polygon points="464,343 454,337 454,349" fill="#a78bfa"/>
+      <polygon points="464,453 454,447 454,459" fill="#a78bfa"/>
+
+      <rect x="470" y="168" width="400" height="62" rx="8" fill="#fbfaff" stroke="#ddd6fe"/>
+      <text x="484" y="188" font-size="11" fill="#6d28d9" font-weight="700">A · 自动配置在这里进厂</text>
+      <text x="484" y="206" font-size="10.3" fill="#475569">ConfigurationClassPostProcessor 递归展开 @Import</text>
+      <text x="484" y="222" font-size="10.3" fill="#475569">DeferredImportSelector 被推迟到用户配置之后</text>
+
+      <rect x="470" y="312" width="400" height="62" rx="8" fill="#fbfaff" stroke="#ddd6fe"/>
+      <text x="484" y="332" font-size="11" fill="#6d28d9" font-weight="700">B · Tomcat 只是被 new 出来</text>
+      <text x="484" y="350" font-size="10.3" fill="#475569">端口在此 bind；Servlet 的 init() 还没发生</text>
+      <text x="484" y="366" font-size="10.3" fill="#475569">所以"端口占用"报在 ⑨，"Servlet 初始化失败"报在 ⑫</text>
+
+      <rect x="470" y="422" width="400" height="62" rx="8" fill="#fbfaff" stroke="#ddd6fe"/>
+      <text x="484" y="442" font-size="11" fill="#6d28d9" font-weight="700">C · 到这里服务才真正可用</text>
+      <text x="484" y="460" font-size="10.3" fill="#475569">lifecycle.onRefresh() → webServer.start()</text>
+      <text x="484" y="476" font-size="10.3" fill="#475569">ContextRefreshedEvent 在 start 之后才发</text>
+    </svg>
+    <figcaption><b>图 4</b>　refresh() 的 12 步与三个插入点。⑪ 是耗时大头（60%），⑨ 绑定端口，⑫ 才 start。</figcaption>
+  </figure>
+
+  <h3>插入点 A：自动配置的 BeanDefinition 在这里进厂</h3>
+  <p>第 ⑤ 步执行所有 <code class="inl">BeanFactoryPostProcessor</code>，其中最重要的是 <code class="inl">ConfigurationClassPostProcessor</code>（一个 <code class="inl">BeanDefinitionRegistryPostProcessor</code>）。它解析所有配置类上的 <code class="inl">@ComponentScan</code>、<code class="inl">@Import</code>、<code class="inl">@Bean</code>，<strong>递归展开</strong>，把结果注册成 BeanDefinition。</p>
+
+  <p><code class="inl">AutoConfigurationImportSelector</code> 就是被 <code class="inl">@Import</code> 带进来的一个 <code class="inl">DeferredImportSelector</code>——它被<strong>推迟</strong>到所有用户配置类解析完之后才执行。这个"推迟"是整个自动配置体系的地基：</p>
+
+  <div class="oneline">
+    <b>为什么必须推迟</b>
+    先解析用户的 <code>@Bean</code>，自动配置类里的 <code>@ConditionalOnMissingBean</code> 才能看到用户的选择并正确退让。顺序反了，用户的自定义 Bean 就会被自动配置"顶掉"或者报 Bean 冲突。这条规则支撑了 L6 的所有条件注解。
+  </div>
+
+  <h3>插入点 B：Tomcat 只是被 new 出来</h3>
+
+  <pre><code>// ServletWebServerApplicationContext.onRefresh()
+private void createWebServer() {
+    WebServer webServer = this.webServer;
+    ServletContext servletContext = getServletContext();
+    if (webServer == null &amp;&amp; servletContext == null) {
+        ServletWebServerFactory factory = getWebServerFactory();
+        // 构造 Tomcat 对象、准备 Connector —— 端口在这一步 bind，
+        // 但 DispatcherServlet.init() 还没发生
+        this.webServer = factory.getWebServer(getSelfInitializer());
+    }
+}</code></pre>
+
+  <p>所以"端口被占用"的报错发生在 ⑨，而"<code class="inl">DispatcherServlet</code> 初始化失败"发生在 ⑫。能区分这两条，说明你真读过源码，而不是背了张流程图。</p>
+
+  <h3>插入点 C：<code class="inl">finishRefresh</code> 才是"服务可用"</h3>
+
+  <pre><code>protected void finishRefresh() {
+    clearResourceCaches();
+    initLifecycleProcessor();                       // DefaultLifecycleProcessor
+    getLifecycleProcessor().onRefresh();            // → WebServerStartStopLifecycle.start()
+    publishEvent(new ContextRefreshedEvent(this));  // 业务监听器在这被触发
+}</code></pre>
+
+  <p>三个"就绪"时间点，答错一个就露馅：</p>
+
+  <table>
+    <tr><th>时间点</th><th>Tomcat</th><th>Bean</th><th>Runner</th><th>适合做什么</th></tr>
+    <tr><td><code>ContextRefreshedEvent</code></td><td>已监听</td><td>全部就绪</td><td>未执行</td><td>缓存预热（必须幂等，可能被重复触发）</td></tr>
+    <tr><td><code>ApplicationStartedEvent</code></td><td>已监听</td><td>全部就绪</td><td>未执行</td><td>埋点</td></tr>
+    <tr><td><code>ApplicationReadyEvent</code></td><td>已监听</td><td>全部就绪</td><td>已执行</td><td>上报注册中心、标记健康</td></tr>
+  </table>
+
+  <div class="warn">
+    <b>K8s 探针的经典错位</b>
+    <code>readinessProbe</code> 应该打 <code>/actuator/health/readiness</code>，它绑定的是 <code>ApplicationReadyEvent</code> 之后的状态——<strong>不是</strong> <code>ContextRefreshedEvent</code>。这就是"服务明明起来了、网关还是 502"的最常见原因：Tomcat 已经在监听，但 Runner 里的初始化还没跑完。
+  </div>
+
+  <h3>第 ⑪ 步为什么最贵</h3>
+  <p><code class="inl">finishBeanFactoryInitialization</code> 遍历所有非懒加载单例，逐个 <code class="inl">getBean</code>。成本拆开是四块：</p>
+  <ul>
+    <li>反射调用构造器 + 解析构造器参数（<code class="inl">ConstructorResolver</code>）</li>
+    <li>字段注入：<code class="inl">AutowiredAnnotationBeanPostProcessor</code> 遍历所有字段</li>
+    <li><code class="inl">@PostConstruct</code> / <code class="inl">InitializingBean</code> / <code class="inl">afterPropertiesSet</code></li>
+    <li>AOP 代理：命中切点就生成 CGLIB 子类，<strong>每个类约 1~3ms</strong></li>
+  </ul>
+  <p>600 个 Bean 里如果有 80 个被代理，光 CGLIB 就是 100~200ms。<strong>"启动慢先看 Bean 数量"比"看自动配置类数量"有效得多</strong>——单例实例化占刷新时间的 60%，而自动配置解析只占全部启动时间的 5%。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>本期核心</em></div>
+  <h2>自动配置的六阶段流水线：153 个候选怎么变成 40 个生效</h2>
+  <p>答这题不要背注解，要背<strong>流水线</strong>。注解只是入口，真正决定"装配什么"的是后面五道闸门。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 292" role="img" aria-label="自动配置六阶段流水线">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">六阶段：触发 → 名单 → 去重 → 过滤 → 排序 → 装配（数字是 3.4.x 实测）</text>
+
+      <rect x="52" y="52" width="62" height="26" rx="13" fill="#f1f5f9" stroke="#cbd5e1"/>
+      <text x="72" y="70" font-size="10.5" fill="#475569" font-weight="700">候选池</text>
+
+      <rect x="196" y="52" width="62" height="26" rx="13" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="216" y="70" font-size="10.5" fill="#075985" font-weight="700">153 条</text>
+
+      <rect x="340" y="52" width="62" height="26" rx="13" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="362" y="70" font-size="10.5" fill="#075985" font-weight="700">148 条</text>
+
+      <rect x="484" y="52" width="62" height="26" rx="13" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="508" y="70" font-size="10.5" fill="#6d28d9" font-weight="700">约 60</text>
+
+      <rect x="628" y="52" width="62" height="26" rx="13" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="650" y="70" font-size="10.5" fill="#6d28d9" font-weight="700">约 60</text>
+
+      <rect x="772" y="52" width="62" height="26" rx="13" fill="#f2fbf6" stroke="#a7f3d0"/>
+      <text x="794" y="70" font-size="10.5" fill="#047857" font-weight="700">约 40</text>
+
+      <rect x="24" y="88" width="132" height="96" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="38" y="106" font-size="11.5" fill="#171a21" font-weight="700">① 触发</text>
+      <text x="38" y="128" font-size="9.8" fill="#475569">@Enable</text>
+      <text x="38" y="146" font-size="9.8" fill="#475569">AutoConfiguration</text>
+      <text x="38" y="164" font-size="9.8" fill="#94a3b8">@Import 选择器</text>
+
+      <rect x="168" y="88" width="132" height="96" rx="8" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="182" y="106" font-size="11.5" fill="#075985" font-weight="700">② 名单</text>
+      <text x="182" y="128" font-size="9.8" fill="#475569">ImportCandidates</text>
+      <text x="182" y="146" font-size="9.8" fill="#475569">.load(...)</text>
+      <text x="182" y="164" font-size="9.8" fill="#94a3b8">读 imports 文件</text>
+
+      <rect x="312" y="88" width="132" height="96" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="326" y="106" font-size="11.5" fill="#171a21" font-weight="700">③ 去重</text>
+      <text x="326" y="128" font-size="9.8" fill="#475569">removeDuplicates</text>
+      <text x="326" y="146" font-size="9.8" fill="#475569">+ exclude 排除</text>
+      <text x="326" y="164" font-size="9.8" fill="#94a3b8">注解 / 配置项两种</text>
+
+      <rect x="456" y="88" width="132" height="96" rx="8" fill="#f5f3ff" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="470" y="106" font-size="11.5" fill="#6d28d9" font-weight="700">④ 过滤</text>
+      <text x="470" y="128" font-size="9.8" fill="#475569">ASM 预过滤</text>
+      <text x="470" y="146" font-size="9.8" fill="#475569">@ConditionalOnClass</text>
+      <text x="470" y="164" font-size="9.8" fill="#94a3b8">不加载类，只 canLoad</text>
+
+      <rect x="600" y="88" width="132" height="96" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="614" y="106" font-size="11.5" fill="#171a21" font-weight="700">⑤ 排序</text>
+      <text x="614" y="128" font-size="9.8" fill="#475569">@AutoConfig...</text>
+      <text x="614" y="146" font-size="9.8" fill="#475569">before / after</text>
+      <text x="614" y="164" font-size="9.8" fill="#94a3b8">用户配置永远在前</text>
+
+      <rect x="744" y="88" width="132" height="96" rx="8" fill="#f2fbf6" stroke="#a7f3d0"/>
+      <text x="758" y="106" font-size="11.5" fill="#047857" font-weight="700">⑥ 装配</text>
+      <text x="758" y="128" font-size="9.8" fill="#475569">@Conditional* 判定</text>
+      <text x="758" y="146" font-size="9.8" fill="#475569">+ Properties 绑定</text>
+      <text x="758" y="164" font-size="9.8" fill="#94a3b8">注册 BeanDefinition</text>
+
+      <polygon points="158,131 166,136 158,141" fill="#94a3b8"/>
+      <polygon points="302,131 310,136 302,141" fill="#94a3b8"/>
+      <polygon points="446,131 454,136 446,141" fill="#a78bfa"/>
+      <polygon points="590,131 598,136 590,141" fill="#94a3b8"/>
+      <polygon points="734,131 742,136 734,141" fill="#94a3b8"/>
+
+      <rect x="24" y="200" width="852" height="32" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+      <text x="38" y="220" font-size="10.8" fill="#334155">④ 是 153→60 的关键（省的是类加载，不是判断逻辑）　⑥ 是 60→40 的关键（用户 Bean 已先行，自动配置才敢退让）</text>
+
+      <text x="24" y="252" font-size="10.5" fill="#64748b">注：③ 的 exclude 早于 ④ 的条件判定，所以被 exclude 的配置不会出现在 --debug 的 Negative matches 里。</text>
+      <text x="24" y="270" font-size="10.5" fill="#64748b">4.0 起自动配置按模块拆分，同一条流水线要合并 20+ 个 jar 各自的 imports 文件。</text>
+    </svg>
+    <figcaption><b>图 5</b>　六阶段漏斗。① 只是入口；真正决定"装不装"的是 ④ 的 ASM 预过滤和 ⑥ 的条件判定。</figcaption>
+  </figure>
+
+  <h3>② 名单从哪读：这条必须背准</h3>
+
+  <pre><code>// AutoConfigurationImportSelector.getCandidateConfigurations(3.x)
+protected List&lt;String&gt; getCandidateConfigurations(AnnotationMetadata metadata,
+                                                 AnnotationAttributes attributes) {
+    List&lt;String&gt; configurations = ImportCandidates.load(
+            AutoConfiguration.class, getBeanClassLoader()).getCandidates();
+    Assert.notEmpty(configurations, "No auto configuration classes found in "
+            + "META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports");
+    return configurations;
+}</code></pre>
+
+  <table>
+    <tr><th>版本</th><th>读哪里</th><th>说明</th></tr>
+    <tr><td>2.7 之前</td><td><code>spring.factories</code> 的 <code>EnableAutoConfiguration</code> key</td><td><code>SpringFactoriesLoader.loadFactoryNames</code>，逗号分隔一长串</td></tr>
+    <tr><td>2.7</td><td>两者都读</td><td>新增 <code>AutoConfiguration.imports</code>，旧 key 标 <code>@Deprecated</code></td></tr>
+    <tr><td><strong>3.0</strong></td><td><strong>只读 <code>AutoConfiguration.imports</code></strong></td><td>旧 key 彻底失效（文件本身仍用于其他 SPI）</td></tr>
+    <tr><td>4.0</td><td>同名文件，但每模块一份</td><td><code>spring-boot-autoconfigure</code> 只剩 12 条，其余分散在 20+ 模块，加载时合并</td></tr>
+  </table>
+
+  <div class="trap">
+    <b>最容易翻车的一问</b>
+    候选人说 <code>spring.factories</code>，你要能立刻给出"3.0 就删了"并说清版本矩阵——不是简单判错，而是指出他背的是 2019 年的答案。同时别过度纠正：<strong>被删的只有 <code>EnableAutoConfiguration</code> 一个 key</strong>，<code>EnvironmentPostProcessor</code>、<code>FailureAnalyzer</code>、<code>ApplicationContextInitializer</code> 仍然写在 <code>spring.factories</code> 里。
+  </div>
+
+  <h3>④ 过滤：为什么少个类不会 <code class="inl">NoClassDefFoundError</code></h3>
+  <p>如果 classpath 里没有 <code class="inl">DataSource</code>，<code class="inl">DataSourceAutoConfiguration</code> 的 <code class="inl">@ConditionalOnClass(DataSource.class)</code> 怎么判定？直接 <code class="inl">Class.forName</code> 会抛异常吗？不会——Boot 用的是 <strong>ASM 读字节码</strong>：</p>
+  <ol>
+    <li>用 <code class="inl">SimpleMetadataReader</code> 读 <code class="inl">.class</code> 文件的注解元数据（<strong>不进 JVM、不初始化类</strong>）</li>
+    <li>注解值以字符串形式取出，只拿到类型名，不解析成 <code class="inl">Class</code> 对象</li>
+    <li>再用 ClassLoader 判断这个名字能否被加载——只做 <code class="inl">canLoad</code>，不做 <code class="inl">load</code></li>
+  </ol>
+  <p>这套机制带来一个工程收益：<strong>自动配置类可以引用 classpath 里不存在的类</strong>，只要它出现在 <code class="inl">@ConditionalOnClass</code> 的注解值里。而如果把 <code class="inl">@ConditionalOnClass</code> 写在 <code class="inl">@Bean</code> 方法的<strong>返回类型</strong>上，就真的会去加载——这是"自动配置方法要返回接口/父类型"的根本原因。</p>
+
+  <p>更狠的是 <code class="inl">OnClassCondition</code> 的<strong>批量优化</strong>：它不是逐个类判定，而是把 153 个候选的 <code class="inl">@ConditionalOnClass</code> 全部收集，一次 ASM 扫描，把结果做成 <code class="inl">Set&lt;String&gt;</code>，然后 <code class="inl">retainAll</code>。实测从"逐个反射判定约 300ms"降到"批量 ASM 约 30ms"。</p>
+
+  <h3>⑤ 排序：用户配置永远赢</h3>
+
+  <table>
+    <tr><th>写法</th><th>作用范围</th><th>说明</th></tr>
+    <tr><td><code>@AutoConfiguration(before = X.class, after = Y.class)</code></td><td>自动配置类之间</td><td>3.x 推荐写法（<code>@AutoConfigureBefore</code> 已废弃）</td></tr>
+    <tr><td><code>@AutoConfigureOrder(HIGHEST_PRECEDENCE)</code></td><td>只影响自动配置之间</td><td>对用户 Bean 无效</td></tr>
+    <tr><td><code>@Order</code> / <code>Ordered</code></td><td>同类型 Bean 的注入顺序</td><td>不参与配置类解析顺序</td></tr>
+  </table>
+
+  <p><strong>底层规则只有一条</strong>：所有用户 <code class="inl">@Configuration</code>（包括 <code class="inl">@ComponentScan</code> 扫到的）都在自动配置之前解析完成。因为 <code class="inl">AutoConfigurationImportSelector</code> 是 <code class="inl">DeferredImportSelector</code>，Spring 会把它挪到最后一组处理。</p>
+
+  <h3>⑥ 装配：条件 + 属性绑定</h3>
+
+  <pre><code>@AutoConfiguration
+@ConditionalOnClass(RedisTemplate.class)              // 有 Lettuce/Jedis 才进来
+@ConditionalOnProperty(prefix = "app.cache", name = "enabled",
+                       havingValue = "true", matchIfMissing = true)
+@EnableConfigurationProperties(CacheProperties.class)  // 绑定 app.cache.*
+public class AppCacheAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean                        // 用户自己定义了就不生效
+    public CacheService cacheService(CacheProperties props,
+                                     RedisTemplate&lt;String, Object&gt; tpl) {
+        return new RedisCacheService(props.getTtl(), tpl);
+    }
+}</code></pre>
+
+  <h3>调试：怎么知道哪些生效了</h3>
+
+  <pre><code># 启动加 --debug（或 -Ddebug=true），输出 ConditionEvaluationReport
+java -jar app.jar --debug
+
+# 报告四段：
+# Positive matches:      生效的自动配置（含判定明细）
+# Negative matches:      未生效的（含未匹配原因）
+# Exclusions:            被 exclude 的
+# Unconditional classes: 无条件生效的（危险信号：说明没写条件）</code></pre>
+
+  <p>生产别常开：153 个候选的完整判定日志上千行，会把启动日志淹掉。要反查就用 <code class="inl">/actuator/conditions</code>（需暴露），或者单独跑一次 <code class="inl">--debug</code> 拿快照。</p>
+
+  <p>排除某个自动配置的四种写法：</p>
+
+  <pre><code>// 1. 注解 + 类
+@SpringBootApplication(exclude = DataSourceAutoConfiguration.class)
+
+// 2. 注解 + 类名（避免编译期依赖）
+@SpringBootApplication(excludeName = "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration")
+
+// 3. 配置文件（最灵活，可按 profile 排除）
+// spring.autoconfigure.exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+
+// 4. 条件式排除：自己实现 AutoConfigurationImportFilter（很少用）</code></pre>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L5</span><em>版本演进</em></div>
+  <h2>从 <code class="inl">spring.factories</code> 到 <code class="inl">AutoConfiguration.imports</code>：为什么非改不可</h2>
+  <p><code class="inl">spring.factories</code> 本来是 Spring 的 SPI 机制：一个 properties 文件，key 是接口全名，value 是实现类列表。<strong>一个文件装下了所有扩展点</strong>——这既是它的优点，也是它被拆掉的直接原因。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="spring.factories 到 AutoConfiguration.imports 的迁移">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">一个文件装所有扩展点 → 一个文件只装自动配置</text>
+
+      <rect x="30" y="40" width="400" height="228" rx="10" fill="#fffbfc" stroke="#f5ccd4"/>
+      <text x="46" y="62" font-size="11.5" fill="#be123c" font-weight="700">2.7 之前 · META-INF/spring.factories</text>
+      <text x="46" y="80" font-size="10" fill="#94a3b8">200+ 行，多个 SPI 混在一个文件里</text>
+
+      <text x="46" y="106" font-size="9.6" fill="#475569">org.springframework.boot.autoconfigure.</text>
+      <text x="46" y="122" font-size="9.6" fill="#475569">　EnableAutoConfiguration=\</text>
+      <text x="46" y="138" font-size="9.6" fill="#475569">　AopAutoConfiguration,\</text>
+      <text x="46" y="154" font-size="9.6" fill="#475569">　DataSourceAutoConfiguration,\</text>
+      <text x="46" y="170" font-size="9.6" fill="#94a3b8">　... 共 140+ 行，每行一个类，逗号结尾</text>
+      <text x="46" y="194" font-size="9.6" fill="#475569">org.springframework.context.</text>
+      <text x="46" y="210" font-size="9.6" fill="#475569">　ApplicationContextInitializer=　（仍有效）</text>
+      <text x="46" y="234" font-size="9.6" fill="#475569">org.springframework.boot.diagnostics.</text>
+      <text x="46" y="250" font-size="9.6" fill="#475569">　FailureAnalyzer=　（仍有效）</text>
+
+      <rect x="480" y="40" width="390" height="228" rx="10" fill="#f4fdf8" stroke="#a7f3d0"/>
+      <text x="496" y="62" font-size="11.5" fill="#047857" font-weight="700">3.0 起 · ...autoconfigure.AutoConfiguration.imports</text>
+      <text x="496" y="80" font-size="10" fill="#94a3b8">一行一个类名，无 key、无逗号、无转义</text>
+
+      <text x="496" y="110" font-size="9.8" fill="#334155">com.example.cache.AppCacheAutoConfiguration</text>
+      <text x="496" y="132" font-size="9.8" fill="#334155">com.example.pay.PayAutoConfiguration</text>
+      <text x="496" y="154" font-size="9.8" fill="#334155">com.example.trace.TraceAutoConfiguration</text>
+
+      <text x="496" y="186" font-size="10" fill="#475569">为什么这样更好：</text>
+      <text x="496" y="206" font-size="9.8" fill="#475569">① 一个文件坏了只影响自动配置一个点</text>
+      <text x="496" y="224" font-size="9.8" fill="#475569">② 每个 jar 一份，天然可按模块拆分</text>
+      <text x="496" y="242" font-size="9.8" fill="#475569">③ 一行一类，便于 ASM 批量预过滤</text>
+      <text x="496" y="260" font-size="9.8" fill="#475569">④ IDE 能识别，不再标成"未使用"</text>
+
+      <polygon points="440,150 462,144 462,156" fill="#94a3b8"/>
+
+      <text x="30" y="292" font-size="10.8" fill="#be123c" font-weight="700">别过度纠正：被移除的只有 EnableAutoConfiguration 一个 key，其余 SPI 继续用 spring.factories。</text>
+      <text x="30" y="312" font-size="10.5" fill="#64748b">说"spring.factories 被删了"也是错的——文件还在，被删的是里面那 140 多行自动配置。</text>
+    </svg>
+    <figcaption><b>图 6</b>　迁移前后。左边是"杂货铺"，右边是"专用通道"；不是文件消失，是自动配置搬了家。</figcaption>
+  </figure>
+
+  <h3>starter 的三段式结构</h3>
+  <p>"自己写一个 starter"这题，90% 的人答成"写个 <code class="inl">@Configuration</code> 加 <code class="inl">@Bean</code>"。缺了骨架，等于没答。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="starter 三段式结构">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">三段式：空壳 starter → autoconfigure 代码 → 用户只加依赖</text>
+
+      <rect x="30" y="44" width="240" height="104" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="44" y="66" font-size="11.2" fill="#171a21" font-weight="700">xxx-spring-boot-starter</text>
+      <text x="44" y="88" font-size="10.2" fill="#475569">只有 pom，没有一行代码</text>
+      <text x="44" y="108" font-size="10.2" fill="#64748b">依赖 autoconfigure 模块</text>
+      <text x="44" y="126" font-size="10.2" fill="#64748b">+ 选定的第三方实现</text>
+
+      <rect x="330" y="44" width="240" height="104" rx="9" fill="#f5f3ff" stroke="#a78bfa"/>
+      <text x="344" y="66" font-size="11.2" fill="#6d28d9" font-weight="700">xxx-...-autoconfigure</text>
+      <text x="344" y="88" font-size="10.2" fill="#475569">自动配置类 + Properties</text>
+      <text x="344" y="108" font-size="10.2" fill="#64748b">+ imports 登记文件</text>
+      <text x="344" y="126" font-size="10.2" fill="#64748b">只依赖 spring-boot-autoconfigure</text>
+
+      <rect x="630" y="44" width="240" height="104" rx="9" fill="#f4fdf8" stroke="#a7f3d0"/>
+      <text x="644" y="66" font-size="11.2" fill="#047857" font-weight="700">用户工程</text>
+      <text x="644" y="88" font-size="10.2" fill="#475569">加一行依赖</text>
+      <text x="644" y="108" font-size="10.2" fill="#64748b">+ 两行 application.yml</text>
+      <text x="644" y="126" font-size="10.2" fill="#64748b">不改任何 Java 代码</text>
+
+      <polygon points="280,96 302,90 302,102" fill="#94a3b8"/>
+      <polygon points="580,96 602,90 602,102" fill="#94a3b8"/>
+
+      <rect x="30" y="176" width="840" height="46" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+      <text x="46" y="196" font-size="10.6" fill="#334155">启动时链路：读 imports（②）→ ASM 过滤（④）→ 条件判定（⑥）→ 注册 BeanDefinition → 绑定 app.cache.*</text>
+      <text x="46" y="214" font-size="10.6" fill="#64748b">换实现时只换 starter，不动 autoconfigure —— 这就是"为什么拆两个模块"的唯一理由</text>
+
+      <text x="30" y="252" font-size="10.5" fill="#be123c" font-weight="700">最常见的漏项：忘了在 autoconfigure 模块里创建 META-INF/spring/...AutoConfiguration.imports</text>
+      <text x="30" y="272" font-size="10.5" fill="#64748b">症状：代码全对、依赖也加了，但 --debug 里连候选都没有 —— 因为没有任何名单指向你的配置类。</text>
+    </svg>
+    <figcaption><b>图 7</b>　starter 三段式。空壳管依赖、autoconfigure 管代码、用户只管配置；漏了 imports 文件，整条链路断在第一步。</figcaption>
+  </figure>
+
+  <pre><code>app-cache-spring-boot-starter/            ← 空壳，只有 pom
+└── pom.xml                               依赖 autoconfigure + redis 客户端
+app-cache-spring-boot-autoconfigure/      ← 代码在这
+├── pom.xml                               只依赖 spring-boot-autoconfigure (compile)
+└── src/main/
+    ├── java/com/example/cache/
+    │   ├── CacheProperties.java          @ConfigurationProperties("app.cache")
+    │   ├── CacheService.java             接口
+    │   ├── RedisCacheService.java        实现
+    │   └── AppCacheAutoConfiguration.java
+    └── resources/META-INF/spring/
+        └── org.springframework.boot.autoconfigure.AutoConfiguration.imports</code></pre>
+
+  <p><strong>为什么拆两个模块</strong>：<code class="inl">autoconfigure</code> 只依赖 <code class="inl">spring-boot-autoconfigure</code>（不锁定具体实现的版本），<code class="inl">starter</code> 负责"选定一个实现 + 拉齐版本"。用户想换实现时只换 starter，不用动 autoconfigure。</p>
+
+  <p>一个能过面试的自动配置类，五个要素缺一不可：</p>
+
+  <pre><code>@AutoConfiguration                                        // ① 3.x 专用，内含 proxyBeanMethods=false
+@ConditionalOnClass({RedisTemplate.class, StringRedisTemplate.class})  // ② 缺类就退
+@ConditionalOnProperty(prefix = "app.cache", name = "enabled", matchIfMissing = true) // ③ 开关
+@EnableConfigurationProperties(CacheProperties.class)     // ④ 属性绑定
+public class AppCacheAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean                            // ⑤ 让位给用户
+    public CacheService cacheService(CacheProperties props,
+                                     ObjectProvider&lt;RedisTemplate&lt;String, Object&gt;&gt; tplProvider) {
+        // 用 ObjectProvider 而不是直接注入：模板可能被替换，故意做成软依赖
+        return new RedisCacheService(props.getTtl(), tplProvider.getIfAvailable());
+    }
+}</code></pre>
+
+  <p><code class="inl">@AutoConfiguration</code> 在 3.x 还多了一个 <code class="inl">replace</code> 属性（<code class="inl">@AutoConfiguration(replace = XxxAutoConfiguration.class)</code>），用来在同一个 jar 内替换旧实现，比 <code class="inl">@AutoConfigureBefore</code> + 重名 Bean 干净得多。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L6</span><em>条件装配</em></div>
+  <h2>12 个 <code class="inl">@Conditional</code>：顺序错了，注解就是装饰</h2>
+  <p>自动配置的所有"智能"都来自条件注解。高频的 12 个：</p>
+
+  <table>
+    <tr><th>注解</th><th>判定依据</th><th>典型用途</th><th>易错点</th></tr>
+    <tr><td><code>@ConditionalOnClass</code></td><td>classpath 能否加载指定类（ASM）</td><td>有依赖才装配</td><td>写在 <code>@Bean</code> 返回类型上会真加载</td></tr>
+    <tr><td><code>@ConditionalOnMissingClass</code></td><td>类不存在</td><td>排除冲突实现</td><td>少用，容易留死路</td></tr>
+    <tr><td><code>@ConditionalOnBean</code></td><td>容器里有指定 Bean</td><td>依赖某 Bean 才装配</td><td><strong>只能用在自动配置类里</strong></td></tr>
+    <tr><td><code>@ConditionalOnMissingBean</code></td><td>容器里没有</td><td>让用户覆盖</td><td>判定时机依赖解析顺序</td></tr>
+    <tr><td><code>@ConditionalOnSingleCandidate</code></td><td>某类型恰好一个（或标了 <code>@Primary</code>）</td><td>有唯一实现才装配</td><td>两个同类型就退让</td></tr>
+    <tr><td><code>@ConditionalOnProperty</code></td><td>配置项值匹配</td><td>功能开关</td><td><code>havingValue</code> 默认空串</td></tr>
+    <tr><td><code>@ConditionalOnResource</code></td><td>资源文件存在</td><td>有 <code>logback.xml</code> 才装配</td><td>路径要带 <code>classpath:</code></td></tr>
+    <tr><td><code>@ConditionalOnWebApplication</code></td><td>上下文是 Web 类型</td><td>只在 web 环境生效</td><td>分 <code>SERVLET</code>/<code>REACTIVE</code></td></tr>
+    <tr><td><code>@ConditionalOnNotWebApplication</code></td><td>非 Web</td><td>批处理、CLI</td><td>—</td></tr>
+    <tr><td><code>@ConditionalOnExpression</code></td><td>SpEL 求值</td><td>复杂组合条件</td><td>慢且难排查，慎用</td></tr>
+    <tr><td><code>@ConditionalOnJava</code></td><td>JDK 版本区间</td><td>特定版本特性</td><td>用 <code>JavaVersion</code> 枚举</td></tr>
+    <tr><td><code>@ConditionalOnWarDeployment</code></td><td>部署在外部容器</td><td>war 包场景</td><td>内嵌容器时不生效</td></tr>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="条件判定短路链">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">判定是一条短路链：任一环节为否就出局，全部命中才注册</text>
+
+      <rect x="30" y="112" width="150" height="76" rx="9" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="46" y="136" font-size="11.5" fill="#075985" font-weight="700">153 个候选类</text>
+      <text x="46" y="156" font-size="10.2" fill="#475569">已按 before/after</text>
+      <text x="46" y="174" font-size="10.2" fill="#475569">排好序，逐个判定</text>
+
+      <polygon points="214,144 228,150 214,156" fill="#94a3b8"/>
+
+      <polygon points="285,118 343,150 285,182 227,150" fill="#f5f3ff" stroke="#a78bfa"/>
+      <text x="285" y="146" font-size="10" fill="#6d28d9" font-weight="700" text-anchor="middle">OnClass</text>
+      <text x="285" y="162" font-size="9.4" fill="#7c3aed" text-anchor="middle">ASM 预过滤</text>
+
+      <polygon points="425,144 439,150 425,156" fill="#94a3b8"/>
+
+      <polygon points="425,118 483,150 425,182 367,150" fill="#f5f3ff" stroke="#a78bfa"/>
+      <text x="425" y="146" font-size="10" fill="#6d28d9" font-weight="700" text-anchor="middle">OnProperty</text>
+      <text x="425" y="162" font-size="9.4" fill="#7c3aed" text-anchor="middle">开关</text>
+
+      <polygon points="565,144 579,150 565,156" fill="#94a3b8"/>
+
+      <polygon points="565,118 623,150 565,182 507,150" fill="#f5f3ff" stroke="#a78bfa"/>
+      <text x="565" y="146" font-size="10" fill="#6d28d9" font-weight="700" text-anchor="middle">OnBean</text>
+      <text x="565" y="162" font-size="9.4" fill="#7c3aed" text-anchor="middle">依赖存在</text>
+
+      <polygon points="705,144 719,150 705,156" fill="#94a3b8"/>
+
+      <polygon points="705,118 763,150 705,182 647,150" fill="#f5f3ff" stroke="#a78bfa"/>
+      <text x="705" y="144" font-size="9.4" fill="#6d28d9" font-weight="700" text-anchor="middle">OnMissing</text>
+      <text x="705" y="158" font-size="9.4" fill="#6d28d9" font-weight="700" text-anchor="middle">Bean</text>
+      <text x="705" y="172" font-size="9" fill="#7c3aed" text-anchor="middle">用户没写</text>
+
+      <polygon points="785,144 797,150 785,156" fill="#047857"/>
+
+      <rect x="799" y="114" width="82" height="72" rx="8" fill="#f2fbf6" stroke="#a7f3d0"/>
+      <text x="840" y="142" font-size="10.2" fill="#047857" font-weight="700" text-anchor="middle">注册</text>
+      <text x="840" y="160" font-size="9.2" fill="#047857" text-anchor="middle">BeanDefinition</text>
+
+      <line x1="285" y1="182" x2="285" y2="238" stroke="#f5ccd4" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <line x1="425" y1="182" x2="425" y2="238" stroke="#f5ccd4" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <line x1="565" y1="182" x2="565" y2="238" stroke="#f5ccd4" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <line x1="705" y1="182" x2="705" y2="238" stroke="#f5ccd4" stroke-width="1.2" stroke-dasharray="4 3"/>
+
+      <rect x="30" y="240" width="851" height="40" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="46" y="265" font-size="10.6" fill="#be123c">任一环节为否 → 不注册任何 Bean，记入 Negative matches（--debug 可查原因）</text>
+
+      <text x="30" y="302" font-size="10.5" fill="#64748b">⚠ 类级条件退让整组，方法级条件只退让自己 —— 需要"整组不装配"时把条件提到类上。</text>
+      <text x="30" y="320" font-size="10.5" fill="#64748b">⚠ 判定顺序由 @AutoConfiguration(before/after) 决定，不写就靠类名字典序（不可依赖）。</text>
+    </svg>
+    <figcaption><b>图 8</b>　条件判定短路链。四个高频条件按"类是否存在 → 开关是否打开 → 依赖是否就绪 → 用户是否已定义"依次收紧。</figcaption>
+  </figure>
+
+  <h3>陷阱一：<code class="inl">@ConditionalOnBean</code> 写在普通 <code class="inl">@Configuration</code> 上不可靠</h3>
+  <p>官方文档的原话是：这个注解"只应该在自动配置类上使用"。原因很直白——条件判定发生在<strong>配置类解析时</strong>，而普通配置类的解析顺序由扫描顺序决定，你无法保证被依赖的那个 Bean 已经注册。自动配置类之所以可靠，是因为它们统一在用户配置之后、且彼此顺序由 <code class="inl">@AutoConfiguration(before/after)</code> 显式声明。</p>
+
+  <pre><code>// 别这么写：userService 是否"已注册"取决于扫描顺序
+@Configuration
+@ConditionalOnBean(UserService.class)
+public class ReportConfig { }
+
+// 要这么写：依赖注入本身就会失败，让它失败得更清晰
+@Configuration
+public class ReportConfig {
+    @Bean
+    public ReportService reportService(UserService userService) { ... }
+}</code></pre>
+
+  <h3>陷阱二：同一个自动配置类里，<code class="inl">@ConditionalOnMissingBean</code> 只管自己</h3>
+
+  <pre><code>@AutoConfiguration
+public class FooAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean
+    public FooTemplate fooTemplate() { return new FooTemplate(); }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public FooService fooService(FooTemplate tpl) { return new FooService(tpl); }
+}
+
+// 用户只定义了 FooService 没定义 FooTemplate：
+//   fooService 退让 ✓
+//   fooTemplate 仍然创建 ✗ —— 冒出个没人用的 Bean
+// 需要"整组退让"时，把条件写在类上：
+//   @AutoConfiguration
+//   @ConditionalOnMissingBean(FooService.class)</code></pre>
+
+  <p>这不是 bug，只是"条件只保证自己那个 Bean 不被创建"。面试里能主动指出这一点，比背 12 个注解有用。</p>
+
+  <h3>陷阱三：<code class="inl">@ConditionalOnProperty</code> 的三种"假"</h3>
+
+  <pre><code>// A：只写 name，配了 app.cache.enabled=false
+@ConditionalOnProperty(prefix = "app.cache", name = "enabled")
+// → 不匹配。规则是"值不等于 false 即匹配"
+
+// B：写了 havingValue="true"，但根本没配这个项
+@ConditionalOnProperty(prefix = "app.cache", name = "enabled", havingValue = "true")
+// → 不匹配。matchIfMissing 默认 false
+
+// C：配了 app.cache.enabled=TRUE（大写）
+@ConditionalOnProperty(..., havingValue = "true")
+// → 不匹配。字符串比较，大小写敏感</code></pre>
+
+  <div class="warn">
+    <b>线上排查别靠猜</b>
+    三种情况在 <code>--debug</code> 的 Negative matches 里长得几乎一样（都是 <code>did not find property</code>）。把 <code>ConditionEvaluationReport</code> 打出来，看 <code>OnPropertyCondition</code> 那一段的具体记录，比在 yml 里反复试快十倍。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L7</span><em>性能</em></div>
+  <h2>启动耗时：优化方向不在自动配置，在 Bean 数量</h2>
+  <p>回到 L0 的账单。把"哪一段能省"标出来，优化的优先级就一目了然了：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 320" role="img" aria-label="启动耗时分布与优化空间">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">2.4 秒的启动，能省的都在"类加载"和"单例实例化"两段</text>
+
+      <text x="30" y="58" font-size="10.5" fill="#475569">JVM 启动 + 类加载</text>
+      <rect x="170" y="44" width="480" height="22" rx="4" fill="#0369a1" opacity="0.85"/>
+      <text x="658" y="60" font-size="10.2" fill="#0369a1" font-weight="700">620ms</text>
+      <text x="706" y="60" font-size="9.8" fill="#64748b">CDS / AOT / 删 starter</text>
+
+      <text x="30" y="96" font-size="10.5" fill="#475569">自动配置解析</text>
+      <rect x="170" y="82" width="93" height="22" rx="4" fill="#7c3aed" opacity="0.8"/>
+      <text x="271" y="98" font-size="10.2" fill="#7c3aed" font-weight="700">120ms</text>
+      <text x="320" y="98" font-size="9.8" fill="#94a3b8">收益最小，别在这折腾</text>
+
+      <text x="30" y="134" font-size="10.5" fill="#475569">单例实例化 + 注入</text>
+      <rect x="170" y="120" width="434" height="22" rx="4" fill="#be123c" opacity="0.8"/>
+      <text x="612" y="136" font-size="10.2" fill="#be123c" font-weight="700">560ms</text>
+      <text x="660" y="136" font-size="9.8" fill="#64748b">减 Bean / 精确 @Lazy</text>
+
+      <text x="30" y="172" font-size="10.5" fill="#475569">AOP 代理 + 连接池</text>
+      <rect x="170" y="158" width="155" height="22" rx="4" fill="#b45309" opacity="0.8"/>
+      <text x="333" y="174" font-size="10.2" fill="#b45309" font-weight="700">200ms</text>
+      <text x="382" y="174" font-size="9.8" fill="#64748b">收窄切点、池改懒初始化</text>
+
+      <text x="30" y="210" font-size="10.5" fill="#475569">内嵌 Tomcat 启动</text>
+      <rect x="170" y="196" width="163" height="22" rx="4" fill="#6b7280" opacity="0.8"/>
+      <text x="341" y="212" font-size="10.2" fill="#6b7280" font-weight="700">210ms</text>
+      <text x="390" y="212" font-size="9.8" fill="#94a3b8">几乎不可省，别浪费时间</text>
+
+      <text x="30" y="248" font-size="10.5" fill="#475569">Runner + 事件</text>
+      <rect x="170" y="234" width="70" height="22" rx="4" fill="#047857" opacity="0.8"/>
+      <text x="248" y="250" font-size="10.2" fill="#047857" font-weight="700">90ms</text>
+      <text x="296" y="250" font-size="9.8" fill="#64748b">把重活挪出启动路径</text>
+
+      <line x1="170" y1="272" x2="650" y2="272" stroke="#e3e7ef" stroke-width="1"/>
+      <text x="30" y="292" font-size="10.6" fill="#334155">优化顺序（性价比从高到低）：</text>
+      <text x="30" y="310" font-size="10.6" fill="#be123c" font-weight="700">删 starter  &gt;  减 Bean  &gt;  收窄切点  &gt;  context-indexer  &gt;  AOT+CDS  &gt;  Native Image</text>
+    </svg>
+    <figcaption><b>图 9</b>　耗时分布与优化空间。注意 120ms 的自动配置解析只占 5%，它是"看起来最像原因、实际最不重要"的那一段。</figcaption>
+  </figure>
+
+  <h3>五档手段，按性价比排</h3>
+
+  <p><strong>第一档：删 starter（收益最大，风险最低）</strong>　一个 starter 平均带 15~25 个 jar。每少一个，类加载少几百个类，自动配置候选少几条。只想用 Redis 却引入了 <code class="inl">spring-boot-starter-data-redis</code> 全套（Jedis + Lettuce + 连接池 + Reactive 支持 + 6 个自动配置类）是最常见的浪费。<strong>先做这一步，再谈别的。</strong></p>
+
+  <p><strong>第二档：<code class="inl">spring.main.lazy-initialization=true</code>（快 30%，但有毒）</strong>　代价要说清楚，这是面试加分点：</p>
+  <ul>
+    <li>首次请求变慢（Bean 在用到时才创建），P99 出现尖刺</li>
+    <li><strong>错误延后暴露</strong>：配置错误、依赖缺失从"启动失败"变成"运行到某个分支才 500"</li>
+    <li>循环依赖、<code class="inl">@PostConstruct</code> 的时序问题会以更诡异的方式出现</li>
+    <li>有状态初始化（连接池预热、本地缓存加载）直接失效</li>
+  </ul>
+  <p>正确用法是<strong>只对非关键路径的 Bean 开</strong>：精确 <code class="inl">@Lazy</code>，或全局开 + <code class="inl">@Lazy(false)</code> 把核心 Bean 钉住。</p>
+
+  <p><strong>第三档：<code class="inl">spring-context-indexer</code>（省 100~300ms）</strong>　<code class="inl">@ComponentScan</code> 要遍历 classpath 所有 <code class="inl">.class</code> 读注解，5000 个类的工程能吃掉 300ms。加个编译期处理器，把候选组件写进 <code class="inl">META-INF/spring.components</code>，运行时直接读索引。</p>
+
+  <p><strong>第四档：AOT + CDS（省 30%~40%，生产可用）</strong></p>
+
+  <pre><code># 1. 打 AppCDS 归档（把类加载结果缓存到文件）
+java -XX:ArchiveClassesAtExit=app.jsa -jar app.jar
+java -XX:SharedArchiveFile=app.jsa -jar app.jar     # 二次启动省 30%+
+
+# 2. AOT 处理（编译期确定 Bean 定义、代理类，需插件烘出）
+mvn -Pnative spring-boot:process-aot
+java -Dspring.aot.enabled=true -jar app.jar</code></pre>
+
+  <p><strong>第五档：GraalVM Native Image（0.1 秒级）</strong></p>
+
+  <table>
+    <tr><th>指标</th><th>JVM 模式</th><th>Native Image</th></tr>
+    <tr><td>启动时间</td><td>2.4s</td><td>0.06~0.12s</td></tr>
+    <tr><td>常驻内存</td><td>300~400MB</td><td>40~70MB</td></tr>
+    <tr><td>构建耗时</td><td>30s</td><td>5~10min</td></tr>
+    <tr><td>峰值吞吐</td><td>基准</td><td>通常低 5%~20%</td></tr>
+    <tr><td>动态能力</td><td>全支持</td><td>反射/动态代理/资源需显式 hint</td></tr>
+  </table>
+
+  <p>问"要不要上 Native"，标准答法是<strong>看场景</strong>：Serverless / CLI / 边缘计算 / 需要极速扩缩容的场景值得；常规常驻 Web 服务不值得——构建慢 10 倍、调试难、生态有坑（某些库的反射配置要手写 <code class="inl">reflect-config.json</code>），省下的 2 秒换不来这些成本。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L8</span><em>配置加载</em></div>
+  <h2>13 档优先级与 <code class="inl">bootstrap.yml</code> 的消失</h2>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="Spring Boot 配置源优先级">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">配置源优先级：上面的覆盖下面的（数字越小越优先）</text>
+
+      <rect x="30" y="34" width="26" height="24" rx="5" fill="#be123c"/>
+      <text x="43" y="51" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+      <text x="66" y="51" font-size="10.3" fill="#334155">命令行 --server.port=9090</text>
+
+      <rect x="30" y="64" width="26" height="24" rx="5" fill="#c2410c"/>
+      <text x="43" y="81" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+      <text x="66" y="81" font-size="10.3" fill="#334155">SPRING_APPLICATION_JSON</text>
+
+      <rect x="30" y="94" width="26" height="24" rx="5" fill="#b45309"/>
+      <text x="43" y="111" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">3</text>
+      <text x="66" y="111" font-size="10.3" fill="#334155">ServletConfig / ServletContext</text>
+
+      <rect x="30" y="124" width="26" height="24" rx="5" fill="#b45309"/>
+      <text x="43" y="141" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">4</text>
+      <text x="66" y="141" font-size="10.3" fill="#334155">JNDI java:comp/env</text>
+
+      <rect x="30" y="154" width="26" height="24" rx="5" fill="#0369a1"/>
+      <text x="43" y="171" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">5</text>
+      <text x="66" y="171" font-size="10.3" fill="#334155">System.getProperties()（-D）</text>
+
+      <rect x="30" y="184" width="26" height="24" rx="5" fill="#0369a1"/>
+      <text x="43" y="201" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">6</text>
+      <text x="66" y="201" font-size="10.3" fill="#075985" font-weight="700">OS 环境变量（K8s 注入）</text>
+
+      <rect x="30" y="214" width="26" height="24" rx="5" fill="#64748b"/>
+      <text x="43" y="231" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">7</text>
+      <text x="66" y="231" font-size="10.3" fill="#334155">RandomValuePropertySource</text>
+
+      <rect x="470" y="34" width="26" height="24" rx="5" fill="#7c3aed"/>
+      <text x="483" y="51" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">8</text>
+      <text x="506" y="51" font-size="10.3" fill="#334155">jar 外 application-{profile}.yml</text>
+
+      <rect x="470" y="64" width="26" height="24" rx="5" fill="#7c3aed"/>
+      <text x="483" y="81" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">9</text>
+      <text x="506" y="81" font-size="10.3" fill="#334155">jar 外 application.yml</text>
+
+      <rect x="470" y="94" width="26" height="24" rx="5" fill="#a78bfa"/>
+      <text x="483" y="111" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">10</text>
+      <text x="506" y="111" font-size="10.3" fill="#334155">jar 内 application-{profile}.yml</text>
+
+      <rect x="470" y="124" width="26" height="24" rx="5" fill="#a78bfa"/>
+      <text x="483" y="141" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">11</text>
+      <text x="506" y="141" font-size="10.3" fill="#334155">jar 内 application.yml（默认值）</text>
+
+      <rect x="470" y="154" width="26" height="24" rx="5" fill="#be123c"/>
+      <text x="483" y="171" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">12</text>
+      <text x="506" y="171" font-size="10.3" fill="#be123c" font-weight="700">@PropertySource（比环境变量还低）</text>
+
+      <rect x="470" y="184" width="26" height="24" rx="5" fill="#94a3b8"/>
+      <text x="483" y="201" font-size="10" fill="#ffffff" font-weight="700" text-anchor="middle">13</text>
+      <text x="506" y="201" font-size="10.3" fill="#334155">setDefaultProperties（兜底）</text>
+
+      <rect x="470" y="218" width="360" height="50" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="484" y="238" font-size="10.2" fill="#be123c" font-weight="700">"我在 @PropertySource 写了库地址，</text>
+      <text x="484" y="256" font-size="10.2" fill="#be123c" font-weight="700">为什么被环境变量覆盖了？"—— 不是 bug，是设计。</text>
+
+      <line x1="440" y1="34" x2="440" y2="240" stroke="#e3e7ef" stroke-width="1" stroke-dasharray="4 4"/>
+      <text x="30" y="278" font-size="10.5" fill="#64748b">运维覆盖服务的首选位置是第 8 档：jar 外 application-{profile}.yml —— 不用重新打包，改完重启即可。</text>
+    </svg>
+    <figcaption><b>图 10</b>　13 档配置优先级。红色两处是最反直觉的：环境变量压过 <code class="inl">@PropertySource</code>，jar 外压过 jar 内。</figcaption>
+  </figure>
+
+  <h3><code class="inl">bootstrap.yml</code> 为什么不生效了</h3>
+
+  <table>
+    <tr><th>版本</th><th>机制</th></tr>
+    <tr><td>2.3 及以前</td><td><code>BootstrapApplicationListener</code> 在主应用启动<strong>之前</strong>建父容器，专读 <code>bootstrap.yml</code>，连配置中心拿远程配置后再启动主容器</td></tr>
+    <tr><td>2.4 起</td><td>引入 <code>ConfigData</code> API，配置加载统一走 <code>spring.config.import</code>，<code>bootstrap.yml</code> 不再自动加载</td></tr>
+    <tr><td>3.x 现状</td><td>要么加 <code>spring-cloud-starter-bootstrap</code> 恢复旧行为，要么改用 <code>spring.config.import</code></td></tr>
+  </table>
+
+  <pre><code># application.yml（3.x 推荐写法）
+spring:
+  config:
+    import: "optional:nacos:${spring.application.name}.yml"
+  application:
+    name: order-service</code></pre>
+
+  <div class="trap">
+    <b><code>optional:</code> 前缀不能省</b>
+    不加 <code>optional:</code> 时，配置中心不可用会直接导致<strong>启动失败</strong>；加上之后是"连不上也继续启动"。这一个单词决定了你的服务在配置中心挂掉时是"降级运行"还是"全线雪崩"，也是最容易被 code review 漏掉的字符。
+  </div>
+
+  <h3>ConfigData 带来的三个新能力</h3>
+
+  <pre><code># 1. 多文档 + 条件激活（一个文件写多环境）
+spring:
+  config:
+    activate:
+      on-profile: prod
+server:
+  port: 80
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+server:
+  port: 8080
+
+# 2. profile 分组（一个 group 激活多个 profile）
+spring:
+  profiles:
+    group:
+      prod: [prod-db, prod-redis, prod-mq]
+
+# 3. 导入额外配置文件
+spring:
+  config:
+    import:
+      - classpath:extra/db.yml
+      - optional:file:./override.yml</code></pre>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L9</span><em>故障模式</em></div>
+  <h2>六个高频坑：启动失败先查这六条</h2>
+
+  <h3>坑一：Bean 覆盖默认被禁止（2.1 起）</h3>
+  <pre><code>spring:
+  main:
+    allow-bean-definition-overriding: false   # 2.1 起默认值</code></pre>
+  <p>两个同名 Bean（比如你写了 <code class="inl">dataSource</code>，某个自动配置里也有）→ 启动直接失败：</p>
+  <pre><code>The bean 'dataSource', defined in class path resource [...],
+could not be registered. A bean with that name has already been defined
+and overriding is disabled.</code></pre>
+  <p>这其实是好事。修复方向不是打开覆盖开关，而是改名或加 <code class="inl">@Primary</code>——<strong>打开开关只是把"启动时报错"变成"运行到某个分支用错 Bean"</strong>。</p>
+
+  <h3>坑二：循环依赖默认被禁止（2.6 起）</h3>
+  <p><code class="inl">spring.main.allow-circular-references</code> 默认 false。字段注入的循环以前靠三级缓存能兜住，现在直接抛 <code class="inl">BeanCurrentlyInCreationException</code>；<strong>构造器注入的循环任何版本都救不了</strong>（对象都没造出来，没法提前暴露引用）。修复只有三条：拆服务、<code class="inl">@Lazy</code> 打断、改 setter（最差的选择）。</p>
+
+  <h3>坑三：自动配置类被 <code class="inl">@ComponentScan</code> 扫到了</h3>
+  <p>如果第三方 starter 的自动配置类正好落在你的扫描包下（比如都是 <code class="inl">com.example</code>），它会被当成<strong>普通配置类</strong>先实例化一次。此时它不享受"用户配置先行"的保证，<code class="inl">@ConditionalOnMissingBean</code> 的判定时机就乱了。官方规范明确要求：自动配置类必须放在独立包，且不能落在使用方的扫描范围内。</p>
+
+  <h3>坑四：<code class="inl">@ConfigurationProperties</code> 不生效的三种原因</h3>
+  <table>
+    <tr><th>原因</th><th>症状</th><th>修复</th></tr>
+    <tr><td>没标 <code>@Component</code>，也没在别处 <code>@EnableConfigurationProperties</code></td><td>字段全是默认值</td><td>二选一补上</td></tr>
+    <tr><td>没有 <code>spring-boot-configuration-processor</code></td><td>能注入但 IDE 无提示、无 <code>metadata.json</code></td><td>加 <code>optional</code> 依赖</td></tr>
+    <tr><td>以为松散绑定对 <code>@Value</code> 也生效</td><td><code>app.cache.max-size</code> 绑不到 <code>maxSize</code></td><td>松散绑定只对 <code>@ConfigurationProperties</code> 生效</td></tr>
+  </table>
+
+  <h3>坑五：多主类 / 扫进了测试类</h3>
+  <p>一个工程里两个 <code class="inl">@SpringBootApplication</code> → 第二个会被第一个扫到，变成 <code class="inl">@Configuration</code> 被重复解析；<code class="inl">src/test</code> 下的 mock 配置如果包名在主类之下，也会被扫进来，表现为"测试能跑、生产启动报 Bean 冲突"。</p>
+
+  <h3>坑六：3.0 升级后自研 starter 失效</h3>
+  <p>症状：升级后自己的 starter 加了依赖但 <code class="inl">@Bean</code> 完全没注册，<code class="inl">--debug</code> 里连候选都没有。原因：代码还在写旧 key。</p>
+  <pre><code># 旧（3.0 起失效）
+# META-INF/spring.factories
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=com.example.FooAutoConfiguration
+
+# 新
+# META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
+com.example.FooAutoConfiguration</code></pre>
+  <p>顺手补一刀：Boot 3 是 <code class="inl">javax.*</code> → <code class="inl">jakarta.*</code> 的大迁移。<code class="inl">javax.servlet</code>、<code class="inl">javax.persistence</code>、<code class="inl">javax.validation</code> 全部要换包名，这是 2.7→3.0 升级的第一大失败原因，比 <code class="inl">spring.factories</code> 更常见。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L10</span><em>速查</em></div>
+  <h2>一张表记住这期的数字</h2>
+
+  <table>
+    <tr><th>数字</th><th>含义</th></tr>
+    <tr><td><strong>153</strong></td><td>Boot 3.4.4 的自动配置候选类总数（实测 <code>spring-boot-autoconfigure-3.4.4.jar</code>）</td></tr>
+    <tr><td><strong>12</strong></td><td>Boot 4.0 时代 <code>spring-boot-autoconfigure</code> 核心包剩下的条数（其余拆到 20+ 模块）</td></tr>
+    <tr><td><strong>6</strong></td><td>自动配置流水线阶段数：触发 → 名单 → 去重 → 过滤 → 排序 → 装配</td></tr>
+    <tr><td><strong>11</strong></td><td><code>SpringApplication.run()</code> 的步骤数（构造 3 + 运行 8）</td></tr>
+    <tr><td><strong>12</strong></td><td><code>refresh()</code> 的步骤数，Boot 只插 3 刀（⑤⑨⑫）</td></tr>
+    <tr><td><strong>3</strong></td><td><code>@SpringBootApplication</code> 拆开的注解数</td></tr>
+    <tr><td><strong>13</strong></td><td>配置源的优先级档数</td></tr>
+    <tr><td><strong>60%</strong></td><td>单例实例化在刷新耗时里的占比</td></tr>
+    <tr><td><strong>5%</strong></td><td>自动配置解析在总启动耗时里的占比（所以优化它收益最小）</td></tr>
+    <tr><td><strong>30%</strong></td><td><code>lazy-initialization</code> 大约能省的启动时间，代价是首请求变慢</td></tr>
+    <tr><td><strong>0.1s</strong></td><td>Native Image 的启动量级（对比 JVM 2.4s）</td></tr>
+  </table>
+
+  <h3>常用命令</h3>
+
+  <pre><code>java -jar app.jar --debug                    # 打印条件评估报告
+curl localhost:8080/actuator/conditions      # 线上看条件报告（需暴露）
+curl localhost:8080/actuator/beans           # 看 Bean 装配关系
+curl localhost:8080/actuator/startup         # 每个启动步骤的耗时
+java -Xlog:class+load=info -jar app.jar | wc -l   # 数一下加载了多少类</code></pre>
+
+  <pre><code># 打开 startup 端点（默认关闭，需要 buffering）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,conditions,beans,startup
+  endpoint:
+    startup:
+      enabled: true</code></pre>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L11</span><em>高频问答</em></div>
+  <h2>十四条问答：每条都能独立成一段回答</h2>
+
+  <div class="qa">
+    <div class="qq">：<code class="inl">@SpringBootApplication</code> 是哪三个注解组成的？各自作用？</div>
+    <p><code>@SpringBootConfiguration</code>（= <code>@Configuration</code>，声明配置类）+ <code>@EnableAutoConfiguration</code>（<code>@Import</code> 引入 <code>AutoConfigurationImportSelector</code>）+ <code>@ComponentScan</code>（扫主类所在包及子包）。另外 <code>proxyBeanMethods</code> 默认 false，不生成 CGLIB 代理，配置类之间必须用参数注入。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：<code class="inl">SpringApplication.run()</code> 都做了什么？</div>
+    <p>构造三步：推断应用类型（看 classpath 有无 <code>DispatcherServlet</code> / <code>DispatcherHandler</code>）、加载 Initializer 与 Listener、从调用栈推断主类。运行八步：启动监听器 → 准备 Environment → 打 Banner → 创建容器 → prepareContext（<strong>只注册主类一个 BeanDefinition</strong>）→ refreshContext（进 12 步）→ afterRefresh（空实现）→ started + Runner + ready。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：自动配置的原理，用一句话说清。</div>
+    <p><code>@EnableAutoConfiguration</code> 通过 <code>@Import</code> 引入一个 <code>DeferredImportSelector</code>，它在所有用户配置解析完之后，读取 classpath 上所有 jar 的 <code>AutoConfiguration.imports</code> 名单（3.x，153 条），经 ASM 预过滤筛掉缺类的、按 before/after 排序、再跑 <code>@Conditional</code> 判定，最后把通过的注册成 BeanDefinition。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：为什么 Boot 3 废弃了 <code class="inl">spring.factories</code> 里的自动配置？</div>
+    <p>四点：一个 key 写错整个文件报废；无法表达模块化拆分（4.0 每个模块自带一份）；一大串逗号分隔字符串不利于 ASM 批量预过滤；IDE 不认识。注意<strong>只废了 <code>EnableAutoConfiguration</code> 一个 key</strong>，<code>EnvironmentPostProcessor</code>、<code>FailureAnalyzer</code> 等继续用 <code>spring.factories</code>。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：<code class="inl">@ConditionalOnMissingBean</code> 什么时候会失效？</div>
+    <p>三种：① 写在普通 <code>@Configuration</code> 上（解析顺序不可控，官方明确只该用在自动配置类）；② 同一个自动配置类里前一个 <code>@Bean</code> 已被创建（条件只保证自己不创建，需要整组退让就把条件提到类上）；③ 自动配置类被 <code>@ComponentScan</code> 扫到，失去"用户配置先行"的保证。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：classpath 里没有 <code class="inl">DataSource</code>，<code class="inl">DataSourceAutoConfiguration</code> 为什么不会 <code class="inl">NoClassDefFoundError</code>？</div>
+    <p>因为 <code>@ConditionalOnClass</code> 的判定走 ASM：读 <code>.class</code> 文件的注解元数据，注解值以字符串形式存在，不触发类加载；只做 <code>canLoad</code> 判断。前提是类名只出现在注解值里——如果出现在方法签名的返回类型上就会真加载。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：启动慢怎么定位？</div>
+    <p>先看三段账：类加载、单例实例化、容器启动。手段：<code>/actuator/startup</code> 看每步耗时；<code>-Xlog:class+load</code> 数类加载量；<code>--debug</code> 看自动配置判定（只占 5%，通常不是主因）。优化顺序：删 starter &gt; 减 Bean &gt; 收窄切点 &gt; context-indexer &gt; AOT/CDS &gt; Native。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：<code class="inl">lazy-initialization</code> 能开吗？</div>
+    <p>能，但要分场景。它省 30% 启动时间，代价是首次请求慢、错误从"启动失败"变成"运行时报错"、有状态初始化失效。生产更稳的做法是精确 <code>@Lazy</code> 非核心 Bean，而不是全局打开。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：为什么 <code class="inl">bootstrap.yml</code> 不生效了？</div>
+    <p>Boot 2.4 引入 ConfigData API，配置加载统一走 <code>spring.config.import</code>，<code>bootstrap.yml</code> 不再自动加载。恢复方式：加 <code>spring-cloud-starter-bootstrap</code>，或改成 <code>spring.config.import: optional:nacos:xxx.yml</code>。注意 <code>optional:</code> 不能省，否则配置中心不可用会直接启动失败。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：<code class="inl">@ConfigurationProperties</code> 和 <code class="inl">@Value</code> 怎么选？</div>
+    <p><code>@ConfigurationProperties</code> 支持松散绑定（<code>max-size</code> → <code>maxSize</code>）、批量绑定、JSR-303 校验、IDE 元数据提示、嵌套结构清晰；<code>@Value</code> 只能单个注入，支持 SpEL。三个以上相关配置项就用 <code>@ConfigurationProperties</code>，这是规范不是偏好。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：怎么排除一个自动配置？</div>
+    <p>四种：<code>@SpringBootApplication(exclude=...)</code>、<code>excludeName</code>（避免编译依赖）、<code>spring.autoconfigure.exclude</code> 配置项（可按 profile 排除）、自定义 <code>AutoConfigurationImportFilter</code>。前三种都在"去重"阶段生效，早于条件判定，所以不会出现在 <code>--debug</code> 的 Negative matches 里。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：写一个 starter 要几步？</div>
+    <p>五步：① 建两个模块（<code>xxx-spring-boot-starter</code> 空壳 + <code>xxx-spring-boot-autoconfigure</code> 代码）；② 写 <code>@ConfigurationProperties</code> 类；③ 写 <code>@AutoConfiguration</code> 类，带 <code>@ConditionalOnClass</code> + <code>@ConditionalOnProperty</code> + <code>@ConditionalOnMissingBean</code>；④ 在 <code>META-INF/spring/...AutoConfiguration.imports</code> 里登记类名；⑤ starter 的 pom 依赖 autoconfigure 模块和第三方库。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：Boot 2.6 之后循环依赖为什么起不来了？</div>
+    <p><code>spring.main.allow-circular-references</code> 默认改为 false。字段/setter 注入的循环以前靠三级缓存兜住，现在直接抛 <code>BeanCurrentlyInCreationException</code>；构造器注入的循环任何版本都不行。修复：拆服务（首选）、<code>@Lazy</code> 打断、重新设计依赖方向。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">：<code class="inl">ContextRefreshedEvent</code> 和 <code class="inl">ApplicationReadyEvent</code> 有什么区别？</div>
+    <p><code>ContextRefreshedEvent</code> 在 <code>finishRefresh</code> 里发出，此时 Tomcat 已 start、Bean 全就绪，但 Runner 未执行；<code>ApplicationReadyEvent</code> 在 <code>callRunners</code> 之后发出，代表"完全就绪"。K8s readiness 应对应后者，否则会出现"服务已监听但依赖尚未初始化完成"的 502。</p>
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L12</span><em>模拟面试</em></div>
+  <h2>三道题，每道都给四档回答</h2>
+
+  <div class="q">
+    <h4><span>Q1</span>设计一个分布式限流 starter：接入方加一行依赖、写三行配置就能用。</h4>
+    <div class="lab">考察点</div>
+    <p>自动配置类设计 / 条件装配 / 属性绑定 / 与既有组件的顺序关系</p>
+    <div class="lab">及格线</div>
+    <p>写一个 <code>@Configuration</code> 类，<code>@Bean</code> 一个 <code>RateLimiter</code>，配置项用 <code>@Value</code> 注入，告诉用户"手动 <code>@Import</code> 一下"。</p>
+    <div class="lab g">良好</div>
+    <p>补齐 starter 骨架——两个模块、<code>@ConfigurationProperties(prefix="app.ratelimit")</code>、<code>@ConditionalOnProperty</code> 做开关、<code>@ConditionalOnMissingBean</code> 让用户可自定义实现、在 <code>AutoConfiguration.imports</code> 里登记。会说"用户加依赖就生效，不用改代码"。</p>
+    <div class="lab">优秀</div>
+    <p>再补四层。① <strong>条件分层</strong>：<code>@ConditionalOnClass(RedisTemplate.class)</code> 决定用 Redis 实现还是本地令牌桶，两个实现放在两个自动配置类里，用 <code>@AutoConfiguration(after = RedisAutoConfiguration.class)</code> 保证顺序，靠 <code>@ConditionalOnBean</code> / <code>@ConditionalOnMissingBean</code> 二选一。<br>
+    ② <strong>失败策略</strong>：Redis 不可用时不能把业务打死，<code>RateLimitProperties</code> 里加 <code>fail-open</code>（默认 true），限流器内部 <code>try/catch</code> 后放行并打点——这个设计决策比代码本身更能体现工程判断。<br>
+    ③ <strong>可观测</strong>：注册 <code>MeterBinder</code> 暴露 <code>ratelimit.passed</code> / <code>ratelimit.rejected</code> 计数，接 Actuator。<br>
+    ④ <strong>顺序陷阱</strong>：如果要拦 <code>HandlerInterceptor</code>，必须用 <code>WebMvcConfigurer</code> 注册，且自动配置类要 <code>@AutoConfiguration(after = WebMvcAutoConfiguration.class)</code>，否则拦截器不生效——这是自研 starter 最高频的"代码没错但不生效"。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>Q2</span>老系统从 Boot 2.7 升到 3.2，启动直接失败，你的排查顺序是什么？</h4>
+    <div class="lab">考察点</div>
+    <p>大版本迁移的失败模式 / 依赖冲突定位 / 兼容性判断</p>
+    <div class="lab">及格线</div>
+    <p>先看启动日志第一段异常，按报错改代码；重点提 <code>javax</code> → <code>jakarta</code> 换包。</p>
+    <div class="lab g">良好</div>
+    <p>给一个有序清单而不是"看日志"：① <code>mvn dependency:tree</code> 找还在引 <code>javax.*</code> 的老版本库；② 编译期报错的直接换包名（<code>javax.servlet</code> → <code>jakarta.servlet</code>、<code>javax.persistence</code> → <code>jakarta.persistence</code>、<code>javax.validation</code> → <code>jakarta.validation</code>）；③ 检查自研 starter 是否还在写 <code>spring.factories</code> 的旧 key；④ 检查 <code>bootstrap.yml</code>（2.4 起就不加载，升级时经常被"顺手"改坏）；⑤ 检查配置项改名（<code>spring.redis.*</code> → <code>spring.data.redis.*</code>，<code>management.metrics.*</code> → <code>management.*.metrics.*</code>）。</p>
+    <div class="lab">优秀</div>
+    <p>再补三点。① <strong>JDK 门槛</strong>：Boot 3 要求 JDK 17+，很多项目升级失败根本不是 Boot 的问题，是还跑在 JDK 8/11 上，先确认 <code>java -version</code> 和 <code>maven.compiler.release</code>。<br>
+    ② <strong>定位手段</strong>：<code>mvn dependency:tree -Dincludes=javax.*</code> 精确找出"谁还在拖 javax"；<code>--debug</code> 看自动配置是否大面积 Negative（往往是依赖被 exclude 掉，<code>@ConditionalOnClass</code> 判定失败）。<br>
+    ③ <strong>灰度策略</strong>：不要一次性全量升，先升一个非核心服务跑一周，把失败清单收集齐再批量迁移，并准备回滚。Boot 2.7 是 2.x 最后一个版本，升级是不可逆的架构决策，不是"改个版本号"。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>Q3</span>一个巨型单体启动要 40 秒，K8s 滚动发布时经常超 readiness 探针被 kill，怎么优化？</h4>
+    <div class="lab">考察点</div>
+    <p>启动耗时归因 / 探针语义 / 优化手段的取舍</p>
+    <div class="lab">及格线</div>
+    <p>加大探针的 <code>initialDelaySeconds</code>，或者提高 <code>failureThreshold</code>，先让它别被 kill。</p>
+    <div class="lab g">良好</div>
+    <p>先归因再动手。用 <code>/actuator/startup</code> 拿到每步耗时，把 40 秒拆成类加载 / 单例实例化 / 数据源 / 缓存预热 / Runner 五段。经验上巨型单体里"缓存预热"和"Runner 里的全量加载"经常占一半以上。然后针对性处理：预热改异步、Runner 里的重活挪到 <code>ApplicationReadyEvent</code> 之后的线程池、删掉不用的 starter。</p>
+    <div class="lab">优秀</div>
+    <p>把问题拆成三个独立问题。① <strong>启动太慢</strong>：删 starter、<code>spring-context-indexer</code>、AOT + AppCDS，通常能砍到 15~20s；剩余部分靠异步预热——但预热不能阻塞 readiness，且必须让 readiness 在预热完成前返回 DOWN，否则流量打进来照样 500。<br>
+    ② <strong>探针语义错</strong>：<code>initialDelaySeconds</code> 是"延迟多久开始探"，<code>startupProbe</code> 才是"给多久启动时间"的正解——用 <code>startupProbe</code>（<code>failureThreshold × periodSeconds = 60s</code>）覆盖慢启动，同时 <code>livenessProbe</code> 保持严格（3 次失败就重启），这样"慢"和"死"被区分开，滚动发布不再误杀。<br>
+    ③ <strong>架构层面</strong>：40 秒启动说明这个单体已不适合"频繁滚动发布"的模型，短期靠 <code>startupProbe</code> + 异步预热撑住，中期拆出高频变更模块独立部署（启动 8 秒的 3 个服务比启动 40 秒的 1 个服务好运维），长期才考虑 Native Image（构建 10 分钟换启动 0.1 秒，只对需要快速扩缩容的部分值得）。</p>
+  </div>
+</section>
+
+<footer>
+  Java 面试深水区 · 第 15 期 · Spring Boot 自动配置与启动流程<br>
+  下期预告：<strong>分库分表与不停机数据迁移</strong>——单表 2000 万行为什么是经验值而不是定律、分片键选错后哪些 SQL 会炸（跨库 join / 跨库分页 / 非分片键查询）、路由算法从取模到一致性哈希再到基因法、以及"双写 + 影子表 + 校验补偿"的完整迁移时序。
+</footer>
+
+</div>
+<script>
+(function () {
+  var kw = 'public|private|protected|static|final|class|interface|extends|implements|new|return|if|else|for|while|try|catch|finally|throw|throws|void|int|long|short|byte|char|float|double|boolean|null|true|false|this|super|import|package|abstract|synchronized|volatile|transient|instanceof|default|break|continue|switch|case|enum|assert|do';
+  var re = new RegExp('(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)|("[^"]*")|\\b(' + kw + ')\\b|\\b(\\d[\\d_]*[LlFfDd]?)\\b', 'g');
+  document.querySelectorAll('pre code').forEach(function (block) {
+    var raw = block.textContent
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    block.innerHTML = raw.replace(re, function (m, c, s, k, n) {
+      if (c) return '<span class="c">' + c + '</span>';
+      if (s) return '<span class="s">' + s + '</span>';
+      if (k) return '<span class="k">' + k + '</span>';
+      if (n) return '<span class="n">' + n + '</span>';
+      return m;
+    });
+  });
+})();
+</script>
+</body>
+</html>

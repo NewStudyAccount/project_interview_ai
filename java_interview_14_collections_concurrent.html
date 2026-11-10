@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 14 · 集合框架深水区与并发容器</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:28px; line-height:1.34; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:780px}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.7px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #bcdcf2}
+  .check li b{color:#075985}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Java 面试深水区 · 第 14 期</div>
+  <h1>集合框架深水区<span class="arrow">→</span>从扩容账本到并发容器</h1>
+  <p class="sub">"ArrayList 和 LinkedList 什么区别"——这题被问烂了，多数人答"一个数组一个链表，前者查询快后者增删快"。然后面试官让你在这两个里选一个存 10 万条数据做中间插入，你说 LinkedList，跑完发现它慢了三倍。因为"增删快"省掉的是<span style="color:#be123c">改指针</span>，而链表要先花 O(n) 走到那个位置，这一路的缓存未命中足够 ArrayList 把整段内存搬好几遍。本期把集合里所有"背下来的结论"重新算一遍账：1.5 倍扩容的总拷贝量是多少、HashMap 树化概率为什么是千万分之六、LRU 三行代码怎么写、COW 到底什么时候不能用、七种 BlockingQueue 怎么选。</p>
+  <div class="meta">
+    <div><strong>12</strong>层递进</div>
+    <div><strong>11</strong>张原理图</div>
+    <div><strong>18</strong>段代码</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span class="on">L0 全景与选型</span>
+  <span>L1 ArrayList 扩容账本</span>
+  <span>L2 HashMap 三个常数</span>
+  <span>L3 LinkedHashMap 与 LRU</span>
+  <span>L4 fail-fast 与 COW</span>
+  <span>L5 并发容器地图</span>
+  <span>L6 BlockingQueue 七种</span>
+  <span>L7 视图与真不可变</span>
+  <span>L8 排序与比较器契约</span>
+  <span>L9 内存账本</span>
+  <span>L10 速查与模拟</span>
+</div>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>概念纠偏</em></div>
+  <h2>集合的第一道题不是"区别"，是"你凭什么这么选"</h2>
+  <p>先把话说清楚：集合框架里真正需要背的类只有二十来个，剩下七十多个是它们的变体、视图、包装器和历史包袱。面试官问"ArrayList 和 LinkedList 区别"，他要的从来不是那两句口诀，而是<strong>你能不能给出一个带数字的选择依据</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 372" role="img" aria-label="Java 集合框架三条主线与选型">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">三条主线：List 管顺序·Set 管唯一·Map 管映射</text>
+
+      <rect x="30" y="38" width="264" height="34" rx="8" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="162" y="60" font-size="12.5" fill="#0c4a6e" font-weight="700" text-anchor="middle">List · 有序可重复</text>
+
+      <rect x="30" y="80" width="264" height="30" rx="6" fill="#fff" stroke="#e2e8f0"/>
+      <text x="44" y="100" font-size="11.5" fill="#1f2937" font-weight="700">ArrayList</text>
+      <text x="282" y="100" font-size="9.5" fill="#64748b" text-anchor="end">数组·1.5x 扩容</text>
+
+      <rect x="30" y="116" width="264" height="30" rx="6" fill="#fff" stroke="#e2e8f0"/>
+      <text x="44" y="136" font-size="11.5" fill="#1f2937" font-weight="700">LinkedList</text>
+      <text x="282" y="136" font-size="9.5" fill="#64748b" text-anchor="end">双向链表·也实现 Deque</text>
+
+      <rect x="30" y="152" width="264" height="30" rx="6" fill="#fff" stroke="#e2e8f0"/>
+      <text x="44" y="172" font-size="11.5" fill="#94a3b8" font-weight="700">Vector</text>
+      <text x="282" y="172" font-size="9.5" fill="#94a3b8" text-anchor="end">全表 synchronized·已弃</text>
+
+      <rect x="30" y="188" width="264" height="30" rx="6" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="44" y="208" font-size="11.5" fill="#9a3412" font-weight="700">CopyOnWriteArrayList</text>
+      <text x="282" y="208" font-size="9.5" fill="#b45309" text-anchor="end">写时复制·读零锁</text>
+
+      <rect x="318" y="38" width="264" height="34" rx="8" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="450" y="60" font-size="12.5" fill="#5b21b6" font-weight="700" text-anchor="middle">Set · 唯一性</text>
+
+      <rect x="318" y="80" width="264" height="30" rx="6" fill="#fff" stroke="#e2e8f0"/>
+      <text x="332" y="100" font-size="11.5" fill="#1f2937" font-weight="700">HashSet</text>
+      <text x="570" y="100" font-size="9.5" fill="#64748b" text-anchor="end">内部就是一个 HashMap</text>
+
+      <rect x="318" y="116" width="264" height="30" rx="6" fill="#fff" stroke="#e2e8f0"/>
+      <text x="332" y="136" font-size="11.5" fill="#1f2937" font-weight="700">LinkedHashSet</text>
+      <text x="570" y="136" font-size="9.5" fill="#64748b" text-anchor="end">插入序·可做 LRU 去重</text>
+
+      <rect x="318" y="152" width="264" height="30" rx="6" fill="#fff" stroke="#e2e8f0"/>
+      <text x="332" y="172" font-size="11.5" fill="#1f2937" font-weight="700">TreeSet</text>
+      <text x="570" y="172" font-size="9.5" fill="#64748b" text-anchor="end">红黑树·按 compareTo 判重</text>
+
+      <rect x="318" y="188" width="264" height="30" rx="6" fill="#fff" stroke="#e2e8f0"/>
+      <text x="332" y="208" font-size="11.5" fill="#1f2937" font-weight="700">ConcurrentSkipListSet</text>
+      <text x="570" y="208" font-size="9.5" fill="#64748b" text-anchor="end">跳表·并发有序</text>
+
+      <rect x="606" y="38" width="264" height="34" rx="8" fill="#fef2f6" stroke="#f3a6b8"/>
+      <text x="738" y="60" font-size="12.5" fill="#9f1239" font-weight="700" text-anchor="middle">Map · 键值映射</text>
+
+      <rect x="606" y="80" width="264" height="30" rx="6" fill="#fff" stroke="#e2e8f0"/>
+      <text x="620" y="100" font-size="11.5" fill="#1f2937" font-weight="700">HashMap</text>
+      <text x="858" y="100" font-size="9.5" fill="#64748b" text-anchor="end">数组+链表+红黑树</text>
+
+      <rect x="606" y="116" width="264" height="30" rx="6" fill="#fff" stroke="#e2e8f0"/>
+      <text x="620" y="136" font-size="11.5" fill="#1f2937" font-weight="700">LinkedHashMap</text>
+      <text x="858" y="136" font-size="9.5" fill="#64748b" text-anchor="end">多一条双向链·LRU</text>
+
+      <rect x="606" y="152" width="264" height="30" rx="6" fill="#fff" stroke="#e2e8f0"/>
+      <text x="620" y="172" font-size="11.5" fill="#1f2937" font-weight="700">TreeMap</text>
+      <text x="858" y="172" font-size="9.5" fill="#64748b" text-anchor="end">红黑树·范围查询</text>
+
+      <rect x="606" y="188" width="264" height="30" rx="6" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="620" y="208" font-size="11.5" fill="#9a3412" font-weight="700">ConcurrentHashMap</text>
+      <text x="858" y="208" font-size="9.5" fill="#b45309" text-anchor="end">CAS+桶锁·禁 null</text>
+
+      <line x1="30" y1="236" x2="870" y2="236" stroke="#e3e7ef" stroke-width="1"/>
+
+      <text x="30" y="258" font-size="11.5" fill="#334155" font-weight="700">选型三问（按顺序问，问到就停）</text>
+      <text x="30" y="278" font-size="11" fill="#475569">① 要按下标随机访问吗？ → List，且大概率就是 ArrayList</text>
+      <text x="30" y="297" font-size="11" fill="#475569">② 要按 key 找 value，还是要排序/范围查询？ → Map；排序才用 TreeMap</text>
+      <text x="30" y="316" font-size="11" fill="#475569">③ 有多个线程同时写吗？ → 换并发容器，别再给普通容器加 synchronized 外衣</text>
+
+      <rect x="30" y="330" width="840" height="30" rx="7" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="44" y="350" font-size="11" fill="#047857" font-weight="700">默认值就两个：ArrayList + HashMap。90% 的性能事故不是"选错容器"，是"选了容器却忘了它的增长方式"。</text>
+    </svg>
+    <figcaption><b>图 1</b>　二十个类、三条主线；真正要记住的是右上角的"禁 null"和下方的三问</figcaption>
+  </figure>
+
+  <h3>先把复杂度表钉正：LinkedList 的 O(1) 是个半句真话</h3>
+  <p>教科书上的表长这样，而它漏掉了最关键的一列——<strong>定位成本</strong>。</p>
+
+  <table>
+    <tr><th>操作</th><th>ArrayList</th><th>LinkedList</th><th>真实差距来自哪里</th></tr>
+    <tr><td>get(i)</td><td>O(1)</td><td>O(n) 走指针</td><td>ArrayList 是一次基址+偏移，CPU 一条指令</td></tr>
+    <tr><td>add(E) 尾部</td><td>均摊 O(1)</td><td>O(1)</td><td>ArrayList 偶尔要扩容拷贝，其余是写一个槽位</td></tr>
+    <tr><td>add(i, E) 中间</td><td>O(n) 拷贝</td><td><b>O(n) 定位 + O(1) 改指针</b></td><td>链表省掉的是"拷贝"，没省掉"走位"</td></tr>
+    <tr><td>remove(i) 中间</td><td>O(n) 拷贝</td><td>O(n) 定位</td><td>同上，且链表每步都可能缓存未命中</td></tr>
+    <tr><td>遍历</td><td>极致快（连续内存）</td><td>慢 3~5 倍</td><td>数组可预取、可向量化；链表每跳一次都在等内存</td></tr>
+    <tr><td>单元素内存</td><td>4B 引用</td><td><b>24B Node</b></td><td>每个元素是个独立对象，还有 GC 标记成本</td></tr>
+  </table>
+
+  <div class="trap"><b>必被追问的坑</b>：10 万元素，在列表正中间反复插入 1000 次，LinkedList 真的一定更快吗？<br>
+  不一定。ArrayList 每次插入要搬 5 万个引用 = 200KB，<b>memmove 是内存带宽级操作</b>，200KB 大约几十微秒；LinkedList 每次要跳 5 万次指针，每次都是一次 L1/L2 未命中，约 5~20 纳秒，5 万次就是<b>250 微秒到 1 毫秒</b>。所以在这个量级上 ArrayList 反而更快。<br>
+  能让 LinkedList 赢的场景极其狭窄：<b>已经持有节点位置（ListIterator 停在原地）</b>，或者元素本身极大、拷贝成本超过走位成本。</div>
+
+  <h3>再补一刀：Java 官方自己都不用 LinkedList</h3>
+  <p><code class="inl">LinkedList</code> 真正被 JDK 内部使用的场景几乎为零。它实现了 <code class="inl">Deque</code>，所以很多人拿它当栈和队列——但 <code class="inl">ArrayDeque</code> 在栈和队列两种用法上都更快、更省内存（环形数组，无 Node 对象）。JDK 文档里 <code class="inl">Deque</code> 接口的第一句推荐就是"用 ArrayDeque"。</p>
+
+  <pre><code>// 栈和队列：用 ArrayDeque，不要用 LinkedList 也不要再用 Stack
+Deque&lt;String&gt; stack = new ArrayDeque&lt;&gt;();
+stack.push("a");            // 等价 addFirst
+stack.pop();                // 等价 removeFirst
+
+Deque&lt;String&gt; queue = new ArrayDeque&lt;&gt;();
+queue.offer("a");           // 等价 offerLast
+queue.poll();               // 等价 pollFirst
+
+// 唯一还需要 LinkedList 的场合：频繁在"已持有迭代器位置"处增删
+ListIterator&lt;String&gt; it = list.listIterator();
+while (it.hasNext()) {
+    if (bad(it.next())) it.add("fix");   // 真 O(1)，因为位置就在手上
+}</code></pre>
+
+  <div class="oneline"><b>一句话答法</b>ArrayList 是数组，随机访问 O(1)，扩容 1.5 倍，中间插入要 memmove；LinkedList 是双向链表，改指针 O(1) 但定位 O(n)，每个元素多 24 字节对象头开销。实际工程里 95% 用 ArrayList，栈和队列用 ArrayDeque，LinkedList 基本可以不用。</div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>必考源码</em></div>
+  <h2>ArrayList 扩容：1.5 倍是从哪来的，代价是多少</h2>
+
+  <h3>一行源码，八个容量台阶</h3>
+  <p>扩容的核心就一行：<code class="inl">newCapacity = oldCapacity + (oldCapacity &gt;&gt; 1)</code>。位移代替除法，所以是<strong>下取整的 1.5 倍</strong>，于是容量序列变成 10 → 15 → 22 → 33 → 49 → 73 → 109 → 163。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="ArrayList 1.5 倍扩容阶梯与累计拷贝量">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">每次扩容都要把旧数组整段搬走 · 8 次扩容累计搬 311 个引用</text>
+
+      <rect x="36" y="34" width="46" height="14" rx="3" fill="#0369a1"/>
+      <text x="92" y="45" font-size="10" fill="#475569">本次容量</text>
+      <rect x="156" y="34" width="46" height="14" rx="3" fill="#f3a6b8"/>
+      <text x="212" y="45" font-size="10" fill="#475569">本次拷贝量（= 旧容量）</text>
+
+      <text x="30" y="72" font-size="10.5" fill="#64748b">容量</text>
+      <text x="360" y="72" font-size="10.5" fill="#64748b">拷贝</text>
+
+      <rect x="70" y="80" width="34" height="18" rx="3" fill="#0369a1"/>
+      <text x="112" y="94" font-size="10.5" fill="#1f2937">10</text>
+      <text x="360" y="94" font-size="10.5" fill="#94a3b8">0（首次分配，无需拷贝）</text>
+
+      <rect x="70" y="106" width="51" height="18" rx="3" fill="#0369a1"/>
+      <text x="129" y="120" font-size="10.5" fill="#1f2937">15</text>
+      <rect x="380" y="109" width="34" height="12" rx="2" fill="#f3a6b8"/>
+      <text x="420" y="120" font-size="10.5" fill="#9f1239">10</text>
+
+      <rect x="70" y="132" width="75" height="18" rx="3" fill="#0369a1"/>
+      <text x="153" y="146" font-size="10.5" fill="#1f2937">22</text>
+      <rect x="380" y="135" width="51" height="12" rx="2" fill="#f3a6b8"/>
+      <text x="437" y="146" font-size="10.5" fill="#9f1239">15</text>
+
+      <rect x="70" y="158" width="112" height="18" rx="3" fill="#0369a1"/>
+      <text x="190" y="172" font-size="10.5" fill="#1f2937">33</text>
+      <rect x="380" y="161" width="75" height="12" rx="2" fill="#f3a6b8"/>
+      <text x="461" y="172" font-size="10.5" fill="#9f1239">22</text>
+
+      <rect x="70" y="184" width="167" height="18" rx="3" fill="#0369a1"/>
+      <text x="245" y="198" font-size="10.5" fill="#1f2937">49</text>
+      <rect x="380" y="187" width="112" height="12" rx="2" fill="#f3a6b8"/>
+      <text x="498" y="198" font-size="10.5" fill="#9f1239">33</text>
+
+      <rect x="70" y="210" width="249" height="18" rx="3" fill="#0369a1"/>
+      <text x="327" y="224" font-size="10.5" fill="#1f2937">73</text>
+      <rect x="380" y="213" width="167" height="12" rx="2" fill="#f3a6b8"/>
+      <text x="553" y="224" font-size="10.5" fill="#9f1239">49</text>
+
+      <rect x="70" y="236" width="372" height="18" rx="3" fill="#0369a1"/>
+      <text x="450" y="250" font-size="10.5" fill="#1f2937">109</text>
+      <rect x="380" y="239" width="249" height="12" rx="2" fill="#f3a6b8"/>
+      <text x="635" y="250" font-size="10.5" fill="#9f1239">73</text>
+
+      <rect x="70" y="262" width="556" height="18" rx="3" fill="#0369a1"/>
+      <text x="634" y="276" font-size="10.5" fill="#1f2937">163</text>
+      <rect x="380" y="265" width="372" height="12" rx="2" fill="#f3a6b8"/>
+      <text x="758" y="276" font-size="10.5" fill="#9f1239">109</text>
+
+      <line x1="30" y1="292" x2="870" y2="292" stroke="#e3e7ef"/>
+
+      <text x="30" y="310" font-size="11" fill="#334155">累计拷贝 0+10+15+22+33+49+73+109 = <tspan fill="#9f1239" font-weight="700">311 ≈ 2 × 163</tspan></text>
+      <text x="420" y="310" font-size="11" fill="#334155">累计申请容量 ≈ <tspan fill="#0369a1" font-weight="700">3 × 163</tspan></text>
+      <text x="660" y="310" font-size="11" fill="#64748b">空洞率上限 1/3</text>
+    </svg>
+    <figcaption><b>图 2</b>　1.5 倍的代价是均摊 2 次引用拷贝，换来的是任意时刻浪费不超过 1/3 空间</figcaption>
+  </figure>
+
+  <p>把这张图翻译成两个必须记住的结论：</p>
+  <ul>
+    <li><strong>均摊成本是 O(1)，但常数是 2。</strong>几何增长因子 g，累计拷贝量约 N/(g−1)。g=1.5 就是 2N，g=2 就只有 N。所以 2 倍增长在拷贝次数上更省，但内存浪费上限是 50%。ArrayList 选了"省内存"，HashMap 选了"2 倍"——但后者不是为了省拷贝，是<strong>必须让长度是 2 的幂</strong>才能用位运算取模。</li>
+    <li><strong>容量不等于大小。</strong><code class="inl">size()</code> 是元素个数，容量是数组长度。存 100 个元素，容量 109，占 436 字节看着还行；但存 10000 个元素时容量会被推到 109×1.5<sup>k</sup>，落到 10937，多出 937 个空槽。</li>
+  </ul>
+
+  <h3>源码三段：什么时候扩、扩多少、在哪扩</h3>
+
+  <pre><code>// 1) 入口：每次 add 都先"预判"，而不是等溢出
+public boolean add(E e) {
+    ensureCapacityInternal(size + 1);   // 传的是 size+1，即"加完之后需要多大"
+    elementData[size++] = e;
+    return true;
+}
+
+// 2) 首次 add 才真正分配 10，默认构造器给的是空数组
+private static final Object[] DEFAULTCAPACITY_EMPTY_ELEMENTDATA = {};
+private void ensureCapacityInternal(int minCapacity) {
+    if (elementData == DEFAULTCAPACITY_EMPTY_ELEMENTDATA) {
+        minCapacity = Math.max(DEFAULT_CAPACITY, minCapacity);   // 10
+    }
+    ensureExplicitCapacity(minCapacity);
+}
+
+private void ensureExplicitCapacity(int minCapacity) {
+    modCount++;                                  // fail-fast 的计数器，就在这里 +1
+    if (minCapacity - elementData.length &gt; 0)    // 只有真不够才扩
+        grow(minCapacity);
+}
+
+// 3) 扩容本体：1.5 倍；若还不够（比如 addAll 一大批）就直接给够
+private void grow(int minCapacity) {
+    int oldCapacity = elementData.length;
+    int newCapacity = oldCapacity + (oldCapacity &gt;&gt; 1);      // ★ 1.5 倍
+    if (newCapacity - minCapacity &lt; 0)
+        newCapacity = minCapacity;                            // 保底：一次性满足
+    if (newCapacity - MAX_ARRAY_SIZE &gt; 0)
+        newCapacity = hugeCapacity(minCapacity);              // 上限：Integer.MAX_VALUE - 8
+    elementData = Arrays.copyOf(elementData, newCapacity);    // 整段拷贝
+}</code></pre>
+
+  <div class="warn"><b>注意 <code class="inl">modCount++</code> 的位置</b>：它不在 <code class="inl">grow()</code> 里，而在 <code class="inl">ensureExplicitCapacity()</code> 里——也就是说<strong>每次 add 都会 +1，哪怕没扩容</strong>。这正是 fail-fast 能检测"结构性修改"的机制：add/remove 一律 +1，set 这类不改变结构的操作不加。</div>
+
+  <h3>预设容量到底能省多少：算一遍再决定要不要写</h3>
+
+  <pre><code>// 场景：已知要装 100 万个元素
+List&lt;String&gt; a = new ArrayList&lt;&gt;();                    // 默认 10 起步
+List&lt;String&gt; b = new ArrayList&lt;&gt;(1_000_000);           // 预设
+
+// a 的扩容次数：10 * 1.5^k >= 1e6  →  k ≈ 29 次
+// a 的累计拷贝：约 2 * 1e6 = 200 万次引用拷贝 = 8MB 内存搬运
+// a 的累计申请：约 300 万个槽位 = 12MB 峰值占用（含旧数组未及回收）
+// 额外成本：29 次大数组分配 → 29 次潜在的 YGC
+
+// 结论：100 万这个量级才值得预设；1 万以内别写，收益小于代码噪音</code></pre>
+
+  <p>更准确地说：预设容量的价值不在"省拷贝字节"（8MB 搬运只要几毫秒），而在<strong>避免那 29 次大对象分配引发的 GC 和数组复制时的停顿抖动</strong>。小集合上写 <code class="inl">new ArrayList&lt;&gt;(16)</code> 纯属自我安慰。</p>
+
+  <h3>数组 vs 链表：差的是缓存行，不是复杂度</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 292" role="img" aria-label="数组连续内存与链表指针追逐的缓存差异">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">左：ArrayList 的元素在内存里是挨着的　右：LinkedList 的节点散落在堆各处</text>
+
+      <rect x="30" y="38" width="400" height="24" rx="5" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="42" y="55" font-size="11" fill="#0c4a6e" font-weight="700">ArrayList · 一次性预取就能拿到 16 个引用</text>
+
+      <rect x="30" y="74" width="400" height="40" rx="4" fill="none" stroke="#0369a1" stroke-dasharray="4 3"/>
+      <text x="34" y="68" font-size="9.5" fill="#0369a1">一个 64B 缓存行</text>
+
+      <rect x="34" y="80" width="44" height="26" rx="3" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="56" y="97" font-size="10" fill="#1e3a8a" text-anchor="middle">e0</text>
+      <rect x="82" y="80" width="44" height="26" rx="3" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="104" y="97" font-size="10" fill="#1e3a8a" text-anchor="middle">e1</text>
+      <rect x="130" y="80" width="44" height="26" rx="3" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="152" y="97" font-size="10" fill="#1e3a8a" text-anchor="middle">e2</text>
+      <rect x="178" y="80" width="44" height="26" rx="3" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="200" y="97" font-size="10" fill="#1e3a8a" text-anchor="middle">e3</text>
+      <rect x="226" y="80" width="44" height="26" rx="3" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="248" y="97" font-size="10" fill="#1e3a8a" text-anchor="middle">e4</text>
+      <rect x="274" y="80" width="44" height="26" rx="3" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="296" y="97" font-size="10" fill="#1e3a8a" text-anchor="middle">e5</text>
+      <rect x="322" y="80" width="44" height="26" rx="3" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="344" y="97" font-size="10" fill="#1e3a8a" text-anchor="middle">e6</text>
+      <rect x="370" y="80" width="44" height="26" rx="3" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="392" y="97" font-size="10" fill="#1e3a8a" text-anchor="middle">e7</text>
+
+      <text x="30" y="136" font-size="10.5" fill="#475569">遍历第 i+1 个：地址 = base + (i+1)×4，编译器直接算出，硬件预取器接力</text>
+      <text x="30" y="154" font-size="10.5" fill="#0369a1" font-weight="700">1000 次访问 ≈ 2 次真实内存读取 + 998 次 L1 命中</text>
+
+      <line x1="450" y1="44" x2="450" y2="270" stroke="#e3e7ef" stroke-width="1"/>
+
+      <rect x="470" y="38" width="400" height="24" rx="5" fill="#fff1f4" stroke="#f3a6b8"/>
+      <text x="482" y="55" font-size="11" fill="#9f1239" font-weight="700">LinkedList · 每个节点都是一次随机跳转</text>
+
+      <rect x="486" y="82" width="52" height="34" rx="3" fill="#fde2e8" stroke="#f3a6b8"/>
+      <text x="512" y="96" font-size="9" fill="#9f1239" text-anchor="middle">Node0</text>
+      <text x="512" y="109" font-size="8" fill="#b45309" text-anchor="middle">12B头</text>
+
+      <rect x="616" y="126" width="52" height="34" rx="3" fill="#fde2e8" stroke="#f3a6b8"/>
+      <text x="642" y="140" font-size="9" fill="#9f1239" text-anchor="middle">Node1</text>
+      <text x="642" y="153" font-size="8" fill="#b45309" text-anchor="middle">12B头</text>
+
+      <rect x="546" y="66" width="52" height="34" rx="3" fill="#fde2e8" stroke="#f3a6b8"/>
+      <text x="572" y="80" font-size="9" fill="#9f1239" text-anchor="middle">Node2</text>
+      <text x="572" y="93" font-size="8" fill="#b45309" text-anchor="middle">12B头</text>
+
+      <rect x="702" y="80" width="52" height="34" rx="3" fill="#fde2e8" stroke="#f3a6b8"/>
+      <text x="728" y="94" font-size="9" fill="#9f1239" text-anchor="middle">Node3</text>
+      <text x="728" y="107" font-size="8" fill="#b45309" text-anchor="middle">12B头</text>
+
+      <rect x="646" y="176" width="52" height="34" rx="3" fill="#fde2e8" stroke="#f3a6b8"/>
+      <text x="672" y="190" font-size="9" fill="#9f1239" text-anchor="middle">Node4</text>
+      <text x="672" y="203" font-size="8" fill="#b45309" text-anchor="middle">12B头</text>
+
+      <line x1="538" y1="98" x2="610" y2="126" stroke="#94a3b8" stroke-width="1.2"/>
+      <line x1="616" y1="120" x2="594" y2="100" stroke="#94a3b8" stroke-width="1.2"/>
+      <line x1="600" y1="82" x2="698" y2="86" stroke="#94a3b8" stroke-width="1.2"/>
+      <line x1="700" y1="112" x2="660" y2="172" stroke="#94a3b8" stroke-width="1.2"/>
+
+      <text x="470" y="236" font-size="10.5" fill="#475569">遍历第 i+1 个：必须先把 Node_i.next 读出来，才知道去哪读</text>
+      <text x="470" y="254" font-size="10.5" fill="#9f1239" font-weight="700">1000 次访问 ≈ 1000 次潜在 L2/内存未命中，约 10~50 微秒</text>
+      <text x="470" y="272" font-size="10" fill="#64748b">每个节点 24B 里只有 4B 是数据，其余是对象头和两个指针</text>
+    </svg>
+    <figcaption><b>图 3</b>　复杂度表只说"O(1) vs O(n)"，但它说不出 20 倍的常数差——这个差来自缓存行和对象头</figcaption>
+  </figure>
+
+  <p>这就是为什么现代硬件下"链表在中规模数据上全面劣于数组"。同样的道理适用于 <code class="inl">LinkedList</code> 当队列、<code class="inl">HashMap</code> 的链表桶（所以 JDK 8 树化其实也是在缓解长链的访问退化）、以及所有"跳表 vs B 树"的争论。</p>
+
+  <div class="oneline"><b>一句话答法</b>ArrayList 扩容是 old + (old &gt;&gt; 1)，即 1.5 倍下取整；扩容时 Arrays.copyOf 整段搬移，累计拷贝约 2N，均摊 O(1)。1.5 而非 2 倍是为了把空间浪费上限压到 1/3。LinkedList 每个节点 24 字节、访问要跳指针，在缓存友好的现代 CPU 上几乎全场景落后于 ArrayList。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>高频追问</em></div>
+  <h2>HashMap 的三个常数：8 / 6 / 64 为什么互不相等</h2>
+  <p>第 01 期讲过 HashMap 的寻址与扰动，这里只深挖一件事：<strong>为什么树化阈值是 8、退化阈值是 6、而树化前还要求容量至少 64</strong>。这三个数字答不出所以然，是"背过八股"和"读过源码"的分水岭。</p>
+
+  <h3>8 与 6：这不是两个阈值，是一个"回差"</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="HashMap 链表与红黑树的迟滞切换">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">迟滞窗口（hysteresis）：7 这个数字是故意留白，不是漏掉</text>
+
+      <rect x="46" y="88" width="180" height="70" rx="10" fill="#eff6fc" stroke="#9fcbe8" stroke-width="1.4"/>
+      <text x="136" y="116" font-size="13" fill="#0c4a6e" font-weight="700" text-anchor="middle">链表 bin</text>
+      <text x="136" y="136" font-size="10" fill="#475569" text-anchor="middle">查找 O(k)，k 通常 0~2</text>
+
+      <rect x="660" y="88" width="180" height="70" rx="10" fill="#fff1f4" stroke="#f3a6b8" stroke-width="1.4"/>
+      <text x="750" y="112" font-size="13" fill="#9f1239" font-weight="700" text-anchor="middle">红黑树 bin</text>
+      <text x="750" y="130" font-size="10" fill="#475569" text-anchor="middle">查找 O(log k)</text>
+      <text x="750" y="147" font-size="9.5" fill="#b45309" text-anchor="middle">TreeNode 约 56B，是 Node 的 1.75 倍</text>
+
+      <path d="M232,100 C360,62 540,62 656,100" fill="none" stroke="#be123c" stroke-width="1.8"/>
+      <polygon points="656,100 646,94 648,104" fill="#be123c"/>
+      <text x="444" y="66" font-size="10.5" fill="#9f1239" text-anchor="middle" font-weight="700">binCount ≥ 8 且 table.length ≥ 64</text>
+
+      <path d="M656,146 C540,184 360,184 232,146" fill="none" stroke="#0369a1" stroke-width="1.8"/>
+      <polygon points="232,146 242,140 240,152" fill="#0369a1"/>
+      <text x="444" y="196" font-size="10.5" fill="#0369a1" text-anchor="middle" font-weight="700">binCount ≤ 6 时退化回链表</text>
+
+      <rect x="366" y="196" width="156" height="26" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+      <text x="444" y="213" font-size="10" fill="#64748b" text-anchor="middle">7 = 缓冲带，不上不下</text>
+
+      <text x="46" y="248" font-size="11" fill="#334155" font-weight="700">为什么要留这条带子？</text>
+      <text x="46" y="266" font-size="10.5" fill="#475569">若两边都用 8：一个桶在 7、8 之间反复抖动，每次都重建整棵树，CPU 直接烧在结构变形上。</text>
+      <text x="46" y="284" font-size="10.5" fill="#475569">留出 7 这一格，任何一次切换后都要再走过一整格才会反向切换，抖动被彻底掐死。</text>
+    </svg>
+    <figcaption><b>图 4</b>　8/6 不是"两个独立阈值"，而是一对上下界；中间那格是防抖缓冲</figcaption>
+  </figure>
+
+  <p>再看 8 这个数字本身的来历。它不是"拍脑袋的经验值"，而是从泊松分布算出来的：在负载因子 0.75、hash 充分离散的前提下，一个桶内落入 k 个节点的概率服从 λ=0.5 的泊松分布。</p>
+
+  <table>
+    <tr><th>桶内节点数 k</th><th>概率</th><th>相当于</th><th>含义</th></tr>
+    <tr><td>0</td><td>0.60653066</td><td>60.7%</td><td>绝大多数桶是空的</td></tr>
+    <tr><td>1</td><td>0.30326533</td><td>30.3%</td><td>一个桶一个节点，正常态</td></tr>
+    <tr><td>2</td><td>0.07581633</td><td>7.58%</td><td>偶尔碰撞</td></tr>
+    <tr><td>3</td><td>0.01263606</td><td>1.26%</td><td>开始不常见</td></tr>
+    <tr><td>4</td><td>0.00157952</td><td>0.158%</td><td>约 1/633</td></tr>
+    <tr><td>6</td><td>0.00001316</td><td>0.0013%</td><td>约 1/76000</td></tr>
+    <tr><td>7</td><td>0.00000094</td><td>0.00009%</td><td>约 1/106 万</td></tr>
+    <tr><td><b>8</b></td><td><b>0.00000006</b></td><td><b>0.000006%</b></td><td><b>约 1/1670 万</b>，比中彩票还难</td></tr>
+  </table>
+
+  <p>所以阈值取 8 的真实含义是：<strong>正常情况下你永远不会触发树化</strong>。树化不是为了性能优化，而是为了防御——防御有人构造大量 hash 相同的 key（hash flooding 攻击），或者 key 的 <code class="inl">hashCode()</code> 写得极烂（比如只返回 <code class="inl">id % 10</code>），把链表拖成 O(n)。这时候红黑树把最坏情况从 O(n) 拉回 O(log n)。</p>
+
+  <h3>64：树化之前先扩容，因为"桶太少"比"链太长"更好治</h3>
+
+  <pre><code>final void treeifyBin(Node&lt;K,V&gt;[] tab, int hash) {
+    int n, index;
+    if (tab == null || (n = tab.length) &lt; MIN_TREEIFY_CAPACITY)   // ★ 64
+        resize();                    // 表太小：先扩容，而不是树化
+    else if ((index = (n - 1) &amp; hash) &gt;= 0) {
+        // 容量够了，才真正把这条链表转成双向链 + 红黑树
+    }
+}</code></pre>
+
+  <p>逻辑很务实：16 个桶里出现 8 个节点的链表，根因是<strong>桶不够</strong>而不是 hash 不好。扩到 32、64 之后，同一批 key 会被分散到不同桶，碰撞自然消失。而树化的代价是每个节点从 32B 涨到约 56B，还要维护红黑树的平衡——能扩容解决就别动结构。</p>
+
+  <h3>顺带把这三个数字串成一个完整判断链</h3>
+  <pre><code>put(k, v)
+ └─ 桶为空 → 直接放 Node
+ └─ 桶非空 → 沿链比较 hash + equals
+      └─ 命中 → 覆盖 value
+      └─ 未命中 → 尾插新 Node，binCount++
+           └─ binCount &gt;= 7（即第 8 个节点）
+                ├─ table.length &lt; 64  → resize()   // 先扩容
+                └─ table.length &gt;= 64 → treeifyBin() // 转红黑树</code></pre>
+
+  <div class="trap"><b>最容易被问倒的一问</b>："既然树化那么难触发，为什么还要写这段代码？"<br>
+  因为<strong>攻击者可以让它必然触发</strong>。只要提交一批 <code class="inl">hashCode()</code> 全部相同的字符串作为参数（HTTP 表单、JSON 字段名都行），HashMap 就会退化成一个 O(n²) 的链表，几百 KB 的请求就能打满一个 CPU 核。这就是 2011 年爆出的 HashDoS，也是 JDK 8 引入红黑树的直接原因。同时在 JDK 8 里 <code class="inl">String.hashCode</code> 还加了散列随机化（<code class="inl">-Djdk.map.althashing.threshold</code>，后被移除改由 TreeBin 兜底）。</div>
+
+  <div class="oneline"><b>一句话答法</b>8 是泊松分布下"几乎不可能自然出现"的节点数（概率 6e-8），树化是为了防 hash 碰撞攻击；6 是退化阈值，留出 7 作为防抖缓冲；64 是因为小表碰撞的根因是桶太少，先扩容比树化更划算。</div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>手写高频题</em></div>
+  <h2>LinkedHashMap：LRU 的三行实现，以及它为什么不该上生产</h2>
+
+  <h3>它只是在 HashMap 的节点上多挂了两根指针</h3>
+  <p><code class="inl">LinkedHashMap</code> 继承 <code class="inl">HashMap</code>，一个字都没改哈希逻辑。它做的是把每个 <code class="inl">Node</code> 换成 <code class="inl">Entry</code>，在原有 <code class="inl">next</code>（桶内链表）之外，额外加 <code class="inl">before</code> / <code class="inl">after</code> 两根指针，串成一条<strong>贯穿全表的双向链</strong>。于是同一份数据有了两条链：桶链管查找，全局链管顺序。</p>
+
+  <table>
+    <tr><th>节点类型</th><th>结构</th><th>大小（压缩指针）</th><th>说明</th></tr>
+    <tr><td><code>Node</code></td><td>hash + key + value + next</td><td>32B</td><td>12B 头 + 4×5，补齐到 8 的倍数</td></tr>
+    <tr><td><code>TreeNode</code></td><td>再加 parent/left/right/prev + red</td><td>约 56B</td><td>树化后内存直接翻 1.75 倍</td></tr>
+    <tr><td><code>LinkedHashMap.Entry</code></td><td>Node + before + after</td><td>40B</td><td>多 8B，换一条全局有序链</td></tr>
+  </table>
+
+  <h3>accessOrder 一个开关，决定它是"有序 Map"还是"LRU"</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 286" role="img" aria-label="LinkedHashMap accessOrder 把被访问节点移到链尾">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">accessOrder=true 时，每次 get 都会把节点摘下来挂到链尾</text>
+
+      <text x="42" y="60" font-size="10.5" fill="#64748b" font-weight="700">访问 C 之前</text>
+      <rect x="42" y="70" width="64" height="34" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="74" y="92" font-size="12" fill="#1f2937" font-weight="700" text-anchor="middle">A</text>
+      <rect x="132" y="70" width="64" height="34" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="164" y="92" font-size="12" fill="#1f2937" font-weight="700" text-anchor="middle">B</text>
+      <rect x="222" y="70" width="64" height="34" rx="6" fill="#fff1f4" stroke="#f3a6b8" stroke-width="1.5"/>
+      <text x="254" y="92" font-size="12" fill="#9f1239" font-weight="700" text-anchor="middle">C</text>
+      <rect x="312" y="70" width="64" height="34" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="344" y="92" font-size="12" fill="#1f2937" font-weight="700" text-anchor="middle">D</text>
+
+      <line x1="108" y1="87" x2="128" y2="87" stroke="#94a3b8" stroke-width="1.4"/>
+      <line x1="198" y1="87" x2="218" y2="87" stroke="#94a3b8" stroke-width="1.4"/>
+      <line x1="288" y1="87" x2="308" y2="87" stroke="#94a3b8" stroke-width="1.4"/>
+
+      <text x="42" y="122" font-size="9.5" fill="#64748b">head（最旧）</text>
+      <text x="316" y="122" font-size="9.5" fill="#64748b">tail（最新）</text>
+
+      <text x="424" y="80" font-size="11" fill="#9f1239" font-weight="700">map.get("C")</text>
+      <text x="424" y="98" font-size="10" fill="#475569">→ afterNodeAccess(C)</text>
+      <text x="424" y="114" font-size="10" fill="#475569">→ 摘链 + 挂 tail</text>
+
+      <text x="42" y="170" font-size="10.5" fill="#64748b" font-weight="700">访问 C 之后</text>
+      <rect x="42" y="180" width="64" height="34" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="74" y="202" font-size="12" fill="#1f2937" font-weight="700" text-anchor="middle">A</text>
+      <rect x="132" y="180" width="64" height="34" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="164" y="202" font-size="12" fill="#1f2937" font-weight="700" text-anchor="middle">B</text>
+      <rect x="222" y="180" width="64" height="34" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="254" y="202" font-size="12" fill="#1f2937" font-weight="700" text-anchor="middle">D</text>
+      <rect x="312" y="180" width="64" height="34" rx="6" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+      <text x="344" y="202" font-size="12" fill="#047857" font-weight="700" text-anchor="middle">C</text>
+
+      <line x1="108" y1="197" x2="128" y2="197" stroke="#94a3b8" stroke-width="1.4"/>
+      <line x1="198" y1="197" x2="218" y2="197" stroke="#94a3b8" stroke-width="1.4"/>
+      <line x1="288" y1="197" x2="308" y2="197" stroke="#94a3b8" stroke-width="1.4"/>
+      <text x="392" y="202" font-size="9.5" fill="#64748b">← tail</text>
+
+      <line x1="30" y1="232" x2="870" y2="232" stroke="#e3e7ef"/>
+
+      <text x="30" y="252" font-size="10.5" fill="#334155">put 新元素时若 <tspan font-weight="700">removeEldestEntry</tspan> 返回 true，就删 <tspan font-weight="700">head</tspan>（最旧的那个）——</text>
+      <text x="30" y="270" font-size="10.5" fill="#9f1239" font-weight="700">所以 head 一侧是"最久未使用"，tail 一侧是"最近使用"，LRU 的核心就是把两者对齐。</text>
+    </svg>
+    <figcaption><b>图 5</b>　accessOrder=true 让"插入序"变成"访问序"；淘汰永远发生在 head</figcaption>
+  </figure>
+
+  <h3>三行代码的 LRU 缓存</h3>
+
+  <pre><code>public class LruCache&lt;K, V&gt; extends LinkedHashMap&lt;K, V&gt; {
+    private final int capacity;
+
+    public LruCache(int capacity) {
+        super(capacity, 0.75f, true);   // ★ 第三个参数 accessOrder = true
+        this.capacity = capacity;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry&lt;K, V&gt; eldest) {
+        return size() &gt; capacity;       // ★ 超了就删 head
+    }
+}
+
+// 用法
+LruCache&lt;String, String&gt; cache = new LruCache&lt;&gt;(3);
+cache.put("a", "1"); cache.put("b", "2"); cache.put("c", "3");
+cache.get("a");          // a 变成最新
+cache.put("d", "4");     // 淘汰 b（此时 b 是最久未使用）</code></pre>
+
+  <p>能这么写，是因为 <code class="inl">HashMap</code> 在三个位置埋了钩子，<code class="inl">LinkedHashMap</code> 正好全部重写：</p>
+
+  <table>
+    <tr><th>钩子方法</th><th>被谁调用</th><th>LinkedHashMap 重写后做什么</th></tr>
+    <tr><td><code>afterNodeAccess(e)</code></td><td><code>get</code> / <code>getOrDefault</code> 命中时</td><td>accessOrder=true 时把 e 移到链尾</td></tr>
+    <tr><td><code>afterNodeInsertion(evict)</code></td><td><code>put</code> 新增节点后</td><td>调 <code>removeEldestEntry</code>，true 就删 head</td></tr>
+    <tr><td><code>afterNodeRemoval(e)</code></td><td><code>remove</code> 时</td><td>把 e 从双向链上摘掉</td></tr>
+  </table>
+
+  <div class="warn"><b>面试加分点</b>：这三个钩子在 <code class="inl">HashMap</code> 里是空方法（<code class="inl">void afterNodeAccess(Node&lt;K,V&gt; p) { }</code>），设计目的是给子类扩展。你能说出"模板方法模式 + 空钩子"，这一问就从"背过"跳到"读过设计"。</div>
+
+  <h3>但生产上别用它：它有三个致命缺陷</h3>
+  <ul>
+    <li><strong>不是线程安全的。</strong>要加锁就退化成串行，高并发下等于没缓存。</li>
+    <li><strong>没有过期时间。</strong>LRU 只按"使用顺序"淘汰，一个 10 分钟前写过再没人碰的 key 会一直占着位置，直到被挤出去。</li>
+    <li><strong>LRU 本身会被"扫描污染"。</strong>一次全表扫描（比如后台导出）会把所有热数据挤出去，之后缓存全 miss，数据库瞬间被打穿。这个问题有个专名叫 <em>cache pollution by scan</em>。</li>
+  </ul>
+  <p>生产答案是 Caffeine：它用 <strong>W-TinyLFU</strong>——一个小的 LRU 窗口区 + 一个 SLRU 主区，中间用 Count-Min Sketch 记录访问频率做准入判断。效果是新来的"一次性 key"进不了主区，扫描不会污染热数据，命中率通常比纯 LRU 高 5~15 个百分点。</p>
+
+  <h3>如果面试官说"不许用 LinkedHashMap"</h3>
+  <p>那就手写 <code class="inl">HashMap + 双向链表</code>，关键是<strong>两个哨兵节点</strong>（head/tail 都指向 dummy），这样所有增删都不用判空：</p>
+
+  <pre><code>class LRUCache {
+    class Node { int k, v; Node prev, next; Node(int k, int v) { this.k = k; this.v = v; } }
+
+    private final Map&lt;Integer, Node&gt; map = new HashMap&lt;&gt;();
+    private final Node head = new Node(0, 0), tail = new Node(0, 0);  // 哨兵
+    private final int cap;
+
+    LRUCache(int cap) { this.cap = cap; head.next = tail; tail.prev = head; }
+
+    public int get(int k) {
+        Node n = map.get(k);
+        if (n == null) return -1;
+        moveToTail(n);              // ★ 访问即提权
+        return n.v;
+    }
+
+    public void put(int k, int v) {
+        Node n = map.get(k);
+        if (n != null) { n.v = v; moveToTail(n); return; }
+        if (map.size() == cap) {    // 满了，先淘汰 head.next
+            Node old = head.next;
+            remove(old);
+            map.remove(old.k);      // ★ 别忘了从 map 里也删
+        }
+        n = new Node(k, v);
+        map.put(k, n);
+        addToTail(n);
+    }
+
+    private void remove(Node n) { n.prev.next = n.next; n.next.prev = n.prev; }
+    private void addToTail(Node n) {
+        n.prev = tail.prev; n.next = tail;
+        tail.prev.next = n; tail.prev = n;
+    }
+    private void moveToTail(Node n) { remove(n); addToTail(n); }
+}</code></pre>
+
+  <div class="trap"><b>手写时最常见的三个 bug</b>：① 淘汰时忘了 <code class="inl">map.remove(old.k)</code>，map 里留着幽灵节点，size 永远不降；② <code class="inl">put</code> 已存在的 key 时忘了 <code class="inl">moveToTail</code>，导致它被误判为最旧；③ 不用哨兵，head/tail 判空写崩。这三个点面试官会逐一看。</div>
+
+  <div class="oneline"><b>一句话答法</b>LinkedHashMap 在 HashMap 节点上多挂 before/after 两根指针串成全局双向链，accessOrder=true 时 get 会把节点移到链尾，再配 removeEldestEntry 就能三行实现 LRU。生产不用它，因为无锁、无 TTL、且 LRU 会被扫描污染，实际用 Caffeine 的 W-TinyLFU。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>并发核心</em></div>
+  <h2>fail-fast 不是并发保护，它只是一个"尽力而为的报警器"</h2>
+
+  <h3>机制只有两个字段</h3>
+  <p><code class="inl">modCount</code> 记录结构性修改次数（增、删、扩容），迭代器创建时把它抄进 <code class="inl">expectedModCount</code>，之后每次 <code class="inl">next()</code> / <code class="inl">remove()</code> 都对一下，不相等就抛 <code class="inl">ConcurrentModificationException</code>。</p>
+
+  <pre><code>final void checkForComodification() {
+    if (modCount != expectedModCount)
+        throw new ConcurrentModificationException();
+}
+
+public E next() {
+    checkForComodification();     // ★ 只在 next 时检查，不是每次修改都检查
+    ...
+}</code></pre>
+
+  <div class="trap"><b>三个必须知道的边界</b><br>
+  ① <b>单线程也会抛</b>——只要是"迭代中结构被改"，跟线程无关，名字里的 Concurrent 是误导。<br>
+  ② <b>多线程不一定抛</b>——两个线程改完都恰好把 modCount 加回去（一增一删），迭代器看到的值相等，于是<b>静默错乱</b>。这才是最危险的：不报错，但你遍历出了重复元素或漏元素。<br>
+  ③ <b>它没有内存可见性保证</b>——modCount 不是 volatile，另一个线程的修改可能压根看不到。</div>
+
+  <h3>三种必炸写法，和三种正确写法</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="fail-fast 触发场景与 CopyOnWrite 快照机制">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">左：三种必炸写法　右：CopyOnWriteArrayList 用"换数组"代替"改数组"</text>
+
+      <rect x="30" y="36" width="380" height="26" rx="5" fill="#fff1f4" stroke="#f3a6b8"/>
+      <text x="42" y="54" font-size="11" fill="#9f1239" font-weight="700">① for-each 里 remove（最常见的生产事故）</text>
+
+      <rect x="30" y="70" width="380" height="26" rx="5" fill="#fff1f4" stroke="#f3a6b8"/>
+      <text x="42" y="88" font-size="11" fill="#9f1239" font-weight="700">② 拿到 subList 后又修改原 list</text>
+
+      <rect x="30" y="104" width="380" height="26" rx="5" fill="#fff1f4" stroke="#f3a6b8"/>
+      <text x="42" y="122" font-size="11" fill="#9f1239" font-weight="700">③ 一个线程遍历、另一个线程 add</text>
+
+      <rect x="30" y="142" width="380" height="26" rx="5" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="42" y="160" font-size="11" fill="#047857" font-weight="700">✓ iterator.remove() / removeIf() / 倒序下标</text>
+
+      <rect x="30" y="176" width="380" height="26" rx="5" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="42" y="194" font-size="11" fill="#047857" font-weight="700">✓ 先 subList(...).clear() 或 copyOf 出新 List</text>
+
+      <rect x="30" y="210" width="380" height="26" rx="5" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="42" y="228" font-size="11" fill="#047857" font-weight="700">✓ 换 CopyOnWriteArrayList / 外部加锁</text>
+
+      <text x="30" y="268" font-size="10.5" fill="#475569">共同本质：遍历期间"数组长度"或"元素位置"被改了，游标全部错位。</text>
+      <text x="30" y="286" font-size="10.5" fill="#9f1239" font-weight="700">CME 是"及时报错"，不是"安全"，静默错乱才是真事故。</text>
+
+      <line x1="434" y1="36" x2="434" y2="286" stroke="#e3e7ef"/>
+
+      <text x="456" y="54" font-size="10.5" fill="#64748b" font-weight="700">写线程（持锁）</text>
+      <rect x="456" y="66" width="180" height="34" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="546" y="88" font-size="10.5" fill="#1f2937" text-anchor="middle">copyOf(old, n+1)</text>
+      <rect x="668" y="66" width="180" height="34" rx="5" fill="#f0fdf4" stroke="#86efac"/>
+      <text x="758" y="88" font-size="10.5" fill="#047857" text-anchor="middle">新数组 = 旧 + 新元素</text>
+      <line x1="640" y1="83" x2="664" y2="83" stroke="#94a3b8" stroke-width="1.3"/>
+
+      <text x="456" y="128" font-size="10.5" fill="#64748b" font-weight="700">读线程（无锁）</text>
+      <rect x="456" y="140" width="392" height="30" rx="5" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="652" y="160" font-size="10.5" fill="#0c4a6e" text-anchor="middle">迭代器持有的是 add 之前那次的数组引用</text>
+
+      <line x1="758" y1="104" x2="758" y2="136" stroke="#86efac" stroke-width="1.6" stroke-dasharray="4 3"/>
+      <text x="768" y="124" font-size="9.5" fill="#047857">setArray 原子换引用</text>
+
+      <text x="456" y="192" font-size="10.5" fill="#475569">所以它天然不会 CME，但也<tspan font-weight="700" fill="#9f1239">读不到写入后的新值</tspan>——</text>
+      <text x="456" y="210" font-size="10.5" fill="#475569">这是"弱一致"的设计取舍，不是 bug。</text>
+
+      <rect x="456" y="224" width="392" height="26" rx="5" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="468" y="242" font-size="10.5" fill="#b45309">代价：每次写复制整个数组，10 万要素写 1 次 = 400KB</text>
+      <text x="456" y="270" font-size="10.5" fill="#475569">适用：读极多、写极少、元素少（监听器表、路由表、白名单）</text>
+      <text x="456" y="288" font-size="10.5" fill="#9f1239">禁用：写频繁（O(n²)）、元素大、数组长</text>
+    </svg>
+    <figcaption><b>图 6</b>　CME 与 COW 是两种完全不同的解法：一个让你"别在遍历时改"，一个让你"改的时候不碰正在遍历的那份"</figcaption>
+  </figure>
+
+  <pre><code>// ✗ 必炸：for-each 本质是 Iterator，remove 走的是 ArrayList.remove
+for (String s : list) {
+    if (s.isEmpty()) list.remove(s);       // CME
+}
+
+// ✓ 写法一：显式迭代器（Iterator.remove 会同步 expectedModCount）
+Iterator&lt;String&gt; it = list.iterator();
+while (it.hasNext()) {
+    if (it.next().isEmpty()) it.remove();
+}
+
+// ✓ 写法二：removeIf（JDK 8+，内部就是上一种，但更短且不会写错）
+list.removeIf(String::isEmpty);
+
+// ✓ 写法三：倒序下标（删元素只影响后面的，前面的下标不漂移）
+for (int i = list.size() - 1; i &gt;= 0; i--) {
+    if (list.get(i).isEmpty()) list.remove(i);
+}
+
+// ✗ 常见误解：以为删一个就 break 就安全
+for (String s : list) {
+    if (s.isEmpty()) { list.remove(s); break; }  // 不抛，但只删了第一个，逻辑错
+}</code></pre>
+
+  <h3>subList 是视图，这个坑比 CME 更隐蔽</h3>
+
+  <pre><code>List&lt;String&gt; list = new ArrayList&lt;&gt;(List.of("a", "b", "c", "d"));
+List&lt;String&gt; sub = list.subList(1, 3);     // ["b","c"]，它不复制，只是"窗口"
+sub.set(0, "B");                           // ★ 原 list 变成 ["a","B","c","d"]
+list.add("e");                             // 原 list 结构性修改
+sub.get(0);                                // ✗ ConcurrentModificationException
+
+// ✓ 要脱离关系，就复制一份
+List&lt;String&gt; copy = new ArrayList&lt;&gt;(list.subList(1, 3));
+// ✓ JDK 10+ 更直白
+List&lt;String&gt; copy2 = List.copyOf(list.subList(1, 3));</code></pre>
+
+  <div class="warn"><b>还有一个内存泄漏变体</b>：<code class="inl">subList</code> 内部持有 <code class="inl">parent</code> 引用和 <code class="inl">offset</code>。如果你从一个 100 万元素的 list 里 <code class="inl">subList(0, 10)</code> 出来丢进缓存，这 100 万元素的数组<strong>一个都回收不掉</strong>。这类问题在 dump 里表现为"一个只有 10 个元素的 list 却引用了 8MB 数组"，非常反直觉，但排查起来极快——看 <code class="inl">ArrayList$SubList.parent</code> 就行。</div>
+
+  <h3>Collections.synchronizedList 也不能救你</h3>
+
+  <pre><code>List&lt;String&gt; sync = Collections.synchronizedList(new ArrayList&lt;&gt;());
+sync.add("a");                  // 单个操作是安全的（整表锁）
+for (String s : sync) { ... }   // ✗ 遍历时依然可能 CME！因为迭代不在锁内
+
+// ✓ 官方文档明确要求手动同步
+synchronized (sync) {
+    for (String s : sync) { ... }
+}</code></pre>
+
+  <p>原因很简单：<code class="inl">synchronizedList</code> 只给每个方法加了 <code class="inl">synchronized(this)</code>，而"遍历"是由几十次 <code class="inl">next()</code> 组成的<strong>复合操作</strong>，锁不住整体。这也是它被淘汰的原因——复合操作的安全性没法靠单个方法的锁拼出来。</p>
+
+  <div class="oneline"><b>一句话答法</b>fail-fast 靠 modCount/expectedModCount 比对，只在 next/remove 时检查，所以单线程也会抛、多线程反而可能静默错乱，它只是报警器不是并发控制。正确做法是 iterator.remove / removeIf / 倒序下标；需要并发读就换 COW（读多写极少）或 CHM（Map 场景），synchronizedList 连遍历都要自己加锁。</div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b0">L5</span><em>并发主线</em></div>
+  <h2>并发容器：一条"锁粒度"的进化线</h2>
+  <p>并发容器不需要一个个背，它们排在这条轴上：<strong>锁的粒度从"整张表"细到"一个桶"，最后细到"一个指针"</strong>。理解这条轴，七种容器的取舍就自动出来了。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 320" role="img" aria-label="并发容器锁粒度演进">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">横轴：锁的粒度　纵轴：并发写吞吐（相对值）</text>
+
+      <line x1="60" y1="248" x2="856" y2="248" stroke="#cbd5e1" stroke-width="1.4"/>
+      <polygon points="856,248 846,243 846,253" fill="#cbd5e1"/>
+      <text x="800" y="266" font-size="10" fill="#64748b">粒度细化 →</text>
+
+      <rect x="72" y="196" width="112" height="52" rx="6" fill="#fee2e2" stroke="#fca5a5"/>
+      <text x="128" y="216" font-size="10.5" fill="#991b1b" font-weight="700" text-anchor="middle">Hashtable</text>
+      <text x="128" y="232" font-size="9.5" fill="#b91c1c" text-anchor="middle">Vector / synchronizedXxx</text>
+      <text x="128" y="245" font-size="9" fill="#991b1b" text-anchor="middle">相对吞吐 1×</text>
+
+      <rect x="212" y="168" width="118" height="80" rx="6" fill="#ffedd5" stroke="#fdba74"/>
+      <text x="271" y="188" font-size="10.5" fill="#9a3412" font-weight="700" text-anchor="middle">CHM · JDK 7</text>
+      <text x="271" y="204" font-size="9.5" fill="#c2410c" text-anchor="middle">16 个 Segment</text>
+      <text x="271" y="219" font-size="9.5" fill="#c2410c" text-anchor="middle">段内仍是一把锁</text>
+      <text x="271" y="236" font-size="9" fill="#9a3412" text-anchor="middle">相对吞吐 16×（理想）</text>
+
+      <rect x="358" y="112" width="128" height="136" rx="6" fill="#dcfce7" stroke="#86efac"/>
+      <text x="422" y="132" font-size="10.5" fill="#166534" font-weight="700" text-anchor="middle">CHM · JDK 8+</text>
+      <text x="422" y="148" font-size="9.5" fill="#15803d" text-anchor="middle">空桶 CAS 无锁写</text>
+      <text x="422" y="163" font-size="9.5" fill="#15803d" text-anchor="middle">冲突才锁桶首节点</text>
+      <text x="422" y="178" font-size="9.5" fill="#15803d" text-anchor="middle">get 完全无锁</text>
+      <text x="422" y="193" font-size="9.5" fill="#15803d" text-anchor="middle">多线程协同扩容</text>
+      <text x="422" y="214" font-size="9" fill="#166534" text-anchor="middle">相对吞吐 100×+</text>
+      <text x="422" y="232" font-size="8.5" fill="#4b5563" text-anchor="middle">Node 数 = 桶数 × 0.75</text>
+
+      <rect x="514" y="88" width="140" height="160" rx="6" fill="#e0f2fe" stroke="#7dd3fc"/>
+      <text x="584" y="108" font-size="10.5" fill="#075985" font-weight="700" text-anchor="middle">CopyOnWriteArrayList</text>
+      <text x="584" y="124" font-size="9.5" fill="#0369a1" text-anchor="middle">读：零锁零同步</text>
+      <text x="584" y="139" font-size="9.5" fill="#0369a1" text-anchor="middle">写：整表复制 + 换引用</text>
+      <text x="584" y="154" font-size="9.5" fill="#0369a1" text-anchor="middle">迭代器读快照，永不 CME</text>
+      <text x="584" y="176" font-size="9" fill="#b45309">写成本 O(n)，写多即灾难</text>
+      <text x="584" y="194" font-size="8.5" fill="#4b5563" text-anchor="middle">元素 1 万时单次写 40KB</text>
+      <text x="584" y="212" font-size="8.5" fill="#4b5563" text-anchor="middle">适合：监听器、白名单、路由表</text>
+
+      <rect x="682" y="64" width="174" height="184" rx="6" fill="#f3e8ff" stroke="#d8b4fe"/>
+      <text x="769" y="84" font-size="10.5" fill="#6b21a8" font-weight="700" text-anchor="middle">ConcurrentSkipListMap</text>
+      <text x="769" y="100" font-size="9.5" fill="#7e22ce" text-anchor="middle">跳表：多层索引链表</text>
+      <text x="769" y="115" font-size="9.5" fill="#7e22ce" text-anchor="middle">增删只改局部指针</text>
+      <text x="769" y="130" font-size="9.5" fill="#7e22ce" text-anchor="middle">可用 CAS 做无锁写</text>
+      <text x="769" y="152" font-size="9" fill="#6b21a8" font-weight="700">唯一并发"有序" Map</text>
+      <text x="769" y="170" font-size="8.5" fill="#4b5563" text-anchor="middle">替代 TreeMap 的并发场景</text>
+      <text x="769" y="188" font-size="8.5" fill="#4b5563" text-anchor="middle">空间换时间：约 2 个指针/节点</text>
+      <text x="769" y="206" font-size="8.5" fill="#4b5563" text-anchor="middle">O(log n) 期望，非严格</text>
+
+      <text x="60" y="290" font-size="10.5" fill="#334155">关键分水岭：JDK 8 把"分段锁"换成了"桶级 synchronized + CAS"，</text>
+      <text x="60" y="307" font-size="10.5" fill="#9f1239" font-weight="700">锁的不再是一段数据，而是一个链表头——粒度从 1/16 细到 1/桶数。</text>
+    </svg>
+    <figcaption><b>图 7</b>　并发容器的全部设计空间就是这条轴：越往右锁越细，但结构和内存代价越高</figcaption>
+  </figure>
+
+  <h3>CHM 的 get 为什么完全不用锁</h3>
+  <p>三个 <code class="inl">volatile</code> 撑起整条无锁读路径：<code class="inl">table</code> 数组引用、数组元素的读取（<code class="inl">tabAt</code> 内部是 <code class="inl">Unsafe.getObjectVolatile</code>）、以及 <code class="inl">Node.val</code>。写线程即使正在改，读线程最坏也只是读到"旧值"或"null"，不会读到半个对象。</p>
+
+  <pre><code>// get 的全部精髓：无锁、无 CAS、两次 volatile 读
+public V get(Object key) {
+    Node&lt;K,V&gt;[] tab; Node&lt;K,V&gt; e, p; int n, eh; K ek;
+    int h = spread(key.hashCode());              // 同 HashMap 的高低位异或
+    if ((tab = table) != null &amp;&amp; (n = tab.length) &gt; 0 &amp;&amp;
+        (e = tabAt(tab, (n - 1) &amp; h)) != null) { // ① volatile 读桶头
+        if ((eh = e.hash) == h) {
+            if ((ek = e.key) == key || (ek != null &amp;&amp; key.equals(ek)))
+                return e.val;                    // ② volatile 读 value
+        }
+        else if (eh &lt; 0)                         // 树节点或正在扩容
+            return (p = e.find(h, key)) != null ? p.val : null;
+        while ((e = e.next) != null) { ... }      // 遍历链表，全程无锁
+    }
+    return null;
+}</code></pre>
+
+  <h3>put：三个阶段，只有第二阶段要锁</h3>
+  <table>
+    <tr><th>阶段</th><th>动作</th><th>同步手段</th><th>失败/竞争时</th></tr>
+    <tr><td>① 桶为空</td><td><code>casTabAt(tab, i, null, new Node(h,k,v))</code></td><td>CAS，无锁</td><td>CAS 失败 → 进第二阶段</td></tr>
+    <tr><td>② 桶非空</td><td><code>synchronized (f)</code> 锁住桶首节点，遍历/尾插/树插</td><td>桶级互斥锁</td><td>遇到 <code>MOVED</code> → 协助扩容</td></tr>
+    <tr><td>③ 计数</td><td><code>addCount(1, binCount)</code> → <code>baseCount</code> + <code>CounterCell[]</code></td><td>CAS + 分片累加</td><td>超过 <code>sizeCtl</code> 阈值 → 触发扩容</td></tr>
+  </table>
+
+  <p>这里的 <strong>CounterCell 借鉴了 LongAdder</strong>：热点计数如果只用单个 <code class="inl">AtomicLong</code>，几百个线程会挤在同一个 cache line 上自旋失败（伪共享 + CAS 冲突）。CHM 把它拆成一圈单元格，线程按 probe 值各写各的，<code class="inl">size()</code> 时再求和——代价是 <code class="inl">size()</code> 只是一个近似值，且不保证原子快照。</p>
+
+  <div class="trap"><b>CHM 为什么禁止 null key 和 null value</b><br>
+  因为在并发场景下，<code class="inl">get</code> 返回 null 有<strong>两种含义</strong>：键不存在，或者键存在但值是 null。HashMap 允许你 <code class="inl">containsKey</code> 二次确认，但两次调用之间别的线程可能已经改了这个桶——<strong>你无法得到确定答案</strong>。所以 Doug Lea 直接禁掉 null，让"null 就代表不存在"这个语义永远成立。顺带也避免了 <code class="inl">if (v == null) put(k, v)</code> 这类非原子写法。</div>
+
+  <h3>为什么没有 ConcurrentTreeMap</h3>
+  <p>红黑树的插入需要<strong>旋转</strong>——一次旋转会连着改父、子、叔、祖父四个节点的指针，还可能要沿树回溯着色。这些操作跨越多个节点，无法用一条 CAS 原子完成；如果用锁，就得锁住整条旋转路径，粒度立刻退化成"接近全表锁"。</p>
+  <p>跳表（SkipList）恰好相反：插入只是在每一层改<strong>相邻两个指针</strong>，每一层都可以独立 CAS。牺牲一点空间（平均每个元素约 2 个额外指针），换来天然的并发友好。<code class="inl">ConcurrentSkipListMap</code> 是 JDK 里唯一提供并发有序语义的 Map，<code class="inl">ConcurrentSkipListSet</code> 是它的包装。</p>
+
+  <div class="oneline"><b>一句话答法</b>并发容器的演进就是锁粒度演进：Hashtable 锁整表 → CHM7 分 16 段 → CHM8 桶级 synchronized + 空桶 CAS，get 靠三个 volatile 完全无锁；size 用 baseCount+CounterCell 分片累加所以是近似值；有序并发只能用跳表，因为红黑树旋转跨多节点，CAS 化不了。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L6</span><em>选型必考</em></div>
+  <h2>七种 BlockingQueue：线程池排队的七种死法</h2>
+  <p>线程池的拒绝策略、最大线程数、甚至"为什么我的线程池把内存吃满了"，答案几乎都在队列上。七种 BlockingQueue 的区别只有三个维度：<strong>有没有容量上限、底层是数组还是链表、用几把锁</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="七种 BlockingQueue 按容量与结构分类">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">横轴：容量特征　纵轴：底层结构　（颜色：锁的数量）</text>
+
+      <rect x="30" y="36" width="264" height="20" rx="4" fill="#eff6fc"/>
+      <text x="162" y="51" font-size="10.5" fill="#0c4a6e" font-weight="700" text-anchor="middle">容量 = 0（直接交接）</text>
+      <rect x="306" y="36" width="270" height="20" rx="4" fill="#fef2f6"/>
+      <text x="441" y="51" font-size="10.5" fill="#9f1239" font-weight="700" text-anchor="middle">有界（必须给上限）</text>
+      <rect x="588" y="36" width="282" height="20" rx="4" fill="#f5f3ff"/>
+      <text x="729" y="51" font-size="10.5" fill="#5b21b6" font-weight="700" text-anchor="middle">无界（可涨到 OOM）</text>
+
+      <rect x="30" y="66" width="264" height="72" rx="7" fill="#fff" stroke="#e2e8f0"/>
+      <text x="44" y="86" font-size="11" fill="#1f2937" font-weight="700">SynchronousQueue</text>
+      <text x="44" y="103" font-size="9.5" fill="#64748b">不存元素，put 必须等到有 take</text>
+      <text x="44" y="118" font-size="9.5" fill="#64748b">公平=TransferQueue，非公平=Stack</text>
+      <text x="44" y="133" font-size="9" fill="#b45309">newCachedThreadPool 用它 → 线程无限涨</text>
+
+      <rect x="306" y="66" width="270" height="72" rx="7" fill="#fff" stroke="#e2e8f0"/>
+      <text x="320" y="86" font-size="11" fill="#1f2937" font-weight="700">ArrayBlockingQueue</text>
+      <text x="320" y="103" font-size="9.5" fill="#64748b">环形数组 · 一把 ReentrantLock</text>
+      <text x="320" y="118" font-size="9.5" fill="#64748b">两个 Condition：notFull / notEmpty</text>
+      <text x="320" y="133" font-size="9" fill="#047857">生产首选：容量可控、内存连续</text>
+
+      <rect x="588" y="66" width="282" height="72" rx="7" fill="#fff" stroke="#e2e8f0"/>
+      <text x="602" y="86" font-size="11" fill="#1f2937" font-weight="700">LinkedBlockingQueue</text>
+      <text x="602" y="103" font-size="9.5" fill="#64748b">链表 · 两把锁（putLock / takeLock）</text>
+      <text x="602" y="118" font-size="9.5" fill="#64748b">count 是 AtomicInteger，入/出队可并行</text>
+      <text x="602" y="133" font-size="9" fill="#b45309">默认 Integer.MAX_VALUE ≈ 无界</text>
+
+      <rect x="306" y="150" width="270" height="72" rx="7" fill="#fff" stroke="#e2e8f0"/>
+      <text x="320" y="170" font-size="11" fill="#1f2937" font-weight="700">LinkedBlockingDeque</text>
+      <text x="320" y="187" font-size="9.5" fill="#64748b">双向链表 · 一把锁两个 Condition</text>
+      <text x="320" y="202" font-size="9.5" fill="#64748b">支持 push/pop 当栈用</text>
+      <text x="320" y="217" font-size="9" fill="#64748b">工作窃取（fork-join）常用</text>
+
+      <rect x="588" y="150" width="282" height="72" rx="7" fill="#fff" stroke="#e2e8f0"/>
+      <text x="602" y="170" font-size="11" fill="#1f2937" font-weight="700">PriorityBlockingQueue</text>
+      <text x="602" y="187" font-size="9.5" fill="#64748b">二叉堆（数组）· 一把锁</text>
+      <text x="602" y="202" font-size="9.5" fill="#64748b">无界但可"逻辑有界"，出队按优先级</text>
+      <text x="602" y="217" font-size="9" fill="#b45309">同优先级不保证 FIFO</text>
+
+      <rect x="588" y="234" width="282" height="72" rx="7" fill="#fff" stroke="#e2e8f0"/>
+      <text x="602" y="254" font-size="11" fill="#1f2937" font-weight="700">DelayQueue</text>
+      <text x="602" y="271" font-size="9.5" fill="#64748b">PriorityQueue + 延迟到期才可取</text>
+      <text x="602" y="286" font-size="9.5" fill="#64748b">leader/follower 减少空唤醒</text>
+      <text x="602" y="301" font-size="9" fill="#047857">订单 30 分钟超时关闭的标准答案</text>
+
+      <rect x="30" y="234" width="546" height="72" rx="7" fill="#fff" stroke="#e2e8f0"/>
+      <text x="44" y="254" font-size="11" fill="#1f2937" font-weight="700">LinkedTransferQueue</text>
+      <text x="44" y="271" font-size="9.5" fill="#64748b">无界 · transfer() 会阻塞到消费者真正取走（不是入队就返回）</text>
+      <text x="44" y="286" font-size="9.5" fill="#64748b">tryTransfer() 非阻塞版；性能优于 LinkedBlockingQueue</text>
+      <text x="44" y="301" font-size="9" fill="#64748b">Netty / Dubbo 的异步传递用过它</text>
+
+      <text x="30" y="325" font-size="9.5" fill="#64748b">绿色 = 有界且锁结构简单，可放心用于生产；橙色 = 默认无界，必须显式设上限。</text>
+    </svg>
+    <figcaption><b>图 8</b>　七种队列只有三个变量：容量、结构、锁的数量。选型就是先定容量，再定结构</figcaption>
+  </figure>
+
+  <h3>无界队列的两条死路：一条是 OOM，一条是超时</h3>
+
+  <pre><code>// ✗ Executors.newFixedThreadPool 的内部实现
+new ThreadPoolExecutor(n, n, 0L, MILLISECONDS,
+        new LinkedBlockingQueue&lt;Runnable&gt;());   // 默认容量 Integer.MAX_VALUE
+
+// 后果 1：maximumPoolSize 永远不生效
+//   队列永不装满 → 永远不会创建第 n+1 个线程 → 任务全在队列里排着
+
+// 后果 2：任务堆积 → GC 压力 → 最终 OutOfMemoryError: Java heap space
+//   一个 Runnable 闭包按 200B 算，100 万个就是 200MB，还没算它引用的对象</code></pre>
+
+  <p>把它算成时间更直观。用 Little's Law：<code class="inl">L = λ × W</code>，队列里积压的任务数等于到达速率乘以排队时间。</p>
+
+  <table>
+    <tr><th>场景</th><th>QPS（λ）</th><th>单任务耗时</th><th>积压 L</th><th>排队等待 W = L/λ</th></tr>
+    <tr><td>正常</td><td>100</td><td>50ms（8 线程刚好）</td><td>≈ 0</td><td>≈ 0</td></tr>
+    <tr><td>下游变慢一倍</td><td>100</td><td>100ms</td><td>持续增长</td><td>无上限，直到 OOM</td></tr>
+    <tr><td>有界队列 1000</td><td>100</td><td>100ms</td><td>封顶 1000</td><td><b>10 秒</b>后开始拒绝</td></tr>
+  </table>
+
+  <p>注意第三行：有界队列的价值不是"让任务不丢"，而是<strong>把"无限排队直到崩"变成"10 秒后明确拒绝"</strong>。拒绝是可控的降级，排队到 OOM 是不可控的雪崩。</p>
+
+  <h3>正确姿势：四件套一起定，缺一不可</h3>
+
+  <pre><code>ThreadPoolExecutor pool = new ThreadPoolExecutor(
+    8,                                   // corePoolSize：常驻
+    32,                                  // maxPoolSize：峰值
+    60L, TimeUnit.SECONDS,               // 空闲回收
+    new ArrayBlockingQueue&lt;&gt;(1000),       // ★ 有界队列，不写就是坑
+    new ThreadFactoryBuilder().setNameFormat("order-pool-%d").build(),  // ★ 命名，排查救命
+    new ThreadPoolExecutor.CallerRunsPolicy()   // ★ 拒绝时调用线程自己跑，天然反压
+);
+
+// CallerRunsPolicy 的精妙：任务丢回给提交者（如 Tomcat 的 worker 线程），
+// 提交者被拖慢 → 上游请求堆积 → 负载均衡摘流 → 系统整体降速而不是崩掉。
+// 这叫"背压（backpressure）"，是拒绝策略里唯一带自我保护的。</code></pre>
+
+  <div class="trap"><b>线程数不是拍脑袋</b>：CPU 密集 ≈ 核数 + 1；IO 密集 ≈ 核数 × (1 + 等待时间/计算时间)。8 核、单任务 90% 在等下游（等待/计算 = 9），那 8 × 10 = 80 个线程才吃满。但线程一多，上下文切换和栈内存（默认 1MB/线程）又成新瓶颈——80 个线程就是 80MB 栈空间，这在容器里是要命的。</div>
+
+  <div class="oneline"><b>一句话答法</b>线程池选队列先看容量：无界队列（LinkedBlockingQueue 默认、PriorityBlockingQueue、DelayQueue）会让 maximumPoolSize 失效并最终 OOM；有界队列（ArrayBlockingQueue）把无限排队转成明确拒绝；SynchronousQueue 配 CachedThreadPool 会让线程无限增长。生产用 ArrayBlockingQueue + CallerRunsPolicy 做背压。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L7</span><em>易错细节</em></div>
+  <h2>三种"只读"：视图、包装、真不可变</h2>
+  <p>这三个东西都让 <code class="inl">add</code> 抛异常，但它们的<strong>内存关系完全不同</strong>。分不清就会在生产上遇到"我明明没改这个 list，它的内容却变了"。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 316" role="img" aria-label="Arrays.asList 与 unmodifiableList 与 List.of 的引用关系">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">关键差别：前两者是"引用"，第三者才是"副本"</text>
+
+      <text x="30" y="50" font-size="10.5" fill="#1f2937" font-weight="700">① Arrays.asList(arr) —— 固定长度视图</text>
+      <rect x="30" y="60" width="120" height="30" rx="5" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="90" y="80" font-size="10" fill="#0c4a6e" text-anchor="middle">Arrays$ArrayList</text>
+      <rect x="190" y="60" width="150" height="30" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="265" y="80" font-size="10" fill="#475569" text-anchor="middle">a[]（原数组）</text>
+      <line x1="150" y1="75" x2="186" y2="75" stroke="#0369a1" stroke-width="1.4"/>
+      <text x="355" y="72" font-size="9.5" fill="#9f1239">set 可以 → 直接写原数组</text>
+      <text x="355" y="88" font-size="9.5" fill="#9f1239">add/remove 抛 UnsupportedOperationException</text>
+
+      <text x="30" y="126" font-size="10.5" fill="#1f2937" font-weight="700">② Collections.unmodifiableList(list) —— 只读代理</text>
+      <rect x="30" y="136" width="120" height="30" rx="5" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="90" y="156" font-size="10" fill="#5b21b6" text-anchor="middle">UnmodifiableList</text>
+      <rect x="190" y="136" width="150" height="30" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="265" y="156" font-size="10" fill="#475569" text-anchor="middle">原 list（仍可变）</text>
+      <line x1="150" y1="151" x2="186" y2="151" stroke="#7c3aed" stroke-width="1.4"/>
+      <text x="355" y="148" font-size="9.5" fill="#9f1239">你改不了，但别人改原 list → 你看到的也变</text>
+      <text x="355" y="164" font-size="9.5" fill="#64748b">所有写方法直接 throw，读方法转发</text>
+
+      <text x="30" y="202" font-size="10.5" fill="#1f2937" font-weight="700">③ List.of(...) —— 真不可变（JDK 9+）</text>
+      <rect x="30" y="212" width="120" height="30" rx="5" fill="#f2fbf6" stroke="#86efac"/>
+      <text x="90" y="232" font-size="10" fill="#047857" text-anchor="middle">ImmutableCollections</text>
+      <rect x="190" y="212" width="150" height="30" rx="5" fill="#f0fdf4" stroke="#86efac"/>
+      <text x="265" y="232" font-size="10" fill="#047857" text-anchor="middle">内部数组（私有副本）</text>
+      <line x1="150" y1="227" x2="186" y2="227" stroke="#047857" stroke-width="1.4"/>
+      <text x="355" y="224" font-size="9.5" fill="#047857">入参被复制，外部改不动它，它也改不动外部</text>
+      <text x="355" y="240" font-size="9.5" fill="#9f1239">禁 null：List.of("a", null) → NullPointerException</text>
+
+      <line x1="30" y1="258" x2="870" y2="258" stroke="#e3e7ef"/>
+
+      <text x="30" y="278" font-size="10.5" fill="#334155">还有两个"视图"变体：<tspan font-weight="700">subList</tspan> 是窗口（连 parent 一起活着），<tspan font-weight="700">Map.keySet/values</tspan> 是视图</text>
+      <text x="30" y="296" font-size="10.5" fill="#334155">（改 Map 会反映到 keySet，反之亦然，且都不支持新增）。</text>
+      <text x="30" y="312" font-size="10.5" fill="#9f1239" font-weight="700">判断标准只有一句：它有没有自己的底层存储？有 → 副本；没有 → 视图。</text>
+    </svg>
+    <figcaption><b>图 9</b>　"能不能改"和"改了会不会互相影响"是两个独立问题，前者看方法抛不抛异常，后者看有没有独立存储</figcaption>
+  </figure>
+
+  <h3>Arrays.asList 的四个坑，一个比一个经典</h3>
+
+  <pre><code>// 坑 1：基本类型数组 → 得到的是"一个元素"的 list
+int[] arr = {1, 2, 3};
+List&lt;int[]&gt; bad = Arrays.asList(arr);      // size = 1，元素是 int[] 本身
+Integer[] boxed = {1, 2, 3};
+List&lt;Integer&gt; ok = Arrays.asList(boxed);   // size = 3
+// 因为 asList 的签名是 asList(T... a)，int[] 被当成一个 T
+
+// 坑 2：固定长度，add/remove 直接炸
+List&lt;String&gt; l = Arrays.asList("a", "b");
+l.set(0, "A");        // ✓ 可以，写回原数组
+l.add("c");           // ✗ UnsupportedOperationException
+
+// 坑 3：它和原数组共用存储
+String[] src = {"a", "b"};
+List&lt;String&gt; view = Arrays.asList(src);
+src[0] = "changed";
+System.out.println(view.get(0));            // "changed"
+
+// 坑 4：想要真 List，套一层
+List&lt;String&gt; real = new ArrayList&lt;&gt;(Arrays.asList("a", "b"));
+real.add("c");                               // ✓</code></pre>
+
+  <h3>不可变集合的真正价值：不是"防改"，是"免锁"</h3>
+  <ul>
+    <li><strong>天然线程安全</strong>：状态不可变就没有可见性问题，跨线程随便传，不需要任何同步。</li>
+    <li><strong>可安全共享与缓存</strong>：返回给调用方不用防御性拷贝（<code class="inl">new ArrayList&lt;&gt;(x)</code> 那一步可以省）。</li>
+    <li><strong>hashCode 可以缓存</strong>：不可变对象的 hash 只算一次，做 Map 的 key 最理想。</li>
+    <li><strong>JDK 做了紧凑优化</strong>：<code class="inl">List.of()</code> 空集合是单例，<code class="inl">List.of(a)</code> 是一个只有 value 字段的对象，比 <code class="inl">ArrayList</code>（对象 + 数组）省一半内存。</li>
+  </ul>
+
+  <div class="warn"><b>API 设计上的铁律</b>：<strong>方法入参可以接受可变集合，方法返回值必须返回不可变集合或副本</strong>。<code class="inl">return Collections.unmodifiableList(this.items)</code> 看似安全，但如果这个 <code class="inl">items</code> 之后被内部修改，调用方手里的"只读视图"内容会变——正确写法是 <code class="inl">return List.copyOf(this.items)</code>，一次性复制断开关系。</div>
+
+  <div class="oneline"><b>一句话答法</b>Arrays.asList 是原数组的固定长度视图（可 set 不可增删，基本类型数组会退化成单元素）；unmodifiableList 是只读代理，底层仍可变所以不安全；List.of 才是 JDK 9 的真不可变，复制存储、禁 null、内存更紧凑。判断视图还是副本，就看它有没有自己的底层数组。</div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b3">L8</span><em>线上真会炸</em></div>
+  <h2>比较器契约：为什么数组小于 32 时不报错，上线三个月后才炸</h2>
+
+  <h3>契约只有三条，违反一条就埋雷</h3>
+  <p><code class="inl">Comparator</code> 的 Javadoc 写得很清楚，实现必须满足三个性质：</p>
+  <ul>
+    <li><strong>自反</strong>：<code class="inl">compare(a, a) == 0</code></li>
+    <li><strong>反对称</strong>：<code class="inl">compare(a, b)</code> 与 <code class="inl">compare(b, a)</code> 符号相反</li>
+    <li><strong>传递</strong>：<code class="inl">a &lt; b</code> 且 <code class="inl">b &lt; c</code>，则必有 <code class="inl">a &lt; c</code></li>
+  </ul>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="比较器传递性被破坏与 TimSort 阈值">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">左：传递性被破坏 → 排序算法陷入"环"　右：为什么小数组检测不出来</text>
+
+      <circle cx="196" cy="106" r="16" fill="#fff1f4" stroke="#f3a6b8"/>
+      <text x="196" y="111" font-size="11" fill="#9f1239" font-weight="700" text-anchor="middle">a</text>
+      <circle cx="126" cy="196" r="16" fill="#fff1f4" stroke="#f3a6b8"/>
+      <text x="126" y="201" font-size="11" fill="#9f1239" font-weight="700" text-anchor="middle">b</text>
+      <circle cx="266" cy="196" r="16" fill="#fff1f4" stroke="#f3a6b8"/>
+      <text x="266" y="201" font-size="11" fill="#9f1239" font-weight="700" text-anchor="middle">c</text>
+
+      <path d="M182,118 C160,140 146,164 138,180" fill="none" stroke="#be123c" stroke-width="1.6"/>
+      <polygon points="138,180 146,175 138,172" fill="#be123c"/>
+      <text x="86" y="140" font-size="10" fill="#9f1239">a &lt; b</text>
+
+      <path d="M142,200 C180,206 220,206 250,200" fill="none" stroke="#be123c" stroke-width="1.6"/>
+      <polygon points="250,200 241,196 241,205" fill="#be123c"/>
+      <text x="186" y="222" font-size="10" fill="#9f1239">b &lt; c</text>
+
+      <path d="M254,182 C244,162 228,132 210,120" fill="none" stroke="#be123c" stroke-width="1.6"/>
+      <polygon points="210,120 219,124 221,117" fill="#be123c"/>
+      <text x="248" y="140" font-size="10" fill="#9f1239">c &lt; a</text>
+
+      <text x="52" y="256" font-size="10.5" fill="#475569">三个都成立，排序就不存在唯一解。</text>
+      <text x="52" y="274" font-size="10.5" fill="#9f1239" font-weight="700">TimSort 检测到 → IllegalArgumentException</text>
+
+      <line x1="340" y1="36" x2="340" y2="284" stroke="#e3e7ef"/>
+
+      <text x="366" y="56" font-size="10.5" fill="#1f2937" font-weight="700">Collections.sort / List.sort 的内部分支</text>
+
+      <rect x="366" y="70" width="240" height="58" rx="6" fill="#f2fbf6" stroke="#86efac"/>
+      <text x="486" y="90" font-size="10.5" fill="#047857" font-weight="700" text-anchor="middle">n &lt; 32</text>
+      <text x="486" y="107" font-size="9.5" fill="#15803d" text-anchor="middle">binarySort（二分插入）</text>
+      <text x="486" y="121" font-size="9.5" fill="#15803d" text-anchor="middle">只做两两比较，不校验契约</text>
+
+      <rect x="366" y="144" width="240" height="58" rx="6" fill="#fff1f4" stroke="#f3a6b8"/>
+      <text x="486" y="164" font-size="10.5" fill="#9f1239" font-weight="700" text-anchor="middle">n ≥ 32</text>
+      <text x="486" y="181" font-size="9.5" fill="#b91c1c" text-anchor="middle">进入归并，检查 run 单调性</text>
+      <text x="486" y="195" font-size="9.5" fill="#b91c1c" text-anchor="middle">发现"环" → 抛异常</text>
+
+      <text x="622" y="90" font-size="9.5" fill="#64748b">单元测试放 5 条数据</text>
+      <text x="622" y="106" font-size="9.5" fill="#64748b">永远测不出来</text>
+      <text x="622" y="164" font-size="9.5" fill="#64748b">生产数据一多</text>
+      <text x="622" y="180" font-size="9.5" fill="#64748b">立刻 500</text>
+
+      <rect x="366" y="220" width="496" height="48" rx="6" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="380" y="239" font-size="10" fill="#b45309" font-weight="700">经典错误写法：return a.age - b.age;</text>
+      <text x="380" y="256" font-size="10" fill="#b45309">当 a.age = -2147483648、b.age = 1 时，相减溢出成正整数 → a 被判定大于 b</text>
+    </svg>
+    <figcaption><b>图 10</b>　"小数据能排对"不等于"契约正确"；32 这个阈值解释了"测试全绿、上线必炸"</figcaption>
+  </figure>
+
+  <pre><code>// ✗ 三种典型错误写法，全部会破坏契约
+Comparator&lt;User&gt; bad1 = (a, b) -&gt; a.getAge() - b.getAge();          // 整数溢出
+Comparator&lt;User&gt; bad2 = (a, b) -&gt; (int)(a.getScore() - b.getScore()); // 浮点截断
+Comparator&lt;User&gt; bad3 = (a, b) -&gt; a.getName().length() - b.getName().length()
+                              == 0 ? 0 : (a.getId() &gt; b.getId() ? 1 : -1); // 传递性断裂
+
+// ✓ 正确写法：用比较函数，不要自己算差
+Comparator&lt;User&gt; ok1 = Comparator.comparingInt(User::getAge);
+Comparator&lt;User&gt; ok2 = Comparator.comparingDouble(User::getScore);
+Comparator&lt;User&gt; ok3 = Comparator.comparingInt((User u) -&gt; u.getName().length())
+                                 .thenComparingLong(User::getId);   // 链式，天然传递
+Comparator&lt;User&gt; ok4 = Comparator.nullsFirst(Comparator.comparing(User::getAge)); // 处理 null</code></pre>
+
+  <h3>比溢出更阴的：compareTo 与 equals 不一致</h3>
+
+  <pre><code>Set&lt;BigDecimal&gt; set = new TreeSet&lt;&gt;();
+set.add(new BigDecimal("1.0"));
+set.add(new BigDecimal("1.00"));
+System.out.println(set.size());     // 1 ！因为 compareTo 认为它们相等
+
+// 换成 HashSet 就是 2，因为 equals 认为 scale 不同就不等
+Set&lt;BigDecimal&gt; hash = new HashSet&lt;&gt;();
+hash.add(new BigDecimal("1.0"));
+hash.add(new BigDecimal("1.00"));
+System.out.println(hash.size());    // 2</code></pre>
+
+  <p>原因是 <code class="inl">TreeSet</code> / <code class="inl">TreeMap</code> 判重走的是 <code class="inl">compareTo() == 0</code>，不是 <code class="inl">equals()</code>。JDK 文档对 <code class="inl">Comparable</code> 的建议是"强烈推荐与 equals 保持一致"，但 BigDecimal 故意不一致（因为 <code class="inl">1.0</code> 和 <code class="inl">1.00</code> 的精度语义不同）。这就是为什么金额字段丢进 <code class="inl">TreeSet</code> 会"莫名其妙少一条"。</p>
+
+  <div class="warn"><b>稳定性顺带一问</b>：<code class="inl">Collections.sort</code> / <code class="inl">List.sort</code> 用的是 TimSort，<strong>稳定</strong>（相等元素保持原序）；<code class="inl">Arrays.parallelSort</code> 用的是并行归并，<strong>稳定但内存翻倍</strong>；<code class="inl">Arrays.sort(int[])</code> 用的是双轴快排，<strong>不稳定</strong>。所以"先按时间排、再按状态排"这种多级排序，必须从后往前逐级排，依赖的就是稳定性。</div>
+
+  <div class="oneline"><b>一句话答法</b>Comparator 必须满足自反、反对称、传递；用 a-b 会整数溢出、浮点截断，必须用 Integer.compare / Comparator.comparingXxx。TimSort 只在 n≥32 时才做归并检查，所以小数据测试全绿、生产数据必炸。TreeSet 用 compareTo 判重，与 equals 不一致的类型（如 BigDecimal）会丢元素。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L9</span><em>算账</em></div>
+  <h2>内存账本：100 万条数据到底占多少</h2>
+  <p>"100 万条数据放内存要多少"是集合类里最能拉开差距的一问，因为它逼你把<strong>对象头、引用宽度、对齐填充、装载因子</strong>四件事同时算清楚。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 296" role="img" aria-label="100 万条数据存进不同 Map 的内存分解">
+      <text x="30" y="22" font-size="12.5" fill="#334155" font-weight="700">100 万个 entry（key/value 本身不计）· 压缩指针开启（引用 4B）</text>
+
+      <text x="30" y="56" font-size="10.5" fill="#475569">HashMap</text>
+      <rect x="120" y="42" width="480" height="26" rx="4" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="360" y="60" font-size="10" fill="#1e3a8a" text-anchor="middle">32MB · Node × 100 万（32B/个）</text>
+      <rect x="600" y="42" width="120" height="26" rx="4" fill="#bfdbfe" stroke="#60a5fa"/>
+      <text x="660" y="60" font-size="10" fill="#1e3a8a" text-anchor="middle">8MB table</text>
+      <text x="732" y="60" font-size="11" fill="#1e3a8a" font-weight="700">≈ 40MB</text>
+
+      <text x="30" y="100" font-size="10.5" fill="#475569">LinkedHashMap</text>
+      <rect x="120" y="86" width="600" height="26" rx="4" fill="#fde2e8" stroke="#f3a6b8"/>
+      <text x="420" y="104" font-size="10" fill="#9f1239" text-anchor="middle">40MB · Entry × 100 万（40B/个，多 before/after）</text>
+      <rect x="720" y="86" width="120" height="26" rx="4" fill="#bfdbfe" stroke="#60a5fa"/>
+      <text x="780" y="104" font-size="10" fill="#1e3a8a" text-anchor="middle">8MB</text>
+      <text x="852" y="104" font-size="11" fill="#9f1239" font-weight="700">48MB</text>
+
+      <text x="30" y="144" font-size="10.5" fill="#475569">TreeMap</text>
+      <rect x="120" y="130" width="600" height="26" rx="4" fill="#ffedd5" stroke="#fdba74"/>
+      <text x="420" y="148" font-size="10" fill="#9a3412" text-anchor="middle">40MB · Entry × 100 万（40B/个，left/right/parent/color）</text>
+      <text x="740" y="148" font-size="11" fill="#9a3412" font-weight="700">40MB（无数组）</text>
+
+      <text x="30" y="188" font-size="10.5" fill="#475569">CHM</text>
+      <rect x="120" y="174" width="480" height="26" rx="4" fill="#dcfce7" stroke="#86efac"/>
+      <text x="360" y="192" font-size="10" fill="#166534" text-anchor="middle">32MB · Node × 100 万</text>
+      <rect x="600" y="174" width="120" height="26" rx="4" fill="#d1fae5" stroke="#6ee7b7"/>
+      <text x="660" y="192" font-size="10" fill="#166534" text-anchor="middle">8MB table</text>
+      <text x="732" y="192" font-size="11" fill="#166534" font-weight="700">≈ 40MB</text>
+
+      <line x1="30" y1="218" x2="870" y2="218" stroke="#e3e7ef"/>
+
+      <text x="30" y="240" font-size="10.5" fill="#334155">单条 entry 的 32B 怎么来的：</text>
+      <text x="200" y="240" font-size="10.5" fill="#475569">12B 对象头 + 4B hash + 4B key 引用 + 4B value 引用 + 4B next 指针 = 28B，</text>
+      <text x="200" y="258" font-size="10.5" fill="#9f1239" font-weight="700">再按 8 字节对齐补齐 → 32B</text>
+
+      <text x="30" y="282" font-size="10.5" fill="#475569">另有：table 长度 = 2²¹ ≈ 209 万槽位（100 万 / 0.75 向上取 2 的幂）× 4B = 8MB。</text>
+    </svg>
+    <figcaption><b>图 11</b>　四种 Map 存 100 万条的纯结构开销都在 40~48MB，真正的内存大头永远是 key/value 对象自己</figcaption>
+  </figure>
+
+  <h3>把账算完整的四步</h3>
+  <ol>
+    <li><strong>单个 entry 多大</strong>：HashMap.Node 32B、LinkedHashMap.Entry 40B、TreeNode 56B、TreeMap.Entry 40B。</li>
+    <li><strong>数组多大</strong>：容量 = 向上取到 2 的幂（1,000,000 / 0.75 = 1,333,333 → 2²¹ = 2,097,152），乘 4B 引用 = 8MB，再加 16B 数组头。</li>
+    <li><strong>key/value 本身多大</strong>：这是最容易被忽略的一项。一个 <code class="inl">Long</code> 是 24B（12B 头 + 8B long + 对齐），一个 10 字符 <code class="inl">String</code> 约 56B（对象 24B + byte[] 32B）。</li>
+    <li><strong>GC 与碎片</strong>：100 万个独立对象意味着 100 万个标记位、100 万次指针追踪。堆上实际占用往往比理论值高 10~20%。</li>
+  </ol>
+
+  <pre><code>// 一个常被忽略的账：List&lt;Integer&gt; 放 100 万个 int
+List&lt;Integer&gt; list = new ArrayList&lt;&gt;();
+for (int i = 0; i &lt; 1_000_000; i++) list.add(i);
+
+// 引用数组：1M × 4B = 4MB（容量按 1.5 倍推到 1,091,000 左右 → 4.4MB）
+// Integer 对象：1M × 16B = 16MB   ← 12B 头 + 4B int，正好 16B
+// 合计 ≈ 20MB
+
+// 换成 int[]
+int[] arr = new int[1_000_000];       // 4MB
+// 差 5 倍。这就是为什么"数值集合"必须考虑原始类型专用容器（或至少别乱装箱）</code></pre>
+
+  <div class="warn"><b>Integer 缓存陷阱</b>：<code class="inl">-128 ~ 127</code> 之间的 Integer 走缓存池，所以 <code class="inl">Integer a = 100, b = 100; a == b</code> 为 true；<code class="inl">1000 == 1000</code> 为 false。这个范围可以用 <code class="inl">-XX:AutoBoxCacheMax</code> 调整上界（下界固定 -128）。用 <code class="inl">==</code> 比较包装类型是集合类代码里最常见的一类 bug。</div>
+
+  <div class="oneline"><b>一句话答法</b>HashMap 存 100 万条，纯结构约 40MB（Node 32MB + table 8MB），LinkedHashMap 48MB，TreeNode 树化后能到 56MB+。算法是：单个 entry 字节数 × 条数 + 2 的幂容量 × 4B。真正的内存大头是 key/value 对象本身和 GC 的对象头成本。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L10</span><em>速查</em></div>
+  <h2>一页速查：十二个数字记住整个集合框架</h2>
+
+  <table>
+    <tr><th>数字</th><th>含义</th><th>答不出来的后果</th></tr>
+    <tr><td>1.5</td><td>ArrayList 扩容因子（old + old&gt;&gt;1）</td><td>说不出为什么不是 2 倍</td></tr>
+    <tr><td>10</td><td>ArrayList 默认容量，且是首次 add 才分配</td><td>以为构造器就分配了</td></tr>
+    <tr><td>2</td><td>ArrayList 累计拷贝量 ≈ 2N</td><td>说"扩容是 O(1)"却讲不出均摊来源</td></tr>
+    <tr><td>0.75</td><td>HashMap 负载因子</td><td>说不清空间与冲突的折中</td></tr>
+    <tr><td>8 / 6 / 64</td><td>树化 / 退化 / 最小树化容量</td><td>把 8 说成"经验值"</td></tr>
+    <tr><td>6e-8</td><td>桶内 8 个节点的泊松概率</td><td>不知道树化是防攻击不是优化</td></tr>
+    <tr><td>32B</td><td>HashMap.Node 大小</td><td>算不出 100 万条占多少内存</td></tr>
+    <tr><td>16 / 32</td><td>CHM7 的 Segment 数 / TimSort 检测阈值</td><td>混淆两个"16"</td></tr>
+    <tr><td>12B</td><td>对象头（压缩指针下）</td><td>所有内存计算从第一步就错</td></tr>
+    <tr><td>4B</td><td>压缩后的引用宽度</td><td>以为引用是 8B，账翻倍</td></tr>
+    <tr><td>7 种</td><td>BlockingQueue 实现</td><td>只会说 Array 和 Linked 两种</td></tr>
+    <tr><td>3 层</td><td>Arrays.asList / unmodifiable / List.of</td><td>分不清视图和副本</td></tr>
+  </table>
+
+  <h3>十四问速答</h3>
+
+  <div class="qa"><div class="qq">ArrayList 扩容为什么是 1.5 倍，不是 2 倍？</div>
+  <p>几何增长因子 g 下累计拷贝量约 N/(g−1)，1.5 倍是 2N、2 倍是 N，所以 2 倍在拷贝上更省；但空间浪费上限分别是 1/3 和 1/2。ArrayList 选了省内存。另外 1.5 可以用 <code>old + (old &gt;&gt; 1)</code> 写成位移，比乘法便宜——虽然这不是主因。</p></div>
+
+  <div class="qa"><div class="qq">ArrayList 和 LinkedList 到底怎么选？</div>
+  <p>95% 场景用 ArrayList。LinkedList 的"增删快"只在<strong>已持有节点位置</strong>时成立，否则定位 O(n) 且每步缓存未命中，实测比 ArrayList 的 memmove 慢。栈和队列用 ArrayDeque。LinkedList 每个节点 24B，还有 GC 压力。</p></div>
+
+  <div class="qa"><div class="qq">HashMap 为什么容量必须是 2 的幂？</div>
+  <p>为了让 <code>(n-1) &amp; hash</code> 等价于 <code>hash % n</code>。只有 n 是 2 的幂时，n-1 的二进制才全是 1，位与才能均匀映射到 [0, n-1]。若 n 不是 2 的幂，某些桶永远取不到，冲突率飙升。构造器传 10 也会被 <code>tableSizeFor</code> 拉到 16。</p></div>
+
+  <div class="qa"><div class="qq">树化阈值 8 和退化阈值 6 为什么不一样？</div>
+  <p>8 来自泊松分布（λ=0.5），概率 6e-8，正常永不触发，树化是防 hash 攻击的兜底。6 是退化阈值，中间留 7 做迟滞带，避免在 7/8 之间反复建树拆树。</p></div>
+
+  <div class="qa"><div class="qq">HashMap 线程不安全，具体会坏成什么样？</div>
+  <p>JDK 7 头插法 + 并发扩容会形成<strong>环形链表</strong>，之后 get 死循环，CPU 100%。JDK 8 改成尾插，死循环没了，但仍然会丢数据（两个线程同时 put 到同一个空桶，后写的覆盖先写的）、size 不准、扩容时读到中间态。所以"JDK 8 的 HashMap 线程安全了"是错的。</p></div>
+
+  <div class="qa"><div class="qq">ConcurrentHashMap 的 get 为什么完全不加锁？</div>
+  <p>靠三个 volatile：table 数组引用、桶头节点（tabAt 用 Unsafe 的 volatile 读）、Node.val。写线程即使正在改，读线程最多读到旧值，绝不会读到"半个对象"（引用赋值本身原子）。这是典型的"用可见性换互斥"。</p></div>
+
+  <div class="qa"><div class="qq">CHM 的 size() 为什么是近似值？</div>
+  <p>计数拆成了 <code>baseCount</code> + <code>CounterCell[]</code>（LongAdder 思路），线程各写各的单元格避免 CAS 冲突。求和时各格子还在变，所以是近似快照。要精确值只能用 <code>mappingCount()</code>（返回 long）且依然不保证并发准确。</p></div>
+
+  <div class="qa"><div class="qq">CHM 为什么不允许 null？</div>
+  <p>并发下 get 返回 null 无法区分"不存在"和"值为 null"，而 containsKey 二次确认在两次调用之间可能已被别的线程改变，逻辑上无法给出确定答案。禁掉 null 让"null 即不存在"永远成立。顺带也堵住了 <code>if (v == null) put(k, v)</code> 这种非原子写法。</p></div>
+
+  <div class="qa"><div class="qq">为什么没有 ConcurrentTreeMap？</div>
+  <p>红黑树插入要旋转，一次旋转跨父、子、叔、祖父多个节点，无法用单条 CAS 完成；加锁又得锁住整条路径，粒度退化成准全表锁。跳表每层只改相邻两个指针，可以逐层 CAS，所以并发有序结构选了跳表。</p></div>
+
+  <div class="qa"><div class="qq">CopyOnWriteArrayList 什么时候能用？</div>
+  <p>读极多、写极少、元素少（几十到几百）：监听器列表、白名单、路由表、配置快照。写一次要复制整个数组，1 万元素就是 40KB；写频繁会退化成 O(n²)。而且迭代器拿到的是快照，读不到最新写入——这是设计取舍不是 bug。</p></div>
+
+  <div class="qa"><div class="qq">fail-fast 和 fail-safe 的区别？</div>
+  <p>fail-fast（ArrayList/HashMap）用 modCount 比对，检测到并发修改立刻抛 CME，<strong>只是尽力检测</strong>：单线程也会抛，多线程反而可能漏检。fail-safe（COW/CHM）在副本或弱一致视图上遍历，不抛异常但可能读到旧数据。前者是报警器，后者是隔离。</p></div>
+
+  <div class="qa"><div class="qq">LinkedHashMap 怎么实现 LRU？</div>
+  <p>构造时 <code>accessOrder=true</code>，<code>get</code> 命中会触发 <code>afterNodeAccess</code> 把节点移到链尾；重写 <code>removeEldestEntry</code> 在 <code>size() &gt; capacity</code> 时返回 true，<code>afterNodeInsertion</code> 就会删掉链头。三行代码，本质是 HashMap 留的三个空钩子。</p></div>
+
+  <div class="qa"><div class="qq">Arrays.asList 和 List.of 有什么区别？</div>
+  <p>Arrays.asList 是原数组的<strong>固定长度视图</strong>：可 set（写回原数组）、不可增删、基本类型数组会退化成单元素。List.of 是 JDK 9 的<strong>真不可变</strong>：复制存储、禁 null、内存更紧凑、可安全跨线程共享。</p></div>
+
+  <div class="qa"><div class="qq">100 万个 Integer 放进 List 要多少内存？</div>
+  <p>约 20MB：引用数组 4.4MB（1.5 倍扩容后）+ 100 万个 Integer 对象 16MB。换成 <code>int[]</code> 只要 4MB，差 5 倍。要点是记得算对象头（12B）和对齐填充，以及装箱对象是独立分配的。</p></div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L11</span><em>模拟面试</em></div>
+  <h2>三道模拟题：从"能答"到"能算"</h2>
+
+  <div class="q">
+    <h4><span>Q1</span>设计一个本地缓存，要求：容量 1 万、支持 TTL 过期、能抗住每秒 10 万次读。说说你的方案和取舍。</h4>
+    <div class="lab">考察点</div>
+    <p>LRU 实现 / 过期清理策略 / 并发读性能 / 缓存污染</p>
+    <div class="lab">及格线</div>
+    <p>能说出用 <code>LinkedHashMap(accessOrder=true)</code> 重写 <code>removeEldestEntry</code> 实现 LRU，另外记一个 <code>Map&lt;K, Long&gt; expireAt</code> 做 TTL，用 <code>synchronized</code> 或 <code>ConcurrentHashMap</code> 保线程安全。</p>
+    <div class="lab g">良好</div>
+    <p>指出三点问题：① LinkedHashMap 不是线程安全的，加锁后读也串行，10 万 QPS 撑不住；② 惰性过期（get 时判断）会导致冷 key 永久占位，需要配一个定时清扫线程；③ TTL 和 LRU 是两个淘汰维度，<code>removeEldestEntry</code> 只能处理容量，处理不了过期。<br>
+    给出改进：读路径用 <code>ConcurrentHashMap</code>（无锁读），淘汰用分段 + 时间轮，或者直接上 Caffeine。</p>
+    <div class="lab">优秀</div>
+    <p>进一步说明：<strong>纯 LRU 会被扫描污染</strong>——一次全表导出会把 1 万个热 key 全挤出去，之后缓存全 miss 打穿 DB。所以要用 W-TinyLFU（窗口 LRU + Count-Min Sketch 准入），新 key 必须先证明自己有访问频率才能进主区。Caffeine 的实现是 1% 窗口区 + 99% SLRU，命中率比纯 LRU 高 5~15 个点。<br>
+    再补一句容量账：1 万条 × 每条约 100B（含 key/value 和 Node 开销）= 1MB，对内存毫无压力，瓶颈全在锁和 GC，所以"无锁读"比"省内存"重要得多。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>Q2</span>线上有个服务每隔几天 CPU 打满、线程 dump 显示大量 RUNNABLE 卡在 HashMap.get，你怎么排查和定位？</h4>
+    <div class="lab">考察点</div>
+    <p>HashMap 并发退化 / 死循环 / 哈希碰撞攻击 / 取证手段</p>
+    <div class="lab">及格线</div>
+    <p>判断是 HashMap 在多线程下被并发修改，建议换成 ConcurrentHashMap。</p>
+    <div class="lab g">良好</div>
+    <p>区分 JDK 版本：JDK 7 头插法 + 并发扩容会形成环形链表，get 沿环无限循环，表现为<strong>单线程 CPU 100% 且栈顶永远是 HashMap.getEntry</strong>；JDK 8 改尾插后死循环消失，但仍有数据丢失、size 不准。<br>
+    取证：<code>jstack</code> 连打三次，如果同一个线程栈顶三次都在 <code>HashMap.get</code> 的同一个行号，基本可以确认死循环；配合 <code>top -Hp</code> 找到最热的线程 ID 转十六进制再对 jstack 里的 nid。</p>
+    <div class="lab">优秀</div>
+    <p>再补两层：① 如果线程栈显示大量线程在同一个桶上自旋，要考虑<strong>哈希碰撞攻击</strong>——攻击者构造大量同 hash 的 key（比如作为请求参数名），把 O(1) 打成 O(n)，几百 KB 请求就能烧掉一个核。这是 HashDoS，也是 JDK 8 引入红黑树的直接动机（桶内 ≥8 且容量 ≥64 就树化，把最坏情况从 O(n) 拉回 O(log n)）。<br>
+    ② 定位手段升级：<code>arthas</code> 的 <code>profiler</code> 火焰图能看到热点集中在 <code>HashMap.getNode</code>；<code>jmap -histo:live</code> 看是否有个 HashMap 的 size 异常大；用 <code>-Djdk.map.althashing.threshold</code> 或自定义 key 类型加随机化 hash。<br>
+    ③ 根治：共享可变状态一律换成 CHM；能用不可变集合（<code>List.of</code>）就绝不放共享可变集合。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>Q3</span>有个接口 P99 从 80ms 涨到 3s，监控显示线程池队列持续增长但 CPU 只有 30%。说说你的排查路径。</h4>
+    <div class="lab">考察点</div>
+    <p>Little's Law / 队列选型 / 线程数与 IO 等待比 / 拒绝策略</p>
+    <div class="lab">及格线</div>
+    <p>队列堆积说明消费速度跟不上生产速度，先看下游依赖是不是变慢，再看线程池参数是否合理。</p>
+    <div class="lab g">良好</div>
+    <p>用 Little's Law 定量：<code>L = λ × W</code>。若 QPS 100、队列积压 300，则排队时间 ≈ 300/100 = 3s——正好对上 P99 的劣化幅度，说明<strong>耗时全花在排队，不在计算</strong>。CPU 只有 30% 也印证了这点：线程都在等 IO，不是在算。<br>
+    然后看线程池：<code>maximumPoolSize</code> 是否因为用了无界 <code>LinkedBlockingQueue</code> 而永远不生效；线程数是否按 IO 密集公式算过（核数 × (1 + 等待/计算)）。</p>
+    <div class="lab">优秀</div>
+    <p>把因果链讲完整：① 下游某接口 RT 从 50ms 涨到 200ms → 单线程吞吐从 20/s 降到 5/s → 8 个线程只能吃 40 QPS，而流量是 100 → 队列每秒净增 60 个 → 队列无限增长（无界）→ 排队时间线性上涨 → P99 崩。<br>
+    ② 关键判断：<strong>这是容量问题还是故障问题</strong>？如果下游 RT 会自己恢复，那队列是"缓冲"；如果下游已经病态，队列只是在延迟暴露故障，还额外增加了内存和超时风险。所以别急着加线程，先确认下游。<br>
+    ③ 整改：队列改有界（<code>ArrayBlockingQueue(1000)</code>）+ <code>CallerRunsPolicy</code> 做背压——提交者被拖慢，上游自然降速，系统整体变慢但不崩。同时加队列深度监控（<code>getQueue().size()</code> 打点到 Prometheus），把"事后发现"变成"事前告警"。<br>
+    ④ 最后一句加分：线程不是越多越好，80 个线程就是 80MB 栈内存，容器里 <code>-Xmx</code> 一共才 2G，这一步很容易把自己 OOM 掉。</p>
+  </div>
+</section>
+
+<footer>
+  Java 面试深水区 · 第 14 期 · 集合框架深水区与并发容器<br>
+  下期预告：<strong>Spring Boot 自动配置与启动流程</strong>——<code>@SpringBootApplication</code> 三个注解的真实分工、<code>spring.factories</code> 到 <code>AutoConfiguration.imports</code> 的迁移、条件装配的 12 个 <code>@Conditional</code>、启动耗时 60% 花在哪、以及"为什么加了 starter 就自动生效"这条链路怎么答才不像背书。
+</footer>
+
+</div>
+<script>
+(function () {
+  var kw = 'public|private|protected|static|final|class|interface|extends|implements|new|return|if|else|for|while|try|catch|finally|throw|throws|void|int|long|short|byte|char|float|double|boolean|null|true|false|this|super|import|package|abstract|synchronized|volatile|transient|instanceof|default|break|continue|switch|case|enum|assert|do';
+  var re = new RegExp('(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)|("[^"]*")|\\b(' + kw + ')\\b|\\b(\\d[\\d_]*[LlFfDd]?)\\b', 'g');
+  document.querySelectorAll('pre code').forEach(function (block) {
+    var raw = block.textContent
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    block.innerHTML = raw.replace(re, function (m, c, s, k, n) {
+      if (c) return '<span class="c">' + c + '</span>';
+      if (s) return '<span class="s">' + s + '</span>';
+      if (k) return '<span class="k">' + k + '</span>';
+      if (n) return '<span class="n">' + n + '</span>';
+      return m;
+    });
+  });
+})();
+</script>
+</body>
+</html>

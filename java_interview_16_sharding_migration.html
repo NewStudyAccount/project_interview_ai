@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 16 · 分库分表与不停机数据迁移</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:28px; line-height:1.34; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:790px}
+  .sub b{color:#be123c}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.7px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21; line-height:1.6}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #bcdcf2}
+  .check li b{color:#075985}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Java 面试深水区 · 第 16 期</div>
+  <h1>分库分表<span class="arrow">→</span>从 2053 万行到六阶段不停机迁移</h1>
+  <p class="sub">简历上写"负责过分库分表"的人，被追问三层基本都会露馅。第一层"为什么分"答"单表超过 2000 万行"；第二层"分片键怎么选"答"用 user_id"；第三层"那用户按订单号查订单怎么办"——沉默，然后说"我们加了 ES"。<b>2000 万这个数字是从一个公式里算出来的</b>，换个行宽就变成 547 万或者 2.23 亿。本期把公式、四类炸点、四代路由算法、六阶段迁移时序全部摊开，目标是让你在第三层追问时还能站着。</p>
+  <div class="meta">
+    <div><strong>12</strong>层递进</div>
+    <div><strong>13</strong>张原理图</div>
+    <div><strong>19</strong>段代码</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span class="on">L0 2000 万怎么算</span>
+  <span>L1 分片键四炸点</span>
+  <span>L2 路由四代</span>
+  <span>L3 SQL 四变形</span>
+  <span>L4 六阶段迁移</span>
+  <span>L5 ID 与索引</span>
+  <span>L6 扩容再平衡</span>
+  <span>L7 事务边界</span>
+  <span>L8 选型四成本</span>
+  <span>L9–L11 速查·问答·模拟</span>
+</div>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>概念纠偏</em></div>
+  <h2>先把账算清：2000 万是算出来的，不是背出来的</h2>
+  <p>InnoDB 一页 16KB。B+ 树的<strong>非叶子节点只存「键 + 页指针」</strong>：bigint 主键 8 字节，页指针 6 字节，一个索引项 14 字节。一页能放 <code class="inl">16384 / 14 ≈ 1170</code> 个指针。叶子节点存完整行，假设一行 1KB，一页装 16 行，扣掉页头页尾实际可用约 15 行。</p>
+  <p>于是三层的总容量就是 <code class="inl">1170 × 1170 × 15 = 20,533,500</code>。这就是 2000 万的出处——它是一个<strong>几何公式的输出结果</strong>，不是一个经验值。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 386" role="img" aria-label="三层 B+ 树容量推导">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">三层 B+ 树：1170 扇出 → 1368900 叶子页 → 2053 万行</text>
+
+      <rect x="190" y="38" width="160" height="36" rx="7" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="270" y="61" font-size="11.5" fill="#075985" font-weight="700" text-anchor="middle">根页 · 1 个</text>
+
+      <line x1="270" y1="74" x2="270" y2="90" stroke="#94a3b8" stroke-width="1.2"/>
+      <line x1="110" y1="90" x2="430" y2="90" stroke="#94a3b8" stroke-width="1.2"/>
+      <line x1="110" y1="90" x2="110" y2="102" stroke="#94a3b8" stroke-width="1.2"/>
+      <line x1="270" y1="90" x2="270" y2="102" stroke="#94a3b8" stroke-width="1.2"/>
+      <line x1="430" y1="90" x2="430" y2="102" stroke="#94a3b8" stroke-width="1.2"/>
+
+      <rect x="50" y="102" width="120" height="34" rx="6" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="110" y="123" font-size="11" fill="#6d28d9" text-anchor="middle">第 2 层页</text>
+      <rect x="210" y="102" width="120" height="34" rx="6" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="270" y="123" font-size="11" fill="#6d28d9" text-anchor="middle">第 2 层页</text>
+      <rect x="370" y="102" width="120" height="34" rx="6" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="430" y="123" font-size="11" fill="#6d28d9" text-anchor="middle">第 2 层页</text>
+      <text x="504" y="114" font-size="10.5" fill="#64748b">← 共 1170 个</text>
+      <text x="504" y="130" font-size="10.5" fill="#64748b">　 每页指 1170 个叶子页</text>
+
+      <line x1="110" y1="136" x2="110" y2="152" stroke="#c4b5fd" stroke-width="1.2"/>
+      <line x1="50" y1="152" x2="170" y2="152" stroke="#c4b5fd" stroke-width="1.2"/>
+      <line x1="50" y1="152" x2="50" y2="166" stroke="#c4b5fd" stroke-width="1.2"/>
+      <line x1="110" y1="152" x2="110" y2="166" stroke="#c4b5fd" stroke-width="1.2"/>
+      <line x1="170" y1="152" x2="170" y2="166" stroke="#c4b5fd" stroke-width="1.2"/>
+
+      <rect x="34" y="166" width="32" height="40" rx="4" fill="#f2fbf6" stroke="#7dd3a0"/>
+      <text x="50" y="191" font-size="10" fill="#047857" text-anchor="middle">15</text>
+      <rect x="94" y="166" width="32" height="40" rx="4" fill="#f2fbf6" stroke="#7dd3a0"/>
+      <text x="110" y="191" font-size="10" fill="#047857" text-anchor="middle">15</text>
+      <rect x="154" y="166" width="32" height="40" rx="4" fill="#f2fbf6" stroke="#7dd3a0"/>
+      <text x="170" y="191" font-size="10" fill="#047857" text-anchor="middle">15</text>
+      <text x="196" y="182" font-size="10.5" fill="#64748b">← 叶子页存整行</text>
+      <text x="196" y="198" font-size="10.5" fill="#64748b">　 1KB 行 = 15 行/页</text>
+
+      <rect x="30" y="224" width="470" height="138" rx="10" fill="#ffffff" stroke="#e3e7ef"/>
+      <text x="46" y="244" font-size="11.5" fill="#334155" font-weight="700">每多一层，每次等值查询多一次随机 IO</text>
+      <text x="46" y="268" font-size="11" fill="#475569">三层：2 次磁盘读 + 1 次内存（根页常驻）</text>
+      <text x="46" y="290" font-size="11" fill="#475569">四层：3 次磁盘读 —— 每查询固定多 0.1ms</text>
+      <text x="46" y="312" font-size="11" fill="#be123c">QPS 5000 时 = 每秒多 500 次 IO，顶到 IOPS 上限</text>
+      <text x="46" y="340" font-size="11" fill="#64748b">这就是为什么必须卡在三层 —— 不是习惯，是 IO 预算</text>
+
+      <rect x="516" y="38" width="354" height="324" rx="10" fill="#fbfcfe" stroke="#c4b5fd"/>
+      <text x="532" y="60" font-size="11.5" fill="#6d28d9" font-weight="700">容量公式（背这个，不要背 2000 万）</text>
+
+      <text x="532" y="88" font-size="11" fill="#475569">① 索引项 = 8B 主键 + 6B 页指针 = 14B</text>
+      <text x="532" y="110" font-size="11" fill="#475569">② 一页扇出 = 16384 / 14 ≈ 1170</text>
+      <text x="532" y="132" font-size="11" fill="#475569">③ 叶子页 = 1170 × 1170 = 1368900</text>
+      <text x="532" y="154" font-size="11" fill="#475569">④ 总行数 = 1368900 × 每页行数</text>
+
+      <line x1="532" y1="170" x2="854" y2="170" stroke="#e3e7ef"/>
+
+      <text x="532" y="194" font-size="11.5" fill="#047857" font-weight="700">1KB 行 → 2053 万行 ← 2000 万的出处</text>
+      <text x="532" y="218" font-size="11" fill="#64748b">第四层要 1170³ ≈ 240 亿行</text>
+      <text x="532" y="238" font-size="11" fill="#64748b">此时索引文件已 TB 级，物理上不可能</text>
+
+      <line x1="532" y1="256" x2="854" y2="256" stroke="#e3e7ef"/>
+      <text x="532" y="280" font-size="11" fill="#be123c" font-weight="700">所以 2000 万不是定律</text>
+      <text x="532" y="302" font-size="11" fill="#475569">100B 行 → 2.23 亿（保守 10 倍）</text>
+      <text x="532" y="322" font-size="11" fill="#475569">4KB 行 → 547 万（乐观 4 倍）</text>
+      <text x="532" y="348" font-size="10.5" fill="#64748b">阈值必须用行宽反算，见下图</text>
+    </svg>
+    <figcaption><b>图 1</b>　三层 B+ 树的容量推导。<code class="inl">1170 × 1170 × 15</code> 是全部秘密；想清楚"为什么不能四层"，比记住 2000 万有用得多。</figcaption>
+  </figure>
+
+  <h3>反过来算：2000 万为什么不是定律</h3>
+  <p>同一个公式，换行宽结果差 40 倍。把四条典型行宽画在同一条对数轴上，你会发现<strong>「2000 万」这条线只对 1KB 的行成立</strong>：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 360" role="img" aria-label="不同行宽下的三层 B+ 树容量对比（对数轴）">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">同样的三层树，容量差 40 倍 —— 2000 万只对应 1KB 行（对数轴）</text>
+
+      <text x="24" y="76" font-size="11" fill="#475569">100 B　埋点/日志</text>
+      <rect x="150" y="62" width="310" height="20" rx="4" fill="#dcfce7" stroke="#7dd3a0"/>
+      <text x="468" y="77" font-size="11.5" fill="#047857" font-weight="700">2.23 亿</text>
+
+      <text x="24" y="116" font-size="11" fill="#475569">500 B　用户/商品</text>
+      <rect x="150" y="102" width="202" height="20" rx="4" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="360" y="117" font-size="11.5" fill="#0369a1" font-weight="700">4380 万</text>
+
+      <text x="24" y="156" font-size="11" fill="#475569">1 KB　订单主表</text>
+      <rect x="150" y="142" width="151" height="20" rx="4" fill="#ede9fe" stroke="#c4b5fd"/>
+      <text x="309" y="157" font-size="11.5" fill="#6d28d9" font-weight="700">2053 万</text>
+
+      <text x="24" y="196" font-size="11" fill="#475569">4 KB　订单详情</text>
+      <rect x="150" y="182" width="63" height="20" rx="4" fill="#fee2e2" stroke="#fca5a5"/>
+      <text x="221" y="197" font-size="11.5" fill="#be123c" font-weight="700">547 万</text>
+
+      <line x1="301" y1="52" x2="301" y2="252" stroke="#be123c" stroke-width="1.4" stroke-dasharray="5 4"/>
+      <text x="301" y="46" font-size="10.5" fill="#be123c" font-weight="700" text-anchor="middle">2000 万</text>
+
+      <line x1="150" y1="222" x2="700" y2="222" stroke="#94a3b8"/>
+      <line x1="150" y1="222" x2="150" y2="228" stroke="#94a3b8"/>
+      <text x="150" y="242" font-size="10" fill="#64748b" text-anchor="middle">100 万</text>
+      <line x1="301" y1="222" x2="301" y2="228" stroke="#94a3b8"/>
+      <text x="301" y="242" font-size="10" fill="#64748b" text-anchor="middle">1000 万</text>
+      <line x1="453" y1="222" x2="453" y2="228" stroke="#94a3b8"/>
+      <text x="453" y="242" font-size="10" fill="#64748b" text-anchor="middle">1 亿</text>
+      <line x1="605" y1="222" x2="605" y2="228" stroke="#94a3b8"/>
+      <text x="605" y="242" font-size="10" fill="#64748b" text-anchor="middle">10 亿</text>
+
+      <text x="30" y="272" font-size="11" fill="#be123c" font-weight="700">结论：拿 2000 万当阈值，小表白拆 10 个库，大表晚动手 4 倍</text>
+
+      <rect x="30" y="286" width="836" height="56" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="46" y="306" font-size="11" fill="#334155" font-weight="700">真正该盯的四个指标（行数只是其中一个，且不是最重要的那个）</text>
+      <text x="46" y="328" font-size="10.8" fill="#475569">单表 1000 万行 / 5000 万行　·　数据+索引 30GB / 100GB　·　单库写入 3000 / 5000 QPS　·　大表 DDL 10 分钟 / 1 小时</text>
+    </svg>
+    <figcaption><b>图 2</b>　把四条行宽放在对数轴上，2000 万这条虚线恰好只切中 1KB 那一档。这就是"经验值"的真面目——一个特定组合的巧合。</figcaption>
+  </figure>
+
+  <h3>两个容易被漏掉的触发点</h3>
+  <p>行数只是表象。真实项目里，先让人受不了的往往是这两件事：</p>
+
+  <div class="warn">
+    <b>① DDL 次数上限。</b>MySQL 8.0 的 instant add column 只支持"加到最后一列"，而且<strong>一张表最多 64 次 instant 操作</strong>，超了就要重建表。业务表加字段加着加着就撞上这个天花板——这才是很多团队被迫分表的真实触发点，而不是行数。
+  </div>
+
+  <div class="warn">
+    <b>② 从库延迟。</b>单表越大，从库回放越慢。1.6 亿行的表做一次全表 UPDATE，从库延迟轻松干到 30 分钟以上，读流量全打到主库。分表之后单表变小，延迟自然摊薄——这个收益经常被忽略，但它比"查询变快"更救命。
+  </div>
+
+  <h3>一次真实的分表决策</h3>
+  <p>订单表，日增 100 万行，保留 3 年：<code class="inl">100 万 × 365 × 3 = 10.95 亿行</code>。不分表的话，第 3 年这张表约 400 GB，任何 DDL 都是小时级，从库延迟常态 5 分钟以上。分 16 片（4 库 × 4 表）后单片 6850 万行、25 GB，回到"三层树 + DDL 十分钟"的安全区。</p>
+
+  <div class="oneline">
+    <b>工期比容量更紧</b>
+    容量规划要提前 6 个月做。因为迁移本身（存量 + 双写 + 校验 + 灰度）在 1.6 亿行量级上要 2~3 个月，而容量告警到真正打满只有 4~5 个月。等报警了再启动，一定来不及。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>最贵的决策</em></div>
+  <h2>分片键选错：四类炸点，一个比一个贵</h2>
+  <p>分片键是整套方案里<strong>唯一真正重要</strong>的决策。选错了，后面所有优化都是在给这个错误打补丁。先看一个具体的错误案例：订单表用 <code class="inl">user_id</code> 分 16 片，而表上实际有五种查询。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 392" role="img" aria-label="五种查询在 16 个分片上的命中分布">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">同一张订单表，五种查询，只有一个能落在单片</text>
+
+      <text x="196" y="44" font-size="9" fill="#94a3b8" text-anchor="end">分片号 →</text>
+      <g font-size="9" fill="#94a3b8" text-anchor="middle">
+        <text x="224" y="44">0</text><text x="256" y="44">1</text><text x="288" y="44">2</text>
+        <text x="320" y="44">3</text><text x="352" y="44">4</text><text x="384" y="44">5</text>
+        <text x="416" y="44">6</text><text x="448" y="44">7</text><text x="480" y="44">8</text>
+        <text x="512" y="44">9</text><text x="544" y="44">10</text><text x="576" y="44">11</text>
+        <text x="608" y="44">12</text><text x="640" y="44">13</text><text x="672" y="44">14</text>
+        <text x="704" y="44">15</text>
+      </g>
+
+      <text x="196" y="72" font-size="10.5" fill="#171a21" text-anchor="end" font-weight="700">① 我的订单 user_id</text>
+      <rect x="210" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="242" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="274" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="306" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="338" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="370" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="402" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="434" y="58" width="28" height="24" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8"/>
+      <rect x="466" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="498" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="530" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="562" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="594" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="626" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="658" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <rect x="690" y="58" width="28" height="24" rx="3" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="736" y="75" font-size="11.5" fill="#047857" font-weight="700">1 次</text>
+      <text x="782" y="75" font-size="10" fill="#64748b">最优</text>
+
+      <text x="196" y="122" font-size="10.5" fill="#171a21" text-anchor="end">② 订单详情 order_id</text>
+      <rect x="210" y="108" width="508" height="24" rx="3" fill="#fee2e2" stroke="#f87171"/>
+      <text x="736" y="125" font-size="11.5" fill="#be123c" font-weight="700">16 次</text>
+      <text x="782" y="125" font-size="10" fill="#64748b">全广播</text>
+
+      <text x="196" y="172" font-size="10.5" fill="#171a21" text-anchor="end">③ 商家后台 merchant_id</text>
+      <rect x="210" y="158" width="508" height="24" rx="3" fill="#fee2e2" stroke="#f87171"/>
+      <text x="736" y="175" font-size="11.5" fill="#be123c" font-weight="700">16 次</text>
+      <text x="782" y="175" font-size="10" fill="#64748b">全广播</text>
+
+      <text x="196" y="222" font-size="10.5" fill="#171a21" text-anchor="end">④ 运营 GMV 无键</text>
+      <rect x="210" y="208" width="508" height="24" rx="3" fill="#fee2e2" stroke="#f87171"/>
+      <text x="736" y="225" font-size="11.5" fill="#be123c" font-weight="700">16 次</text>
+      <text x="782" y="225" font-size="10" fill="#64748b">全广播</text>
+
+      <text x="196" y="272" font-size="10.5" fill="#171a21" text-anchor="end">⑤ 客服 手机号</text>
+      <rect x="210" y="258" width="508" height="24" rx="3" fill="#fee2e2" stroke="#f87171"/>
+      <text x="736" y="275" font-size="11.5" fill="#be123c" font-weight="700">16 次</text>
+      <text x="782" y="275" font-size="10" fill="#64748b">全广播</text>
+
+      <rect x="30" y="302" width="836" height="76" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="46" y="322" font-size="11" fill="#334155" font-weight="700">放大倍数 = 分片数。QPS 2000 的接口 → 数据库侧承受 32000（16 片）</text>
+      <text x="46" y="344" font-size="10.8" fill="#be123c">更致命的是连接池：一次广播查询同时占 16 个连接，池 200 时并发度掉到 12 —— 表现为"QPS 上不去、池满、CPU 空"</text>
+      <text x="46" y="366" font-size="10.8" fill="#64748b">压测时极易误判成慢 SQL，实际是连接被路由打散</text>
+    </svg>
+    <figcaption><b>图 3</b>　只有 ① 命中单片，②③④⑤ 全部广播。这就是"分片键要覆盖 80% 查询"这条标准的分量——它是唯一错一次就要重做整套方案的标准。</figcaption>
+  </figure>
+
+  <h3>炸点一：非分片键查询 → 全路由放大 16 倍</h3>
+  <p>16 个分片意味着一次查询变 16 次网络往返 + 16 次索引查找，应用侧还要归并。原本 QPS 2000 的接口，数据库侧承受 32000。</p>
+  <p>更麻烦的是<strong>连接池</strong>。16 个分片并行查，一个请求要同时占 16 个连接，连接池 200 的话并发度直接掉到 12。压测时表现为"QPS 上不去、连接池满、但 CPU 很空"，非常容易误判成慢 SQL。</p>
+
+  <h3>炸点二：跨分片 JOIN</h3>
+  <p>订单表按 <code class="inl">user_id</code> 分片，订单明细表也按 <code class="inl">user_id</code> 分片——这是<strong>绑定表</strong>（binding table），同一条订单的明细一定落在同一个分片，JOIN 在片内完成，没问题。</p>
+  <p>但如果明细表按 <code class="inl">order_id</code> 分片，或者商品表按 <code class="inl">category_id</code> 分片，那 <code class="inl">订单 JOIN 商品</code> 就成了跨分片 JOIN。中间件的处理方式是<strong>笛卡尔积 + 内存归并</strong>：16 片 × 16 片 = 256 个查询组合。5 万行的结果集能在内存里滚成 500 万行，然后 OOM。</p>
+
+  <h3>炸点三：跨分片聚合与深分页</h3>
+  <p><code class="inl">SUM / COUNT</code> 还好，下推到各分片再归并就行（<code class="inl">AVG</code> 不行，见 L3）。真正致命的是<strong>深分页</strong>：<code class="inl">LIMIT 1000000, 20</code> 在 16 个分片上要扫 1600 万行、内存排 1600 万行。一次翻页能把这个实例的 buffer pool 全挤空，其他接口跟着变慢——这是分库分表最经典的线上事故。</p>
+
+  <h3>炸点四：跨库写入与分布式事务</h3>
+  <p>"下单扣库存"如果订单在 0 库、库存在 1 库，就不再是本地事务。要么上 2PC（性能崩、同步阻塞），要么上 TCC / 本地消息表（复杂度涨）。原本 <code class="inl">BEGIN…COMMIT</code> 一行就能保证的一致性，现在要写 200 行补偿逻辑。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="四类炸点的成本数字">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">四类炸点，四个能算出来的数字</text>
+
+      <rect x="30" y="36" width="200" height="104" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="46" y="58" font-size="10.5" fill="#be123c" font-weight="700">炸点一 非分片键查询</text>
+      <text x="46" y="94" font-size="26" fill="#be123c" font-weight="800">16×</text>
+      <text x="46" y="116" font-size="10" fill="#64748b">1 次查询 → 16 次下发</text>
+      <text x="46" y="132" font-size="10" fill="#64748b">并发度 200 → 12</text>
+
+      <rect x="250" y="36" width="200" height="104" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="266" y="58" font-size="10.5" fill="#be123c" font-weight="700">炸点二 跨分片 JOIN</text>
+      <text x="266" y="94" font-size="26" fill="#be123c" font-weight="800">256</text>
+      <text x="266" y="116" font-size="10" fill="#64748b">16 片 × 16 片组合</text>
+      <text x="266" y="132" font-size="10" fill="#64748b">5 万行滚成 500 万行</text>
+
+      <rect x="470" y="36" width="200" height="104" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="486" y="58" font-size="10.5" fill="#be123c" font-weight="700">炸点三 深分页</text>
+      <text x="486" y="94" font-size="26" fill="#be123c" font-weight="800">1600 万</text>
+      <text x="486" y="116" font-size="10" fill="#64748b">offset 100 万时的扫描行</text>
+      <text x="486" y="132" font-size="10" fill="#64748b">只用 20 行</text>
+
+      <rect x="690" y="36" width="180" height="104" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="706" y="58" font-size="10.5" fill="#be123c" font-weight="700">炸点四 跨库事务</text>
+      <text x="706" y="94" font-size="26" fill="#be123c" font-weight="800">200 行</text>
+      <text x="706" y="116" font-size="10" fill="#64748b">补偿代码替代</text>
+      <text x="706" y="132" font-size="10" fill="#64748b">一行 BEGIN…COMMIT</text>
+
+      <rect x="30" y="158" width="840" height="126" rx="9" fill="#ffffff" stroke="#e3e7ef"/>
+      <text x="46" y="180" font-size="11.5" fill="#334155" font-weight="700">选分片键的三条硬标准（第三条最容易忽略，也最贵）</text>
+
+      <rect x="46" y="192" width="256" height="76" rx="7" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="60" y="212" font-size="10.8" fill="#171a21" font-weight="700">① 高基数</text>
+      <text x="60" y="232" font-size="10" fill="#475569">取值足够多，能均匀打散</text>
+      <text x="60" y="252" font-size="10" fill="#be123c">反例：status 只有 5 个值</text>
+
+      <rect x="316" y="192" width="256" height="76" rx="7" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="330" y="212" font-size="10.8" fill="#171a21" font-weight="700">② 均匀</text>
+      <text x="330" y="232" font-size="10" fill="#475569">没有超级大客户</text>
+      <text x="330" y="252" font-size="10" fill="#be123c">反例：头商占 40% 订单</text>
+
+      <rect x="586" y="192" width="268" height="76" rx="7" fill="#fff8f0" stroke="#f4dcc2" stroke-width="1.6"/>
+      <text x="600" y="212" font-size="10.8" fill="#b45309" font-weight="700">③ 覆盖 80% 查询</text>
+      <text x="600" y="232" font-size="10" fill="#475569">绝大多数查询都能带上它</text>
+      <text x="600" y="252" font-size="10" fill="#be123c">错这条 = 主链路全退化</text>
+    </svg>
+    <figcaption><b>图 4</b>　炸点的成本都能量化。前两条错了只是性能不均（可调），第三条错了是<strong>主链路全部变成广播查询</strong>（要重做方案）。</figcaption>
+  </figure>
+
+  <p>真实工程里的答案通常是<strong>组合拳</strong>，而不是"选一个完美的分片键"：</p>
+  <ul>
+    <li>主分片键选 <code class="inl">user_id</code>——覆盖 C 端 90% 查询，基数大、分布均匀</li>
+    <li>用<strong>基因法</strong>把 <code class="inl">user_id</code> 的位嵌进 <code class="inl">order_id</code>，让"按订单号查"也能单片路由（L2 详述）</li>
+    <li><code class="inl">merchant_id</code>、<code class="inl">phone</code> 这类查询走<strong>异构索引表</strong>或 ES（L5 详述）</li>
+  </ul>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>路由算法</em></div>
+  <h2>路由算法四代演进：从取模到基因法</h2>
+  <p>绝大多数人只知道"取模"和"一致性哈希"，能说出基因法的已经是少数。四代的差别不在实现难度，在<strong>扩容时要不要搬数据</strong>。</p>
+
+  <h3>第一代：取模</h3>
+  <pre><code>// 最简单的路由，一行代码
+int shard = Math.abs(userId.hashCode()) % 16;</code></pre>
+  <p>优点是绝对均匀、<code class="inl">O(1)</code>。缺点是<strong>扩容即灾难</strong>：16 片扩到 32 片时，约 50% 的 key 会换片，1.6 亿行里 8000 万行要搬家，而且搬完之后缓存全失效。</p>
+  <p>注意一个常见误解："扩到 32 片只搬一半，还行？"——但实际是<strong>每一片都要动</strong>，16 个源分片同时对外输出数据，迁移期间双写、校验、延迟全线吃紧。而如果扩到 24 片（非成倍），几乎 100% 重分布，等于重建。</p>
+
+  <h3>第二代：一致性哈希</h3>
+  <p>把 <code class="inl">0 ~ 2^32</code> 组成环，节点和 key 都 hash 到环上，key 顺时针找到第一个节点。扩容只影响相邻节点，迁移量 <code class="inl">1/N</code>。</p>
+  <p>两个缺点：<strong>数据倾斜</strong>（节点少时环上分布不均，可能一个节点吃 50%）需要引入虚拟节点（每物理节点 150~200 个）来摊平；<strong>无法范围查询</strong>（相邻 ID 散落在环上各处）。</p>
+  <div class="warn">
+    <b>为什么数据库分片很少用它。</b>一致性哈希解决的是"节点动态增减"，而数据库分片恰恰要求<strong>确定性路由</strong>——同一条 SQL 任何时候都必须去同一个分片。环上节点的增减会让路由结果变化，运维上不好接受。它更适合缓存（Redis Cluster）这种"丢失可重建"的场景。
+  </div>
+
+  <h3>第三代：基因法</h3>
+  <p>这是国内互联网最常用的解法，专门解决"一个业务实体有两个查询维度"的问题。核心思路一句话：<strong>把分片键的基因，写进另一个 ID 里。</strong></p>
+  <p>订单按 <code class="inl">user_id</code> 分 1024 片（<code class="inl">2^10</code>）。取 <code class="inl">user_id</code> 的低 10 位作为"基因"，塞进 <code class="inl">order_id</code> 的低 10 位：</p>
+
+  <pre><code>// 分片数必须是 2 的幂：1024 = 2^10，MASK = 0x3FF
+private static final int  SHARD_BITS = 10;
+private static final long SHARD_MASK = (1L &lt;&lt; SHARD_BITS) - 1;   // 0x3FF
+
+// 生成订单号：时间戳 + 序列占高 54 位，低 10 位填 user_id 的基因
+public long generateOrderId(long userId) {
+    long ts    = System.currentTimeMillis() - EPOCH;   // 41 位
+    long seq   = sequence.getAndIncrement() &amp; 0xFFF;   // 12 位
+    long high  = (ts &lt;&lt; 12) | seq;                     // 共 53 位
+    long gene  = userId &amp; SHARD_MASK;                  // 取低 10 位
+    return (high &lt;&lt; SHARD_BITS) | gene;                // 63 位 + 1 位符号
+}
+
+// 两种入参，算出来的分片号必须一致
+public int routeByUserId(long userId) {
+    return (int) (userId  &amp; SHARD_MASK);
+}
+public int routeByOrderId(long orderId) {
+    return (int) (orderId &amp; SHARD_MASK);   // 基因位本身就是分片号
+}</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 348" role="img" aria-label="基因法 64 位位图与双维度路由">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">64 位里划出 10 位当"基因"：order_id 的低 10 位 = user_id 的低 10 位</text>
+
+      <g>
+        <rect x="40" y="46" width="11.5" height="34" rx="2" fill="#e2e8f0" stroke="#cbd5e1"/>
+        <rect x="52.7" y="46" width="521.1" height="34" rx="4" fill="#dbeafe" stroke="#93c5fd"/>
+        <rect x="573.8" y="46" width="127" height="34" rx="4" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.8"/>
+        <rect x="700.8" y="46" width="152" height="34" rx="4" fill="#dcfce7" stroke="#7dd3a0"/>
+      </g>
+
+      <text x="46" y="38" font-size="9" fill="#64748b">符号</text>
+      <text x="316" y="38" font-size="10" fill="#075985" font-weight="700" text-anchor="middle">41 位时间戳（69.7 年）</text>
+      <text x="637" y="38" font-size="10" fill="#6d28d9" font-weight="700" text-anchor="middle">10 位基因</text>
+      <text x="776" y="38" font-size="10" fill="#047857" font-weight="700" text-anchor="middle">12 位序列</text>
+
+      <line x1="52.7" y1="92" x2="573.8" y2="92" stroke="#93c5fd"/>
+      <line x1="573.8" y1="108" x2="700.8" y2="108" stroke="#8b5cf6"/>
+      <line x1="700.8" y1="92" x2="852.8" y2="92" stroke="#7dd3a0"/>
+      <text x="637" y="122" font-size="9.5" fill="#6d28d9" text-anchor="middle">= user_id &amp; 0x3FF</text>
+      <text x="637" y="136" font-size="9.5" fill="#6d28d9" text-anchor="middle">= 分片号</text>
+
+      <rect x="30" y="158" width="290" height="52" rx="8" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="46" y="178" font-size="10.5" fill="#075985" font-weight="700">user_id = 9826…1101001011</text>
+      <text x="46" y="198" font-size="10" fill="#475569">低 10 位 = 1101001011 = 843</text>
+
+      <rect x="30" y="222" width="290" height="52" rx="8" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="46" y="242" font-size="10.5" fill="#6d28d9" font-weight="700">order_id = 1699…1101001011</text>
+      <text x="46" y="262" font-size="10" fill="#475569">低 10 位 = 1101001011 = 843</text>
+
+      <line x1="320" y1="184" x2="392" y2="200" stroke="#94a3b8" stroke-width="1.4"/>
+      <polygon points="392,200 383,195 384,206" fill="#94a3b8"/>
+      <line x1="320" y1="248" x2="392" y2="228" stroke="#94a3b8" stroke-width="1.4"/>
+      <polygon points="392,228 383,223 384,234" fill="#94a3b8"/>
+
+      <rect x="394" y="182" width="176" height="68" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8"/>
+      <text x="482" y="206" font-size="11" fill="#047857" font-weight="700" text-anchor="middle">都路由到分片 843</text>
+      <text x="482" y="228" font-size="10" fill="#047857" text-anchor="middle">两种入参，一个分片</text>
+      <text x="482" y="244" font-size="9.5" fill="#4d7c0f" text-anchor="middle">无需广播、无需二次查</text>
+
+      <rect x="592" y="158" width="278" height="152" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="608" y="180" font-size="10.8" fill="#b45309" font-weight="700">代价与边界（必答）</text>
+      <text x="608" y="204" font-size="10" fill="#475569">① 分片数被基因位锁死</text>
+      <text x="618" y="221" font-size="9.8" fill="#be123c">10 位 = 最多 1024 片，改 12 位则历史 ID 全废</text>
+      <text x="608" y="244" font-size="10" fill="#475569">② 位数必须按 5 年后容量定</text>
+      <text x="618" y="261" font-size="9.8" fill="#be123c">这是不可逆决策，上线后再改要全量重写 ID</text>
+      <text x="608" y="284" font-size="10" fill="#475569">③ 序列位被压缩，单机每毫秒 4096 个号</text>
+      <text x="608" y="301" font-size="9.8" fill="#64748b">够用：409.6 万/秒/节点</text>
+
+      <rect x="30" y="292" width="536" height="44" rx="8" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="46" y="312" font-size="10.5" fill="#334155" font-weight="700">附带收益：一个 user_id 只落一个分片 → "一个用户的所有订单同片"天然成立</text>
+      <text x="46" y="329" font-size="10" fill="#64748b">这正是 L7 聚合根分片的基础：订单 + 明细 + 优惠 + 支付流水可以放在同一个本地事务里</text>
+    </svg>
+    <figcaption><b>图 5</b>　基因法的位图。低 10 位既是"分片号"也是"基因位"，所以 <code class="inl">user_id</code> 和 <code class="inl">order_id</code> 都能单片路由。代价是<strong>分片数被这 10 位锁死</strong>。</figcaption>
+  </figure>
+
+  <h3>第四代：目录表 / 映射表</h3>
+  <p>单独一张 <code class="inl">shard_mapping(key, shard_id)</code> 表，路由时先查映射。最灵活（支持任意扩容、支持热点单独迁移），但多一次查询——必须靠本地缓存 + 广播刷新兜住，否则路由本身就是瓶颈。</p>
+  <p>实际用法：只对<strong>少数热点或需要特殊安置</strong>的 key 建映射，大部分走基因法，形成"默认规则 + 例外表"。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 344" role="img" aria-label="四代路由算法的迁移量对比">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">四代算法的真正差别：扩容时要搬多少数据</text>
+
+      <text x="212" y="52" font-size="9.5" fill="#94a3b8" text-anchor="end">迁移量</text>
+      <line x1="230" y1="58" x2="650" y2="58" stroke="#e3e7ef"/>
+      <line x1="650" y1="52" x2="650" y2="64" stroke="#cbd5e1"/>
+      <text x="650" y="48" font-size="9" fill="#94a3b8" text-anchor="middle">100%</text>
+      <line x1="440" y1="52" x2="440" y2="64" stroke="#cbd5e1"/>
+      <text x="440" y="48" font-size="9" fill="#94a3b8" text-anchor="middle">50%</text>
+
+      <text x="212" y="86" font-size="10.5" fill="#171a21" text-anchor="end" font-weight="700">取模 · 成倍扩</text>
+      <rect x="230" y="70" width="210" height="20" rx="4" fill="#fef3c7" stroke="#fbbf24"/>
+      <text x="448" y="85" font-size="10.5" fill="#b45309" font-weight="700">50%</text>
+      <text x="668" y="85" font-size="9.8" fill="#64748b">每片一半留一半走，可对拷</text>
+
+      <text x="212" y="131" font-size="10.5" fill="#171a21" text-anchor="end" font-weight="700">取模 · 非成倍扩</text>
+      <rect x="230" y="115" width="420" height="20" rx="4" fill="#fee2e2" stroke="#f87171"/>
+      <text x="658" y="130" font-size="10.5" fill="#be123c" font-weight="700">≈100%</text>
+      <text x="706" y="130" font-size="9.8" fill="#be123c">等于重建，禁止</text>
+
+      <text x="212" y="176" font-size="10.5" fill="#171a21" text-anchor="end" font-weight="700">一致性哈希</text>
+      <rect x="230" y="160" width="26" height="20" rx="4" fill="#dcfce7" stroke="#7dd3a0"/>
+      <text x="264" y="175" font-size="10.5" fill="#047857" font-weight="700">1/N</text>
+      <text x="302" y="175" font-size="9.8" fill="#64748b">16 节点扩 1 个 = 6.25%，但路由不确定、不支持范围查</text>
+
+      <text x="212" y="221" font-size="10.5" fill="#171a21" text-anchor="end" font-weight="700">基因法</text>
+      <line x1="230" y1="205" x2="238" y2="205" stroke="#8b5cf6" stroke-width="3"/>
+      <text x="246" y="220" font-size="10.5" fill="#6d28d9" font-weight="700">0（但扩不动）</text>
+      <text x="342" y="220" font-size="9.8" fill="#64748b">只能靠"一开始就分够"来避免扩容 —— 10 位基因 = 上限 1024 片</text>
+
+      <text x="212" y="266" font-size="10.5" fill="#171a21" text-anchor="end" font-weight="700">目录表</text>
+      <line x1="230" y1="250" x2="238" y2="250" stroke="#0369a1" stroke-width="3"/>
+      <text x="246" y="265" font-size="10.5" fill="#0369a1" font-weight="700">≈0</text>
+      <text x="274" y="265" font-size="9.8" fill="#64748b">改映射即可，但每次路由多一次查询（要靠缓存）</text>
+
+      <rect x="30" y="284" width="840" height="48" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="46" y="304" font-size="10.8" fill="#334155" font-weight="700">没有一种算法同时满足：均匀 + 可扩 + 可范围查询 —— 这是分布式系统的固有取舍</text>
+      <text x="46" y="322" font-size="10.2" fill="#64748b">业务上要么接受"不可范围查询"，要么用 ES / 数仓把范围查询单独承接（见 L5 三层链路）</text>
+    </svg>
+    <figcaption><b>图 6</b>　四代算法的迁移量。注意基因法那一条是 <strong>0 但不可扩</strong>——它不是"更好"，是"用不可逆换不迁移"。</figcaption>
+  </figure>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>SQL 变形</em></div>
+  <h2>分片后的 SQL：四种变形与它们的成本</h2>
+  <p>分片之后，原来一条 SQL 能做的事被拆成<strong>路由 → 下发 → 归并</strong>三段，每一段都有坑。</p>
+
+  <h3>JOIN 的四条出路</h3>
+  <table>
+    <tr><th>方案</th><th>做法</th><th>代价</th><th>适用</th></tr>
+    <tr><td>绑定表</td><td>两张表用同一分片键，同片 JOIN</td><td>要求分片键、分片数一致</td><td>订单 + 明细、用户 + 用户扩展</td></tr>
+    <tr><td>字段冗余</td><td>下单时把 <code>user_name</code>、<code>sku_name</code> 冗余进订单表</td><td>数据冗余、改名要刷全量</td><td>高频只读展示字段</td></tr>
+    <tr><td>广播表</td><td>小表（字典、配置）每片存一份</td><td>写要写 N 份、有一致性窗口</td><td>城市表、类目表，万行以内</td></tr>
+    <tr><td>应用层拼装</td><td>分两次查，Java 里 <code>Map</code> 组装</td><td>代码量、无优化器、N+1</td><td>前三种都不行时兜底</td></tr>
+  </table>
+
+  <div class="good">
+    <b>"字段冗余"被严重低估。</b>订单表里存一份 <code class="inl">user_name</code> 看着不优雅，但它把"订单列表要显示用户名"这个高频场景从跨库 JOIN 变成了单表查询，收益远大于那份冗余。<strong>分片环境下，范式让位于性能</strong>——这是必须接受的现实，不是妥协。
+  </div>
+
+  <h3>聚合：AVG 不能求平均</h3>
+  <p>这是最经典的分片陷阱，很多人第一次写就踩：</p>
+
+  <pre><code>-- ✗ 错误：各分片先算 AVG，再对 AVG 求平均
+SELECT AVG(amount) FROM t_order WHERE create_time &gt; '2026-11-09';
+-- 分片 A = (100, 100) → AVG 100
+-- 分片 B = (1000)      → AVG 1000
+-- 归并：(100 + 1000) / 2 = 550     真实值 = (100+100+1000)/3 = 400
+
+-- ✓ 正确：拆成 SUM 与 COUNT 下推，归并后再相除
+SELECT SUM(amount) / SUM(cnt)
+FROM (
+    SELECT SUM(amount) AS amount, COUNT(*) AS cnt FROM t_order_0 WHERE create_time &gt; '2026-11-09'
+    UNION ALL
+    SELECT SUM(amount) AS amount, COUNT(*) AS cnt FROM t_order_1 WHERE create_time &gt; '2026-11-09'
+) t;</code></pre>
+
+  <p><code class="inl">COUNT(DISTINCT x)</code> 更麻烦：各分片的 distinct 结果直接相加会<strong>重复计数</strong>（同一个用户在两个分片各出现一次，会被数成 2 个），必须把所有分片的 distinct 值拉到内存再做一次去重。数据量大时这是内存炸弹——1 亿行表上算 <code class="inl">COUNT(DISTINCT phone)</code>，中间件会尝试把 1 亿个手机号装进堆里。</p>
+
+  <h3>排序与分页：深分页的 1600 万行</h3>
+  <p>分片下 <code class="inl">ORDER BY … LIMIT offset, size</code> 的<strong>唯一正确</strong>执行方式是"每片取 offset+size 条，再归并丢弃前 offset 条"。offset 一大就出事：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 352" role="img" aria-label="深分页与游标分页的扫描行数对比">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">同一个"翻到第 50000 页"，两种写法的扫描量差 50000 倍</text>
+
+      <rect x="30" y="34" width="386" height="212" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="46" y="56" font-size="11" fill="#be123c" font-weight="700">LIMIT 1000000, 20（错误）</text>
+
+      <rect x="46" y="70" width="354" height="26" rx="5" fill="#ffffff" stroke="#fca5a5"/>
+      <text x="58" y="88" font-size="10.2" fill="#475569">每片执行 LIMIT 1000020, 20</text>
+
+      <rect x="46" y="106" width="354" height="26" rx="5" fill="#ffffff" stroke="#fca5a5"/>
+      <text x="58" y="124" font-size="10.2" fill="#475569">每片扫描 1,000,020 行　×16 片</text>
+
+      <rect x="46" y="142" width="354" height="26" rx="5" fill="#ffffff" stroke="#fca5a5"/>
+      <text x="58" y="160" font-size="10.2" fill="#475569">归并堆里同时存在 1600 万条记录</text>
+
+      <text x="46" y="196" font-size="10.2" fill="#be123c">最终只返回 20 行 —— 放大 80 万倍</text>
+      <text x="46" y="226" font-size="24" fill="#be123c" font-weight="800">1600 万行</text>
+
+      <circle cx="434" cy="140" r="15" fill="#ffffff" stroke="#fca5a5"/>
+      <text x="434" y="145" font-size="11" fill="#be123c" font-weight="800" text-anchor="middle">VS</text>
+
+      <rect x="452" y="34" width="418" height="212" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="468" y="56" font-size="11" fill="#047857" font-weight="700">WHERE id &lt; ?　LIMIT 20（正确）</text>
+
+      <rect x="468" y="70" width="386" height="26" rx="5" fill="#ffffff" stroke="#7dd3a0"/>
+      <text x="480" y="88" font-size="10.2" fill="#475569">游标 = 上一页最后一条 id，走 (user_id, id) 联合索引</text>
+
+      <rect x="468" y="106" width="386" height="26" rx="5" fill="#ffffff" stroke="#7dd3a0"/>
+      <text x="480" y="124" font-size="10.2" fill="#475569">每片只扫 20 行　×16 片</text>
+
+      <rect x="468" y="142" width="386" height="26" rx="5" fill="#ffffff" stroke="#7dd3a0"/>
+      <text x="480" y="160" font-size="10.2" fill="#475569">归并堆里只有 320 条，一次快排就够</text>
+
+      <text x="468" y="196" font-size="10.2" fill="#047857">扫描量与页码无关，第 1 页和第 5 万页一样快</text>
+      <text x="468" y="226" font-size="24" fill="#047857" font-weight="800">320 行</text>
+
+      <rect x="30" y="258" width="256" height="76" rx="8" fill="#ffffff" stroke="#7dd3a0" stroke-width="1.6"/>
+      <text x="44" y="278" font-size="10.5" fill="#047857" font-weight="700">① 游标分页（首选）</text>
+      <text x="44" y="298" font-size="9.8" fill="#475569">不能跳页，只能上/下一页</text>
+      <text x="44" y="316" font-size="9.8" fill="#475569">排序键必须唯一且稳定</text>
+
+      <rect x="300" y="258" width="256" height="76" rx="8" fill="#ffffff" stroke="#e3e7ef"/>
+      <text x="314" y="278" font-size="10.5" fill="#334155" font-weight="700">② 限制最大页数</text>
+      <text x="314" y="298" font-size="9.8" fill="#475569">offset 超 1 万直接拒绝</text>
+      <text x="314" y="316" font-size="9.8" fill="#475569">要求用户加时间范围</text>
+
+      <rect x="570" y="258" width="300" height="76" rx="8" fill="#ffffff" stroke="#e3e7ef"/>
+      <text x="584" y="278" font-size="10.5" fill="#334155" font-weight="700">③ 列表页交给 ES</text>
+      <text x="584" y="298" font-size="9.8" fill="#475569">ES 拿 ID 再回表，要多一条同步链路</text>
+      <text x="584" y="316" font-size="9.8" fill="#475569">搜索/筛选/排序本就该用搜索引擎</text>
+
+      <text x="30" y="348" font-size="10.2" fill="#64748b">注：加索引对深分页无效 —— 索引解决"定位起点"，不解决"跳过 N 条"，即使用索引也要沿叶子链表走完 N 条</text>
+    </svg>
+    <figcaption><b>图 7</b>　深分页的代价是<strong>乘出来的</strong>：offset × 分片数。游标分页把"跳过 N 条"变成"从游标开始"，扫描量与页码彻底解耦——同样是第 50000 页，1600 万行 vs 320 行，差 5 万倍。</figcaption>
+  </figure>
+
+  <pre><code>-- 第一页
+SELECT id, amount, create_time FROM t_order
+WHERE user_id = 10086 ORDER BY id DESC LIMIT 20;
+
+-- 后续页：把上一页最后一条的 id 作为游标传进来
+SELECT id, amount, create_time FROM t_order
+WHERE user_id = 10086 AND id &lt; 1699000000123456789
+ORDER BY id DESC LIMIT 20;</code></pre>
+
+  <p>限制也很明确：不能跳页（只能上一页/下一页），排序键必须唯一且稳定（<code class="inl">id</code> 或 <code class="inl">(create_time, id)</code>）。产品上一般都能接受——用户真正会翻到第 1000 页的场景基本不存在。</p>
+
+  <h3>另外两个隐形炸弹</h3>
+  <div class="trap">
+    <b>COUNT(*)。</b>16 片各算一次再相加。看着没问题，但每次都要扫 16 片，而 InnoDB 的 <code class="inl">COUNT(*)</code> 必须扫索引（不像 MyISAM 有计数器）。1.6 亿行的 count 会跑几十秒。工程解法是维护<strong>计数表</strong>（<code class="inl">merchant_order_count(merchant_id, status, cnt)</code>），下单/状态变更时增减——牺牲一点强一致，换掉一个全表扫描。
+  </div>
+  <div class="trap">
+    <b>ORDER BY 非分片键 + 无索引。</b>每片先做一次 filesort 再归并，内存占用 = 分片数 × 排序缓冲。16 片各 256KB 就是 4MB，100 并发直接 400MB。分片表上任何 <code class="inl">ORDER BY</code> 的列都必须建索引，这不是优化建议，是生存要求。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>核心战场</em></div>
+  <h2>不停机迁移：六阶段时序与三条铁律</h2>
+  <p>这是分库分表里唯一"做错了会丢数据"的部分，也是面试区分度最高的部分。大部分人能说出"双写"，说不出双写的失败处理，说不出校验怎么做，更说不出回滚怎么做。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 396" role="img" aria-label="不停机迁移六阶段时序">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">六阶段时序：权威库在阶段 5 才切换，切换之后仍要留回滚窗口</text>
+
+      <rect x="35" y="38" width="610" height="30" rx="6" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="340" y="58" font-size="10.5" fill="#b45309" font-weight="700" text-anchor="middle">老库是权威（双写只是"多写一份"，不是"换主"）</text>
+      <rect x="645" y="38" width="220" height="30" rx="6" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="755" y="58" font-size="10.5" fill="#047857" font-weight="700" text-anchor="middle">新库是权威</text>
+
+      <rect x="35" y="80" width="160" height="72" rx="7" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="115" y="102" font-size="11" fill="#075985" font-weight="700" text-anchor="middle">① 存量 + 增量</text>
+      <text x="115" y="122" font-size="9.5" fill="#475569" text-anchor="middle">全量导入 + binlog 追平</text>
+      <text x="115" y="140" font-size="9.5" fill="#be123c" text-anchor="middle">延迟到 1s 内才进下一步</text>
+
+      <rect x="195" y="80" width="120" height="72" rx="7" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="255" y="102" font-size="11" fill="#6d28d9" font-weight="700" text-anchor="middle">② 双写</text>
+      <text x="255" y="122" font-size="9.5" fill="#475569" text-anchor="middle">先老后新</text>
+      <text x="255" y="140" font-size="9.5" fill="#475569" text-anchor="middle">失败落消息表</text>
+
+      <rect x="315" y="80" width="110" height="72" rx="7" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="370" y="102" font-size="11" fill="#075985" font-weight="700" text-anchor="middle">③ 校验</text>
+      <text x="370" y="122" font-size="9.5" fill="#475569" text-anchor="middle">分段 checksum</text>
+      <text x="370" y="140" font-size="9.5" fill="#be123c" text-anchor="middle">差异 0.001% 以内</text>
+
+      <rect x="425" y="80" width="220" height="72" rx="7" fill="#fef3c7" stroke="#fbbf24"/>
+      <text x="535" y="102" font-size="11" fill="#b45309" font-weight="700" text-anchor="middle">④ 灰度读（耗时最长）</text>
+      <text x="535" y="122" font-size="9.5" fill="#475569" text-anchor="middle">1% → 10% → 50% → 100%</text>
+      <text x="535" y="140" font-size="9.5" fill="#475569" text-anchor="middle">双读比对 + 不一致回源老库</text>
+
+      <rect x="645" y="80" width="130" height="72" rx="7" fill="#f2fbf6" stroke="#7dd3a0"/>
+      <text x="710" y="102" font-size="11" fill="#047857" font-weight="700" text-anchor="middle">⑤ 切写</text>
+      <text x="710" y="122" font-size="9.5" fill="#475569" text-anchor="middle">写新库</text>
+      <text x="710" y="140" font-size="9.5" fill="#be123c" text-anchor="middle">反向同步到老库</text>
+
+      <rect x="775" y="80" width="90" height="72" rx="7" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="820" y="102" font-size="11" fill="#334155" font-weight="700" text-anchor="middle">⑥ 下线</text>
+      <text x="820" y="122" font-size="9.5" fill="#64748b" text-anchor="middle">扫隐藏调用</text>
+      <text x="820" y="140" font-size="9.5" fill="#64748b" text-anchor="middle">再删库</text>
+
+      <text x="115" y="168" font-size="9.5" fill="#94a3b8" text-anchor="middle">4~6 小时</text>
+      <text x="255" y="168" font-size="9.5" fill="#94a3b8" text-anchor="middle">1~2 周</text>
+      <text x="370" y="168" font-size="9.5" fill="#94a3b8" text-anchor="middle">持续跑</text>
+      <text x="535" y="168" font-size="9.5" fill="#be123c" text-anchor="middle">3~4 周（占整个项目一半）</text>
+      <text x="710" y="168" font-size="9.5" fill="#94a3b8" text-anchor="middle">1 天</text>
+      <text x="820" y="168" font-size="9.5" fill="#94a3b8" text-anchor="middle">观察 3 天</text>
+
+      <rect x="645" y="188" width="220" height="30" rx="6" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="755" y="208" font-size="10.5" fill="#be123c" font-weight="700" text-anchor="middle">回滚窗口 7~14 天</text>
+      <line x1="645" y1="182" x2="865" y2="182" stroke="#f5ccd4" stroke-dasharray="4 3"/>
+
+      <rect x="35" y="236" width="830" height="146" rx="10" fill="#ffffff" stroke="#e3e7ef"/>
+      <text x="50" y="258" font-size="11" fill="#334155" font-weight="700">三条铁律（面试只要答出这三条，就已经在"良好"档以上）</text>
+
+      <rect x="50" y="270" width="256" height="46" rx="6" fill="#f8f9fc"/>
+      <text x="64" y="288" font-size="10.2" fill="#be123c" font-weight="700">铁律一　老库永远是权威</text>
+      <text x="64" y="306" font-size="9.6" fill="#475569">双写失败不回滚老库，校验差异不擅自改</text>
+
+      <rect x="320" y="270" width="256" height="46" rx="6" fill="#f8f9fc"/>
+      <text x="334" y="288" font-size="10.2" fill="#be123c" font-weight="700">铁律二　校验不是抽样</text>
+      <text x="334" y="306" font-size="9.6" fill="#475569">抽样只能证明没大问题，不能证明没问题</text>
+
+      <rect x="590" y="270" width="256" height="46" rx="6" fill="#f8f9fc"/>
+      <text x="604" y="288" font-size="10.2" fill="#be123c" font-weight="700">铁律三　回滚要带数据</text>
+      <text x="604" y="306" font-size="9.6" fill="#475569">没有反向同步，回滚 = 丢数据</text>
+
+      <text x="50" y="344" font-size="10.2" fill="#64748b">阶段 ④ 最容易被低估：很多不一致只在特定用户的特定操作序列下出现，1% 流量至少跑 48 小时，且必须覆盖月末结算、大促这类特殊时段。</text>
+      <text x="50" y="364" font-size="10.2" fill="#64748b">阶段 ⑥ 的"隐藏读老库路径"比想象中多：报表、离线任务、DBA 手工 SQL、别的团队的同步任务 —— 删库前用审计日志扫来源 IP。</text>
+    </svg>
+    <figcaption><b>图 8</b>　六阶段时序。真正决定成败的是两个"事后"动作：<strong>阶段 5 的反向同步</strong>和<strong>阶段 3 的持续对账</strong>。没有它们，前面四个阶段都白做。</figcaption>
+  </figure>
+
+  <h3>阶段 1：存量 + 增量，必须配合</h3>
+  <p>两步：</p>
+  <ol>
+    <li><strong>全量</strong>：记录 binlog 位点 <code class="inl">P0</code> → 导出（mysqldump / DataX / DTS）→ 导入新库</li>
+    <li><strong>增量</strong>：从 <code class="inl">P0</code> 开始订阅 binlog（canal / DataX stream / 云厂商 DTS），持续回放，直到延迟小于 1 秒</li>
+  </ol>
+  <p>1.6 亿行 × 1KB = 160 GB。按 50 MB/s 传输 + 索引重建，纯导入约 55 分钟，含索引约 4~6 小时。这期间业务照常写老库，增量在追——等全量导入完成时 binlog 已积压几小时，要算一下能不能追平：</p>
+
+  <pre><code>追平时间 = binlog 积压量 / (消费速率 − 业务写入速率)
+
+业务峰值 5000 TPS，canal 消费 10000 TPS → 净追平 5000 TPS
+积压 4 小时 = 7200 万条事件 → 14400 秒 ≈ 4 小时
+
+// 若消费速率 ≤ 写入速率，永远追不平 → 说明全量窗口太长
+// 对策：改成按 user_id 分段导，边导边追</code></pre>
+
+  <h3>阶段 2：双写，四个必须明确的决策</h3>
+  <table>
+    <tr><th>决策</th><th>选项</th><th>推荐</th><th>理由</th></tr>
+    <tr><td>谁先写</td><td>先老后新 / 先新后老</td><td><strong>先老后新</strong></td><td>老库是权威，老库失败可直接返回失败</td></tr>
+    <tr><td>同步还是异步</td><td>同步双写 / 异步双写</td><td><strong>同步写老 + 异步写新</strong></td><td>新库延迟不拖累主链路 RT</td></tr>
+    <tr><td>新库失败</td><td>回滚老库 / 记录补偿</td><td><strong>记录补偿，不回滚</strong></td><td>老库已是权威，回滚会造成"业务失败但数据已落"</td></tr>
+    <tr><td>一致性窗口</td><td>强一致 / 最终一致</td><td><strong>最终一致（1s 内）</strong></td><td>强一致要 2PC，性能不可接受</td></tr>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 900 308" role="img" aria-label="双写三种失败时序的处理">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">双写失败的三种时序 —— 只有 A 和 C 会踩坑，而它们最常发生</text>
+
+      <text x="34" y="66" font-size="10.5" fill="#047857" font-weight="700">时序 A</text>
+      <rect x="104" y="48" width="112" height="30" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+      <text x="160" y="67" font-size="10" fill="#047857" text-anchor="middle">老库 ✓ 提交</text>
+      <polygon points="228,63 216,57 216,69" fill="#94a3b8"/>
+      <rect x="240" y="48" width="112" height="30" rx="6" fill="#fee2e2" stroke="#f87171"/>
+      <text x="296" y="67" font-size="10" fill="#be123c" text-anchor="middle">新库 ✗ 失败</text>
+      <text x="376" y="67" font-size="10.2" fill="#be123c" font-weight="700">→ 落本地消息表异步重试，绝不回滚老库</text>
+
+      <text x="34" y="126" font-size="10.5" fill="#64748b" font-weight="700">时序 B</text>
+      <rect x="104" y="108" width="112" height="30" rx="6" fill="#fee2e2" stroke="#f87171"/>
+      <text x="160" y="127" font-size="10" fill="#be123c" text-anchor="middle">老库 ✗ 失败</text>
+      <polygon points="228,123 216,117 216,129" fill="#cbd5e1"/>
+      <rect x="240" y="108" width="112" height="30" rx="6" fill="#f8fafc" stroke="#dbe3ee" stroke-dasharray="4 3"/>
+      <text x="296" y="127" font-size="10" fill="#94a3b8" text-anchor="middle">新库 不写</text>
+      <text x="376" y="127" font-size="10.2" fill="#475569" font-weight="700">→ 直接返回失败，无需补偿</text>
+
+      <text x="34" y="186" font-size="10.5" fill="#b45309" font-weight="700">时序 C</text>
+      <rect x="104" y="168" width="112" height="30" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+      <text x="160" y="187" font-size="10" fill="#047857" text-anchor="middle">老库 ✓ 提交</text>
+      <polygon points="228,183 216,177 216,189" fill="#94a3b8"/>
+      <rect x="240" y="168" width="112" height="30" rx="6" fill="#fef3c7" stroke="#fbbf24"/>
+      <text x="296" y="187" font-size="10" fill="#b45309" text-anchor="middle">新库 超时</text>
+      <text x="376" y="180" font-size="10.2" fill="#b45309" font-weight="700">→ 实际可能已成功，重试必然重复</text>
+      <text x="376" y="196" font-size="9.8" fill="#64748b">　 所以新库写入必须幂等：upsert 而非 insert</text>
+
+      <rect x="30" y="220" width="840" height="76" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="46" y="242" font-size="10.8" fill="#b45309" font-weight="700">最容易漏的一条：异步双写用线程池，池满时不能阻塞、也不能丢</text>
+      <text x="46" y="264" font-size="10.2" fill="#475569">正确做法 —— 池满降级成同步写，或直接入本地消息表；错误做法 —— 抛 RejectedExecutionException 被 catch 后只打日志</text>
+      <text x="46" y="284" font-size="10.2" fill="#be123c">这是线上真实丢数据的头号原因，且"只打日志"在监控上几乎看不出来</text>
+    </svg>
+    <figcaption><b>图 9</b>　三种时序里，A 和 C 都必须靠"落消息表 + 幂等写"兜住。B 反而是最安全的——失败得很干脆。</figcaption>
+  </figure>
+
+  <pre><code>@Service
+public class OrderWriteService {
+
+    // 三段式：老库同步（权威）→ 新库异步（补偿）→ 失败入队
+    @Transactional(rollbackFor = Exception.class)
+    public void createOrder(Order order) {
+        // 1. 老库：本地事务，失败直接抛，业务感知失败
+        legacyOrderMapper.insert(order);
+
+        // 2. 新库：异步，失败不影响主流程；池满降级为同步写，绝不丢
+        try {
+            dualWriteExecutor.execute(() -&gt; writeShard(order));
+        } catch (RejectedExecutionException e) {
+            writeShard(order);                    // 降级：同步写，慢但不丢
+        }
+    }
+
+    private void writeShard(Order order) {
+        try {
+            shardedOrderMapper.upsert(order);     // 幂等写，必须
+            dualWriteMetrics.success();
+        } catch (Exception e) {
+            retryTaskMapper.insert(new RetryTask(order.getOrderId(), e.getMessage()));
+            dualWriteMetrics.fail();
+        }
+    }
+}</code></pre>
+
+  <h3>阶段 3：校验对账，三级</h3>
+  <table>
+    <tr><th>级别</th><th>手段</th><th>成本</th><th>能发现什么</th></tr>
+    <tr><td>L1</td><td><code>COUNT(*)</code> 按天分段比对</td><td>低</td><td>整行丢失 / 重复</td></tr>
+    <tr><td>L2</td><td>分段 <code>checksum</code> / <code>SUM(CRC32(concat(...)))</code></td><td>中</td><td>任意字段变更</td></tr>
+    <tr><td>L3</td><td>主键对齐后逐行 diff（按 id 分桶并行）</td><td>高</td><td>精确定位到行和字段</td></tr>
+  </table>
+
+  <pre><code>-- checksum table 对整表算，1.6 亿行一次算不完
+-- 改为按 id 每 100 万一段，新旧库对应段比对
+SELECT COUNT(*) AS cnt,
+       SUM(CRC32(CONCAT_WS('#', id, user_id, amount, status))) AS sig
+FROM t_order
+WHERE id &gt;= 1699000000000000000 AND id &lt; 1699000000100000000;</code></pre>
+
+  <p>160 GB 全量 checksum 要 6 小时，不能每次都跑。实际节奏：<strong>T+1 按天增量 + 每周全量一次</strong>。差异率低于 0.001% 才允许进阶段 4。</p>
+  <div class="warn">
+    <b>差异怎么处理。</b>不能"以新库为准"直接覆盖（可能是新库写丢了），也不能"以老库为准"无脑刷（可能是老库的脏数据）。正确做法是<strong>差异进审核队列</strong>，按字段级规则判断哪边是对的，规则覆盖不了的再人工。直接覆盖是二次事故的起点。
+  </div>
+
+  <h3>阶段 4：灰度读</h3>
+  <p>按 <code class="inl">user_id % 100 &lt; N</code> 控制读新库的比例，<code class="inl">N</code> 从 1 → 10 → 50 → 100。每一步必须做<strong>双读比对</strong>：</p>
+
+  <pre><code>public Order queryOrder(long orderId, long userId) {
+    int bucket = (int) (userId % 100);
+    if (bucket &gt;= grayPercent.get()) {
+        return legacyOrderMapper.selectById(orderId);        // 未灰度：只读老库
+    }
+    Order fromNew = shardedOrderMapper.selectById(orderId);   // 灰度：读新库
+    Order fromOld = legacyOrderMapper.selectById(orderId);    // 旁路读老库做 diff
+    if (!Objects.equals(fromNew, fromOld)) {
+        diffLogger.warn("read-diff", orderId, fromNew, fromOld);
+        return fromOld;                                       // 不一致时回源，用户无感
+    }
+    return fromNew;
+}</code></pre>
+
+  <div class="trap">
+    <b>必须按 <code class="inl">user_id</code> 取模，不能随机。</b>同一个用户在整个灰度期必须稳定落在同一边，否则用户会看到"刷新一下订单就没了"——这种投诉比数据错误更难解释。
+  </div>
+
+  <h3>阶段 5~6：切写、回滚窗口、下线</h3>
+  <p>切写 = 把开关从"双写"改成"写新库 + 反向同步到老库"。<strong>反向同步是关键，很多人漏掉。</strong>不做的后果：切写后发现问题想回滚，但老库缺了切写之后的所有数据，回滚等于丢数据。窗口一般 7~14 天。</p>
+  <p>下线前必须做一次<strong>全链路调用扫描</strong>（数据库审计日志 + 慢查询日志里的来源 IP）。"隐藏的读老库路径"比想象中多：报表系统、离线任务、DBA 的手工 SQL、三年前的定时 Job、另一个团队的数据同步任务。不扫就删库，当天会有一堆人来找你。</p>
+
+  <div class="oneline">
+    <b>一句话总结这 11 层里最值钱的一句</b>
+    迁移的技术难度不在"双写"这个动作，在<strong>"证明数据是对的"</strong>和<strong>"证明能退回去"</strong>这两件看起来不产生进度的事上。谁把这两件事做扎实，谁的项目就不会半夜被叫起来。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L5</span><em>配套基建</em></div>
+  <h2>全局 ID 与二级索引</h2>
+
+  <h3>为什么分片后不能用自增 ID</h3>
+  <p><code class="inl">AUTO_INCREMENT</code> 在每个分片独立递增：<code class="inl">t_order_0</code> 出 1、<code class="inl">t_order_3</code> 也出 1，主键冲突。而且自增 ID 会让"按 ID 范围查"变成全广播（ID 不再连续），等于把 L1 的炸点主动请进家门。</p>
+
+  <h3>雪花算法的位图</h3>
+  <pre><code>64 位 = 1 符号 + 41 时间戳 + 10 机器 + 12 序列
+单节点上限 = 1000 ms × 4096 = 409.6 万 / 秒
+41 位时间戳 = 2^41 ms ≈ 69.7 年</code></pre>
+
+  <p>三个工程问题，面试常问：</p>
+  <ul>
+    <li><strong>时钟回拨。</strong>NTP 同步可能让时钟倒退几毫秒。三档处理：回拨小于 5ms 自旋等待；回拨较大切备用 <code class="inl">workerId</code>；超过阈值直接抛异常让上层重试（比生成重复 ID 好）。<strong>不处理 = 主键冲突的隐蔽来源。</strong></li>
+    <li><strong>机器 ID 分配。</strong>1024 个 ID 不能写死在配置里（K8s 下 Pod 会漂移）。用 ZK 顺序节点、Redis <code class="inl">INCR</code>、或启动时从 DB 抢号。</li>
+    <li><strong>容器环境。</strong>Pod 重启后若 <code class="inl">workerId</code> 没变而时间戳回退，会撞号。要结合 Pod 名 hash 或从注册中心拿。</li>
+  </ul>
+
+  <h3>号段模式：不依赖时钟的解法</h3>
+  <p>靠数据库批量发号，业务侧在内存里发。关键是<strong>双 buffer</strong>：当前号段消耗到 10% 时异步预取下一段，两个 buffer 轮换，取号永远是内存操作，没有取号毛刺。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 340" role="img" aria-label="号段模式双 buffer 与取号 QPS 账">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">号段双 buffer：把"每次取号一次 DB 往返"变成"每 1000 个号一次"</text>
+
+      <rect x="30" y="36" width="470" height="288" rx="10" fill="#ffffff" stroke="#e3e7ef"/>
+
+      <rect x="46" y="56" width="438" height="48" rx="7" fill="#dcfce7" stroke="#16a34a"/>
+      <text x="60" y="76" font-size="10.8" fill="#047857" font-weight="700">Buffer A　[1,000,000 , 1,001,000)　正在发放</text>
+      <rect x="60" y="84" width="410" height="10" rx="5" fill="#ffffff" stroke="#7dd3a0"/>
+      <rect x="60" y="84" width="368" height="10" rx="5" fill="#16a34a"/>
+      <text x="438" y="93" font-size="8.5" fill="#ffffff" font-weight="700">已发 90%</text>
+
+      <line x1="428" y1="104" x2="428" y2="140" stroke="#b45309" stroke-width="1.4" stroke-dasharray="4 3"/>
+      <polygon points="428,146 422,136 434,136" fill="#b45309"/>
+      <text x="418" y="124" font-size="9.5" fill="#b45309" text-anchor="end">剩 10% 时触发异步预取</text>
+
+      <rect x="46" y="150" width="438" height="48" rx="7" fill="#dbeafe" stroke="#93c5fd"/>
+      <text x="60" y="170" font-size="10.8" fill="#075985" font-weight="700">Buffer B　[1,001,000 , 1,002,000)　预备就绪</text>
+      <rect x="60" y="178" width="410" height="10" rx="5" fill="#ffffff" stroke="#93c5fd"/>
+      <rect x="60" y="178" width="41" height="10" rx="5" fill="#93c5fd"/>
+      <text x="120" y="187" font-size="8.5" fill="#0369a1">空（等 A 耗尽后切换）</text>
+
+      <text x="46" y="224" font-size="10.5" fill="#334155" font-weight="700">取号链路：CAS 自增 → 命中 buffer 区间直接返回</text>
+      <text x="46" y="246" font-size="10" fill="#475569">全程无锁、无网络、无时钟依赖 —— 这是它比雪花更"确定"的地方</text>
+
+      <rect x="46" y="260" width="438" height="50" rx="7" fill="#f8f9fc"/>
+      <text x="60" y="280" font-size="10.2" fill="#be123c" font-weight="700">风险：DB 不可用时号段耗尽就发不出号</text>
+      <text x="60" y="298" font-size="9.8" fill="#64748b">对策：buffer 预取 2~3 段（可撑数分钟），并给号段服务降级开关</text>
+
+      <rect x="520" y="36" width="350" height="288" rx="10" fill="#fbfcfe" stroke="#c4b5fd"/>
+      <text x="536" y="58" font-size="11.5" fill="#6d28d9" font-weight="700">QPS 账：为什么业务量翻倍，DB 压力不变</text>
+
+      <text x="536" y="88" font-size="10.5" fill="#475569">业务取号　100,000 QPS</text>
+      <text x="536" y="112" font-size="10.5" fill="#475569">号段 step　1,000</text>
+      <line x1="536" y1="124" x2="854" y2="124" stroke="#e3e7ef"/>
+
+      <text x="536" y="150" font-size="10.5" fill="#047857" font-weight="700">DB 压力 = 100,000 / 1000 = 100 QPS</text>
+      <text x="536" y="172" font-size="10" fill="#64748b">一次 UPDATE 抢一段，摊薄 1000 倍</text>
+
+      <text x="536" y="204" font-size="10.5" fill="#475569">雪花：0 次外部依赖，但吃时钟</text>
+      <text x="536" y="226" font-size="10.5" fill="#475569">号段：吃 DB，但趋势严格递增</text>
+
+      <line x1="536" y1="244" x2="854" y2="244" stroke="#e3e7ef"/>
+      <text x="536" y="266" font-size="10.2" fill="#be123c" font-weight="700">UUID 不要做主键</text>
+      <text x="536" y="286" font-size="9.8" fill="#64748b">16 字节 + 完全随机 → 页分裂，1.6 亿行能被拖垮</text>
+      <text x="536" y="306" font-size="9.8" fill="#64748b">雪花虽不连续，但趋势递增，页分裂接近自增</text>
+    </svg>
+    <figcaption><b>图 10</b>　号段模式的核心是"批量预取 + 双 buffer 轮换"。注意右下角那句：<strong>趋势递增</strong>才是雪花做 MySQL 主键的真正优势，不是"唯一"。</figcaption>
+  </figure>
+
+  <h3>二级索引：不要试图让一个分片方案满足所有查询</h3>
+  <table>
+    <tr><th>方案</th><th>做法</th><th>优点</th><th>缺点</th></tr>
+    <tr><td>异构索引表</td><td><code>t_order_idx_by_merchant(merchant_id, create_time, order_id, shard_id)</code>，按目标维度分片，只存少量列</td><td>纯 MySQL、事务内可写、一致性好</td><td>多维护一张表、回表是 N 次查询</td></tr>
+    <tr><td>ES 宽表</td><td>canal 订阅 binlog → ES，查询拿 ID 再回 MySQL 取详情</td><td>支持任意维度组合、聚合、排序、搜索</td><td>秒级一致性窗口、运维成本、需单独对账</td></tr>
+  </table>
+
+  <p>真实项目的组合拳是<strong>三层链路</strong>，各自最优：</p>
+  <ul>
+    <li><strong>C 端"我的订单"</strong> → <code class="inl">user_id</code> 分片，单片查询（主链路，最优）</li>
+    <li><strong>订单详情"按订单号"</strong> → 基因法，单片查询（L2）</li>
+    <li><strong>商家后台"店铺订单"</strong> → 异构索引表 / ES（次链路，可容忍秒级延迟）</li>
+    <li><strong>运营大盘"GMV 统计"</strong> → 数仓 / 预聚合表（离线链路，不查业务库）</li>
+  </ul>
+
+  <div class="good">
+    <b>这个分层比"我们上了 ShardingSphere"有价值得多。</b>面试时说出"主链路用分片键、次链路用异构索引、分析链路用数仓"，说明你理解了<strong>分片只解决一条链路的性能问题</strong>，而不是把所有查询都塞进分片方案里硬扛。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L6</span><em>扩容</em></div>
+  <h2>扩容再平衡：为什么只能成倍扩</h2>
+
+  <h3>1024 → 2048 只搬一半</h3>
+  <p>取模扩容有个数学性质，值得记住：</p>
+
+  <pre><code>hash % 1024 = h &amp; 0x3FF      // 取低 10 位
+hash % 2048 = h &amp; 0x7FF      // 取低 11 位
+
+多出来的是第 11 位（0x400）：
+  bit11 = 0  →  新结果 == 老结果         → 留在原分片
+  bit11 = 1  →  新结果 == 老结果 + 1024  → 迁到新增分片</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="成倍扩容的位运算与原片映射">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">成倍扩容：每一片正好一半留下、一半搬到"原片 + 1024"</text>
+
+      <rect x="30" y="38" width="190" height="52" rx="8" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="125" y="60" font-size="10.8" fill="#075985" font-weight="700" text-anchor="middle">老分片 7</text>
+      <text x="125" y="78" font-size="9.8" fill="#475569" text-anchor="middle">1 亿行 · 100%</text>
+
+      <line x1="220" y1="64" x2="268" y2="64" stroke="#94a3b8" stroke-width="1.4"/>
+      <polygon points="274,64 264,58 264,70" fill="#94a3b8"/>
+
+      <rect x="280" y="38" width="256" height="52" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="294" y="58" font-size="9.8" fill="#475569">按 bit11 拆成两组</text>
+      <text x="294" y="78" font-size="9.8" fill="#475569">h &amp; 0x7FF 只有两个可能值</text>
+
+      <line x1="536" y1="52" x2="580" y2="34" stroke="#93c5fd" stroke-width="1.4"/>
+      <polygon points="586,31 575,29 578,40" fill="#93c5fd"/>
+      <line x1="536" y1="78" x2="580" y2="98" stroke="#8b5cf6" stroke-width="1.4"/>
+      <polygon points="586,101 575,92 578,103" fill="#8b5cf6"/>
+
+      <rect x="592" y="18" width="278" height="44" rx="8" fill="#f2fbf6" stroke="#7dd3a0"/>
+      <text x="606" y="38" font-size="10.2" fill="#047857" font-weight="700">bit11 = 0 → 分片 7（原地不动）</text>
+      <text x="606" y="55" font-size="9.6" fill="#475569">占 50%，不需要搬任何数据</text>
+
+      <rect x="592" y="86" width="278" height="44" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.6"/>
+      <text x="606" y="106" font-size="10.2" fill="#6d28d9" font-weight="700">bit11 = 1 → 分片 1031（新增）</text>
+      <text x="606" y="123" font-size="9.6" fill="#475569">占 50%，7 + 1024 = 1031，目标确定</text>
+
+      <rect x="30" y="152" width="840" height="72" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="46" y="174" font-size="10.8" fill="#b45309" font-weight="700">关键收益：目标分片是确定的 → 可以"按分片对"直接对拷，不需要逐条重算路由</text>
+      <text x="46" y="196" font-size="10.2" fill="#475569">1024 → 2048 时，老片 7 的一半数据搬到 1031，老片 8 的一半搬到 1032 …… 全部可并行的 1024 组对拷</text>
+      <text x="46" y="216" font-size="10.2" fill="#be123c">对比 1024 → 1536：h % 1536 与 h % 1024 没有任何位运算关系，迁移量接近 100%，只能逐条重算</text>
+
+      <rect x="30" y="240" width="410" height="76" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="46" y="262" font-size="10.5" fill="#047857" font-weight="700">成倍扩容 1024 → 2048</text>
+      <text x="46" y="282" font-size="10" fill="#475569">迁移 50%，可分片对拷、可并行</text>
+      <text x="46" y="302" font-size="10" fill="#475569">单片从 1 亿降到 5000 万</text>
+
+      <rect x="460" y="240" width="410" height="76" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="476" y="262" font-size="10.5" fill="#be123c" font-weight="700">非成倍扩容 1024 → 1536</text>
+      <text x="476" y="282" font-size="10" fill="#475569">迁移近 100%，等同重建</text>
+      <text x="476" y="302" font-size="10" fill="#475569">且缓存全失效、回滚不可能</text>
+    </svg>
+    <figcaption><b>图 11</b>　成倍扩容的全部秘密就是"多取一位"。所以<strong>分片数必须是 2 的幂，且第一次就按 5 年后容量定</strong>——1024 片单片 100 万行不浪费，B+ 树矮、DDL 快，反而是好事。</figcaption>
+  </figure>
+
+  <div class="oneline">
+    <b>扩容复用同一套迁移流程</b>
+    扩容本质就是"把一部分数据从老分片搬到新分片"，和 L4 的库间迁移是同一个问题、同一套工具：新建分片 → 双写 → 存量对拷 → 校验 → 切读 → 切写 → 清理。唯一区别是<strong>可以一片一片做</strong>，风险比整库迁移低得多。所以能靠"多分片 + 局部迁移"解决的，不要靠"改算法"解决。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L7</span><em>事务边界</em></div>
+  <h2>分布式事务边界：按聚合根分片</h2>
+
+  <h3>同片事务 vs 跨片事务</h3>
+  <p>分片之后事务被分成两类：<strong>同片事务</strong>（参与的表都在同一分片，仍是本地事务，ACID 完整）和<strong>跨片事务</strong>（需要分布式事务）。设计目标应该是：<strong>把 95% 的业务事务做成同片事务。</strong></p>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="聚合根同片与跨片事务的两种处理">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">以聚合根为分片键 → 聚合内实体天然同片 → 本地事务</text>
+
+      <rect x="30" y="36" width="392" height="150" rx="10" fill="#f2fbf6" stroke="#7dd3a0" stroke-width="1.6"/>
+      <text x="46" y="58" font-size="10.8" fill="#047857" font-weight="700">分片 843（user_id 维度）</text>
+
+      <rect x="46" y="70" width="176" height="42" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="134" y="96" font-size="10.2" fill="#334155" text-anchor="middle">t_order</text>
+      <rect x="232" y="70" width="176" height="42" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="320" y="96" font-size="10.2" fill="#334155" text-anchor="middle">t_order_item</text>
+      <rect x="46" y="120" width="176" height="42" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="134" y="146" font-size="10.2" fill="#334155" text-anchor="middle">t_order_coupon</text>
+      <rect x="232" y="120" width="176" height="42" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="320" y="146" font-size="10.2" fill="#334155" text-anchor="middle">t_pay_flow</text>
+
+      <text x="226" y="178" font-size="9.8" fill="#047857" text-anchor="middle">BEGIN … COMMIT　一个本地事务搞定</text>
+
+      <rect x="452" y="36" width="418" height="150" rx="10" fill="#fff5f6" stroke="#f5ccd4" stroke-width="1.6"/>
+      <text x="468" y="58" font-size="10.8" fill="#be123c" font-weight="700">分片 17（sku_id 维度）—— 天生跨片</text>
+
+      <rect x="468" y="70" width="120" height="42" rx="6" fill="#ffffff" stroke="#fca5a5"/>
+      <text x="528" y="96" font-size="10.2" fill="#be123c" text-anchor="middle">t_stock</text>
+      <text x="602" y="86" font-size="9.8" fill="#475569">「下单扣库存」不是事务问题，</text>
+      <text x="602" y="102" font-size="9.8" fill="#475569">是并发扣减问题</text>
+
+      <text x="468" y="134" font-size="9.8" fill="#475569">① Redis 预扣（DECR，原子）</text>
+      <text x="468" y="152" font-size="9.8" fill="#475569">② MQ 异步 → 真正落库扣减</text>
+      <text x="468" y="170" font-size="9.8" fill="#475569">③ 定时任务扫"预扣未落库"超时回滚</text>
+
+      <rect x="30" y="200" width="840" height="116" rx="9" fill="#ffffff" stroke="#e3e7ef"/>
+      <text x="46" y="222" font-size="11" fill="#334155" font-weight="700">四种跨库方案，按"业务能不能容忍不一致"选，不是按"哪个听起来高级"选</text>
+
+      <rect x="46" y="234" width="196" height="68" rx="6" fill="#f8f9fc"/>
+      <text x="58" y="252" font-size="10.2" fill="#be123c" font-weight="700">2PC / XA</text>
+      <text x="58" y="270" font-size="9.6" fill="#475569">强一致，同步阻塞</text>
+      <text x="58" y="288" font-size="9.6" fill="#64748b">现在极少用，银行内部偶见</text>
+
+      <rect x="254" y="234" width="196" height="68" rx="6" fill="#f8f9fc"/>
+      <text x="266" y="252" font-size="10.2" fill="#b45309" font-weight="700">TCC</text>
+      <text x="266" y="270" font-size="9.6" fill="#475569">强（最终），每步写三个方法</text>
+      <text x="266" y="288" font-size="9.6" fill="#64748b">资金、库存等核心</text>
+
+      <rect x="462" y="234" width="196" height="68" rx="6" fill="#f2fbf6" stroke="#7dd3a0"/>
+      <text x="474" y="252" font-size="10.2" fill="#047857" font-weight="700">本地消息表　最常用</text>
+      <text x="474" y="270" font-size="9.6" fill="#475569">业务表 + 消息表同库同事务</text>
+      <text x="474" y="288" font-size="9.6" fill="#64748b">订单 → 积分 / 优惠券</text>
+
+      <rect x="670" y="234" width="184" height="68" rx="6" fill="#f8f9fc"/>
+      <text x="682" y="252" font-size="10.2" fill="#334155" font-weight="700">Saga</text>
+      <text x="682" y="270" font-size="9.6" fill="#475569">每步写补偿，长流程编排</text>
+      <text x="682" y="288" font-size="9.6" fill="#64748b">多服务长事务</text>
+    </svg>
+    <figcaption><b>图 12</b>　左边是"设计对了"的结果（一个本地事务），右边是"设计避不开"的情况（库存天生跨片）。区别在于<strong>分片键选的是聚合根，还是某个字段</strong>。</figcaption>
+  </figure>
+
+  <h3>本地消息表的完整时序（最值得背）</h3>
+  <pre><code>1. 本地事务：业务表写入 + 消息表写入（同库、同分片）→ 原子
+2. 定时任务扫消息表 status=0 的记录，投递到 MQ
+3. 消费方幂等消费，成功后回调把 status 改成 1
+4. 失败重试（指数退避），超过 N 次进人工队列</code></pre>
+
+  <div class="trap">
+    <b>唯一的死穴。</b>"业务写入和消息写入必须在同一个本地事务里"——这是它做到"不丢"的唯一原因。所以消息表<strong>必须和业务表同库同分片</strong>。一旦把消息表放到独立的库，它立刻退化成分布式事务，白忙一场。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L8</span><em>选型</em></div>
+  <h2>中间件选型与四个隐藏成本</h2>
+
+  <table>
+    <tr><th>维度</th><th>ShardingSphere-JDBC</th><th>ShardingSphere-Proxy</th><th>手动 DAO</th></tr>
+    <tr><td>部署形态</td><td>jar 包，嵌在应用里</td><td>独立进程，伪装成 MySQL</td><td>代码里自己算路由</td></tr>
+    <tr><td>性能</td><td>最好（进程内）</td><td>多一跳网络</td><td>最好</td></tr>
+    <tr><td>多语言</td><td>只支持 Java</td><td>支持任意（MySQL 协议）</td><td>看实现</td></tr>
+    <tr><td>升级成本</td><td>每个应用都要升</td><td>一次升级</td><td>—</td></tr>
+    <tr><td>连接数</td><td><strong>放大 N 倍</strong></td><td>集中管理</td><td><strong>放大 N 倍</strong></td></tr>
+    <tr><td>运维</td><td>无额外组件</td><td>要部署、监控、容灾</td><td>无</td></tr>
+  </table>
+
+  <h3>隐藏成本一：连接数放大</h3>
+  <p>这是最容易被忽略、也最容易在生产炸的。原来 1 个库配 20 个连接，分 4 个库后每库各要 20 个——<strong>总连接 80</strong>。分 32 个库就是 640。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 306" role="img" aria-label="分片后连接数放大与 max_connections 上限">
+      <text x="30" y="20" font-size="12.5" fill="#334155" font-weight="700">连接池是按"库"配的，所以连接数随分片数线性放大</text>
+
+      <text x="24" y="66" font-size="10.5" fill="#475569">单库</text>
+      <rect x="150" y="52" width="12" height="20" rx="3" fill="#dcfce7" stroke="#7dd3a0"/>
+      <text x="170" y="67" font-size="10.5" fill="#047857" font-weight="700">20</text>
+
+      <text x="24" y="112" font-size="10.5" fill="#475569">4 库 × 4 表</text>
+      <rect x="150" y="98" width="48" height="20" rx="3" fill="#fef3c7" stroke="#fbbf24"/>
+      <text x="206" y="113" font-size="10.5" fill="#b45309" font-weight="700">80</text>
+
+      <text x="24" y="158" font-size="10.5" fill="#475569">32 库 × 32 表</text>
+      <rect x="150" y="144" width="384" height="20" rx="3" fill="#fee2e2" stroke="#f87171"/>
+      <text x="542" y="159" font-size="10.5" fill="#be123c" font-weight="700">640</text>
+
+      <line x1="240" y1="40" x2="240" y2="200" stroke="#be123c" stroke-width="1.4" stroke-dasharray="5 4"/>
+      <text x="240" y="34" font-size="10" fill="#be123c" font-weight="700" text-anchor="middle">max_connections 默认 151</text>
+
+      <text x="150" y="188" font-size="10" fill="#be123c">4 个应用实例 × 80 = 320 —— 已经超过默认上限一倍</text>
+
+      <rect x="30" y="206" width="410" height="88" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="46" y="228" font-size="10.5" fill="#b45309" font-weight="700">对策一：按总预算重新分配</text>
+      <text x="46" y="248" font-size="10" fill="#475569">总连接预算 200 / 32 库 ≈ 每库 6 个</text>
+      <text x="46" y="268" font-size="10" fill="#475569">代价：单片并发度下降，要靠异步或批量补</text>
+      <text x="46" y="286" font-size="10" fill="#64748b">每个连接还占 256KB~1MB 内存，640 个 = 600MB</text>
+
+      <rect x="460" y="206" width="410" height="88" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="476" y="228" font-size="10.5" fill="#047857" font-weight="700">对策二：Proxy 集中管理</text>
+      <text x="476" y="248" font-size="10" fill="#475569">应用连 Proxy（连接少），Proxy 连后端（可控）</text>
+      <text x="476" y="268" font-size="10" fill="#475569">代价：多一跳网络 + 一个必须高可用的组件</text>
+      <text x="476" y="286" font-size="10" fill="#64748b">多语言栈也顺带解决了（MySQL 协议）</text>
+    </svg>
+    <figcaption><b>图 13</b>　连接数放大是分片最"沉默"的成本——不报错、不告警，只在压测时表现为"QPS 上不去"。</figcaption>
+  </figure>
+
+  <h3>隐藏成本二~四</h3>
+  <div class="warn">
+    <b>② 分布式事务的缺席。</b>ShardingSphere 支持 <code class="inl">@ShardingTransactionType</code> 的 LOCAL / XA / BASE 三档，但<strong>默认是 LOCAL</strong>——意味着跨库写入没有事务保证。很多人以为"用了中间件就有事务"，这是线上数据不一致的经典来源。
+  </div>
+  <div class="warn">
+    <b>③ SQL 兼容性。</b>不是所有 SQL 都能下推。<code class="inl">UNION</code>、子查询、<code class="inl">GROUP BY + HAVING</code>、窗口函数、<code class="inl">INSERT … SELECT</code> 在分片下的支持程度各不相同。写代码时看着能跑，压测时才发现某个查询被打成了广播。<strong>上线前必须开 SQL 日志，人工审一遍所有走分片表的 SQL。</strong>
+  </div>
+  <div class="warn">
+    <b>④ 运维与排查。</b>分片后一条 SQL 的执行计划分散在 16 个分片，出问题要看 16 份慢日志。必须有统一的 SQL 审计（<code class="inl">SQL_LOG</code> + traceId 串联），否则排查成本随分片数线性增长。
+  </div>
+
+  <h3>该不该上中间件</h3>
+  <ul>
+    <li>分片数 ≤ 4、表数 ≤ 8、团队少于 5 人 → <strong>手动 DAO</strong>。一把 <code class="inl">ShardingAlgorithm</code> 工具类 + 明确的分片规则，比引入一个中间件更可控</li>
+    <li>分片数多、要灰度、要读写分离 + 分片组合 → <strong>ShardingSphere-JDBC</strong></li>
+    <li>多语言栈（Go / Python 也要访问） → <strong>Proxy</strong></li>
+    <li>预算充足、能接受成本 → <strong>TiDB / OceanBase</strong>，透明分片、SQL 不用改，但硬件成本高 2~3 倍</li>
+  </ul>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L9</span><em>速查</em></div>
+  <h2>数字速查：把这些数背下来</h2>
+  <table>
+    <tr><th>数字</th><th>含义</th></tr>
+    <tr><td>1170</td><td>16KB 页能放的 bigint 索引项数（16384 / 14）</td></tr>
+    <tr><td>2053 万</td><td>1KB 行宽下三层 B+ 树容量（2000 万的出处）</td></tr>
+    <tr><td>2.23 亿 / 547 万</td><td>100B 行 / 4KB 行下的三层树容量</td></tr>
+    <tr><td>5000 万 / 50 GB</td><td>单表必须分表的经验线</td></tr>
+    <tr><td>64</td><td>MySQL 8.0 instant add column 的次数上限</td></tr>
+    <tr><td>16</td><td>4 库 × 4 表的分片数，也是广播查询的放大倍数</td></tr>
+    <tr><td>1600 万 / 320</td><td>深分页 vs 游标分页的扫描行数（offset 100 万、16 片）</td></tr>
+    <tr><td>50% / ≈100%</td><td>成倍扩容 / 非成倍扩容的迁移量</td></tr>
+    <tr><td>409.6 万</td><td>雪花单节点每秒 ID 上限（1000 × 4096）</td></tr>
+    <tr><td>0.001%</td><td>校验差异率阈值，超过不许灰度</td></tr>
+    <tr><td>7~14 天</td><td>切写后的回滚窗口</td></tr>
+    <tr><td>N 倍</td><td>分片后连接数的放大倍数</td></tr>
+  </table>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L10</span><em>问答</em></div>
+  <h2>14 条高频问答</h2>
+
+  <div class="qa"><div class="qq">为什么是 2000 万行，不是 1000 万或者 5000 万？</div>
+  <p>因为 2000 万是"1KB 行宽 + 三层 B+ 树"的容量上限，换个行宽完全变。正确答法是给公式：<code class="inl">1170 × 1170 × 每页行数</code>。100B 行是 2.23 亿，4KB 行是 547 万。所以判断标准应该是"单表体积 + DDL 窗口 + 写入 QPS"三个指标，而不是行数。</p></div>
+
+  <div class="qa"><div class="qq">分片键怎么选？</div>
+  <p>三条标准：高基数、分布均匀、覆盖 80% 以上查询。第三条最重要也最容易被忽略——前两条错了只是性能不均，第三条错了主链路全部退化成广播。真实方案通常组合：主分片键 + 基因法覆盖第二维度 + 异构索引表覆盖长尾查询。</p></div>
+
+  <div class="qa"><div class="qq">分片之后按非分片键查怎么办？</div>
+  <p>三条路：① 路由算法层面——基因法把分片键嵌进另一个 ID，让它也能单片路由；② 存储层面——异构索引表（按目标维度组织的窄表）或 ES；③ 交互层面——强制用户带上分片维度（"我的订单"必须登录）。按查询频次和一致性要求选。</p></div>
+
+  <div class="qa"><div class="qq">深分页怎么解决？</div>
+  <p>先讲清代价：16 片 + offset 100 万 = 扫 1600 万行、内存归并 1600 万行。三种解法：游标分页（首选，扫描降到 320 行）、限制最大页数 + 二次查询、列表页交给 ES。推荐游标分页，代价是不能跳页。</p></div>
+
+  <div class="qa"><div class="qq">双写怎么保证不丢数据？</div>
+  <p>三条：① 顺序——先写老库（权威）再写新库，老库失败直接返回失败；② 新库失败不回滚老库，而是落本地消息表异步重试；③ 新库写入必须幂等（upsert 而不是 insert），因为超时场景下"实际成功但报失败"会重试。补充：异步线程池满时要降级成同步写或直接入消息表，不能抛异常丢数据。</p></div>
+
+  <div class="qa"><div class="qq">怎么校验迁移的数据是对的？</div>
+  <p>三级：COUNT 比对（发现丢行/重复）、分段 checksum（发现字段变更）、主键对齐逐行 diff（定位到行和字段）。160 GB 不能每次全量跑，实际节奏是"T+1 按天增量 + 每周全量"。差异率低于 0.001% 才允许灰度。差异不擅自覆盖，进审核队列按字段级规则判断。</p></div>
+
+  <div class="qa"><div class="qq">切写完发现问题怎么回滚？</div>
+  <p>前提是切写时做了<strong>反向同步</strong>（新库 → 老库）。回滚 = 把开关切回"写老库" + 反向同步把新库期间的数据补到老库 + 校验。所以回滚窗口（7~14 天）和反向同步必须在切写前设计好，事后补等于丢数据。这是最容易被问倒的一点。</p></div>
+
+  <div class="qa"><div class="qq">为什么分片数必须是 2 的幂？</div>
+  <p>因为取模扩容只有在成倍时才有位运算性质：<code class="inl">h % 1024</code> 和 <code class="inl">h % 2048</code> 只差第 11 位，所以每片正好一半留下、一半搬到"原片 + 1024"，迁移量 50% 且可对拷。非成倍扩容（1024 → 1536）没有任何位运算关系，迁移量接近 100%，只能逐条重算。</p></div>
+
+  <div class="qa"><div class="qq">雪花算法时钟回拨怎么处理？</div>
+  <p>三档：回拨小于 5ms 自旋等待；回拨较大切备用 workerId；超过阈值（如 100ms）抛异常让上层重试。绝对不能不处理——时钟回拨会产生重复 ID，是主键冲突的隐蔽来源。另外容器环境要注意 workerId 分配（不能写死配置，Pod 会漂移），用 ZK / Redis / DB 抢号。</p></div>
+
+  <div class="qa"><div class="qq">分片后事务怎么办？</div>
+  <p>先分层：同片事务仍是本地事务（设计目标是把 95% 的业务做成同片，靠"按聚合根分片"）；跨片事务用本地消息表（最常用）、TCC（资金级）、Saga（长流程）。库存这种高并发场景其实不该用事务解，而该用"Redis 预扣 + 异步落库 + 定时兜底"。</p></div>
+
+  <div class="qa"><div class="qq">用了 ShardingSphere，为什么还会数据不一致？</div>
+  <p>因为默认事务类型是 LOCAL——跨库写入没有事务保证，中间件只负责路由不负责一致性。要显式配 XA 或 BASE，而 XA 性能很差。这是"以为用了中间件就有事务"的经典误区。</p></div>
+
+  <div class="qa"><div class="qq">分片后连接数为什么会爆？</div>
+  <p>连接池是按"库"配的，分 4 个库就要 4 份连接池 → 总连接数放大 4 倍。4 个应用实例 × 80 连接 = 320，超过 MySQL 默认 <code class="inl">max_connections=151</code>。对策：按"总预算 / 分片数"重新分配，或用 Proxy 集中管理。</p></div>
+
+  <div class="qa"><div class="qq">为什么不直接用 TiDB，不用改代码？</div>
+  <p>成本。TiDB 需要至少 3 TiKV + 3 PD + 2 TiDB 的集群，硬件成本是同量级 MySQL 的 2~3 倍，且运维复杂度高（Region 调度、热点、GC）。中小规模用 ShardingSphere 更划算；数据量到 PB 级、或团队没有专职 DBA 时，TiDB 的"透明"才值这个钱。</p></div>
+
+  <div class="qa"><div class="qq">分库分表最大的坑是什么？</div>
+  <p>不是技术，是<strong>没想清楚查询维度</strong>。技术方案（取模 / 基因法 / 中间件）都能查文档学会，但"业务未来三年会有哪些查询"这个问题只有业务方知道。分片键选错的代价是整套方案重做 + 一次全量迁移，比一开始多花两个月做容量和查询规划贵得多。</p></div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L11</span><em>模拟面试</em></div>
+  <h2>3 道模拟题（四档对照）</h2>
+
+  <div class="q">
+    <h4><span>Q1</span>订单表 8 亿行要分库分表，给完整方案。</h4>
+    <div class="lab">考察点</div>
+    <p>容量推导 / 分片键选择 / 多维查询 / 迁移流程</p>
+    <div class="lab r">不及格</div>
+    <p>"分 16 个库，用 user_id 做 hash。"——没有容量推导，没有说明其他查询怎么办，没有迁移方案。</p>
+    <div class="lab">及格</div>
+    <p>说清分片数怎么来的（8 亿 / 单片 5000 万 = 16 片）、分片键用 user_id、迁移用双写 + 校验。能主动提"按订单号查要广播"这个风险。</p>
+    <div class="lab g">良好</div>
+    <p>补齐四件事。① 分片维度选 4 库 × 4 表 = 16 片，单片 5000 万行回到三层树；② 用基因法把 user_id 低 10 位嵌进 order_id，让按订单号也能单片路由；③ 商家后台和运营统计走异构索引表 + 数仓，不查业务库；④ 迁移六阶段：全量 + binlog 追平 → 双写（先老后新、幂等 upsert、失败落消息表）→ 分段 checksum 校验 → 灰度读 1%→100% → 切写 + 反向同步 → 下线。</p>
+    <div class="lab">优秀</div>
+    <p>再补四个工程判断。<br>
+    ① <strong>分片数按 5 年后定</strong>：8 亿涨到 50 亿要 6 年，直接按 1024 片（32×32）规划，单片 500 万，基因位数一次定死（10 位不可逆），扩容压力归零。<br>
+    ② <strong>连接数账</strong>：32 库 × 每库 20 连接 = 640，必须提前算 <code>max_connections</code> 和内存，或者上 Proxy。<br>
+    ③ <strong>DDL 策略</strong>：分片表的加字段要 32 个库同步执行，用 gh-ost / pt-osc 分批；注意 <code>ALGORITHM=INSTANT</code> 有 64 次上限，长期还要准备重建方案。<br>
+    ④ <strong>回滚设计</strong>：切写后老库保留 14 天只读 + 反向同步；下线前用数据库审计日志扫一遍所有来源 IP，确认没有隐藏的读老库路径（报表、离线任务、别人的定时 Job）。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>Q2</span>分片后"我的订单"列表页翻到第 500 页就超时，怎么查怎么改？</h4>
+    <div class="lab">考察点</div>
+    <p>深分页原理 / 定位手段 / 改造方案与产品妥协</p>
+    <div class="lab r">不及格</div>
+    <p>"加索引""加缓存""上 ES"。没有定位，直接给方案。</p>
+    <div class="lab">及格</div>
+    <p>指出是深分页问题——<code>LIMIT 10000, 20</code> 在 16 个分片上每片都要扫 10020 行再归并，offset 越大越慢。给出方案：限制最大页数，或者用游标分页。</p>
+    <div class="lab g">良好</div>
+    <p>把数字算出来（16 片 × 10020 行 = 16 万行，offset 到 50 万时是 800 万行），并给出游标分页的具体改造：把上一页最后一条 id 作为游标，配合 <code>(user_id, id)</code> 联合索引，每片只扫 20 行。同时说明产品侧代价：不能跳页，只能"下一页"，排序键必须唯一稳定。</p>
+    <div class="lab">优秀</div>
+    <p>再补三层。<br>
+    ① <strong>定位手段</strong>：不靠猜。看 <code>SHOW PROCESSLIST</code> 和慢日志确认是不是 16 个分片都在慢（是 → 分片归并问题；只有一片慢 → 数据倾斜）；看 <code>Handler_read_next</code> 确认扫描行数；用 traceId 串起 16 个分片的耗时。<br>
+    ② <strong>为什么加索引没用</strong>：<code>LIMIT 500000, 20</code> 即使走索引也要沿叶子链表跳过 50 万条记录，索引只解决"定位起点"，不解决"跳过 N 条"。所以"加索引"这个答案在深分页上是无效的。<br>
+    ③ <strong>根治判断</strong>：列表页的产品形态决定了技术方案。如果确实需要"跳到第 500 页"（比如客服查历史订单），那是<strong>检索需求</strong>而不是<strong>分页需求</strong>，应该给筛选条件（时间范围、订单状态）把 offset 压到 1 万以内，而不是优化一个本不该存在的查询。这个判断比技术方案更重要。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>Q3</span>迁移切写完成 3 天后，发现新库少了 2000 条订单，怎么办？</h4>
+    <div class="lab">考察点</div>
+    <p>故障处置 / 根因定位 / 数据修复 / 流程反思</p>
+    <div class="lab r">不及格</div>
+    <p>"用老库的数据补回去。"——没问清 2000 条是怎么发现的、缺的是什么数据、补回去会不会覆盖新库的正确数据。</p>
+    <div class="lab">及格</div>
+    <p>把"补数据"拆成三步：① 找出缺失的主键集合（老库有、新库没有）；② 从老库导出这 2000 条；③ 幂等 upsert 到新库。补完再跑一次校验确认。</p>
+    <div class="lab g">良好</div>
+    <p>补上风险控制。① 补数据前先备份新库对应分片（<code>CREATE TABLE t_order_bak_1110 AS SELECT …</code>）；② 只补缺失的主键，不整行覆盖，避免把切写后新库的正确修改冲掉；③ 补完立刻跑 checksum 对比；④ 排查这 2000 条的共同特征（同一时间段？同一分片？同一 user_id 段？）——这决定是偶发还是系统性问题。</p>
+    <div class="lab">优秀</div>
+    <p>从"修数据"上升到"修流程"。<br>
+    ① <strong>根因优先于修复</strong>。2000 条集中在同一时段 → 大概率是某个时间窗口内双写线程池满了，降级逻辑把数据丢了（<code>RejectedExecutionException</code> 被 catch 后只打日志）。看那个时段的 <code>dualWriteMetrics.fail()</code> 曲线就能确认。<br>
+    ② <strong>修复要能证明</strong>。不能"补完说好了"，要给出三个证据：补前缺失 2000 条、补后缺失 0 条、连续 3 天 T+1 对账差异为 0。<br>
+    ③ <strong>流程改进三条</strong>：双写失败必须有持久化兜底（本地消息表），不能只打日志；校验要从"迁移期"变成"常态"，T+1 对账永久保留（很多团队迁移完就把对账下线了，这是数据漂移的开始）；灰度期要更长，1% 流量至少跑 48 小时，且覆盖月末结算、大促这类特殊时段。<br>
+    ④ <strong>最后一句加分</strong>：这次能发现是因为做了对账，如果没做，这 2000 条会一直丢到用户投诉。所以<strong>"对账能力"本身是迁移项目的第一交付物</strong>，比迁移本身更重要。</p>
+  </div>
+
+  <div class="oneline">
+    <b>下一期预告</b>
+    第 17 期：<strong>缓存架构与一致性</strong>——本地缓存与 Redis 的分层容量账、Cache Aside 的四种时序与延迟双删的真实效果、为什么 binlog 订阅解耦是唯一可靠方案、热 key 探测的滑动窗口实现、以及"随机 TTL"为什么经常无效。
+  </div>
+</section>
+
+<footer>
+  Java 面试深水区 · 第 16 期 · 分库分表与不停机数据迁移<br>
+  13 张原理图 · 19 段代码 · 14 条问答 · 3 道模拟面试<br>
+  下期：缓存架构与一致性（多级缓存 / 双写一致性 / 热点探测 / 缓存治理）
+</footer>
+
+</div>
+<script>
+(function () {
+  var kw = 'public|private|protected|static|final|class|interface|extends|implements|new|return|if|else|for|while|try|catch|finally|throw|throws|void|int|long|short|byte|char|float|double|boolean|null|true|false|this|super|import|package|abstract|synchronized|volatile|transient|instanceof|default|break|continue|switch|case|enum|assert|do|SELECT|FROM|WHERE|ORDER|GROUP|LIMIT|INSERT|INTO|VALUES|UPDATE|SET|DELETE|UNION|ALL|AS|CREATE|TABLE|BEGIN|COMMIT';
+  var re = new RegExp('(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/|--[^\\n]*)|("[^"]*"|\'[^\']*\')|\\b(' + kw + ')\\b|\\b(\\d[\\d_]*[LlFfDd]?)\\b', 'g');
+  document.querySelectorAll('pre code').forEach(function (block) {
+    var raw = block.textContent
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    block.innerHTML = raw.replace(re, function (m, c, s, k, n) {
+      if (c) return '<span class="c">' + c + '</span>';
+      if (s) return '<span class="s">' + s + '</span>';
+      if (k) return '<span class="k">' + k + '</span>';
+      if (n) return '<span class="n">' + n + '</span>';
+      return m;
+    });
+  });
+})();
+</script>
+</body>
+</html>

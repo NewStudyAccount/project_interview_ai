@@ -121,3 +121,103 @@
   3. 校验脚本沿用：SVG 禁 HTML 标签（`<b>` 必须换 `<tspan>`）、url(#id) 必须有 marker、CJK 1.0em·ASCII 0.55em 估宽、text y 越界、标签配平；本轮 10 图 0 issue。
   4. base64 通道第 7 次验证稳定（81.8KB 无拦截）。
 - 下期建议主题：JVM 调优与性能压测（堆参数推导 / GC 日志解读 / 压测模型与瓶颈定位），已在文末做预告。
+
+## 2026-11-09 09:31（第 12 次执行）
+- 主题：第 12 期 JVM 调优与性能压测（L0 调优边界+停顿预算1/10 / L1 对象内存账本 头12B·引用4B·对齐8B+JOL / L2 Eden=分配速率×YGC间隔 四步推导+动态年龄判定 / L3 GC日志逐字段+四形态+to-space exhausted / L4 四格判别+YGC/Mixed/Full/Safepoint 四病 / L5 容器内存账本 exit137+ActiveProcessorCount / L6 Little's Law+阶梯拐点+四大压测错误 / L7 800→80ms 五步案例 / L8 参数地图+命令速查 / L9 14问答 / L10 3模拟题四档对照）
+- 产出：`java_interview_12_jvm_tuning.html`（95KB，9 图 + 14 代码块 + 12 H2/26 H3/8 表）、`java_interview_12_jvm_tuning.md`（28.2k 字符，1 H1 / 12 H2 / 52 H3、23 个代码块）
+- 云端：`create_with_markdown` + base64（64KB）一次成功，file_id `PcaDNMMxysJO`，url https://docs.qq.com/doc/DUGNhRE5NTXh5c0pP，回读 1/12/52 与本地完全一致
+- 关键经验：
+  1. 5.9.3 的 `tdoc_call doc-mcp create_with_markdown` + base64 第 8 次验证稳定，64KB base64 无 WAF 拦截。driver 脚本放 `.build/`，跑完 `rm -rf .build` 一并清掉。
+  2. **`get_outline` 返回值是标准 jsonrpc 信封**，路径 `result.structuredContent.outlines`；直接找 `{"outlines"` 子串再 json.loads 会报「Extra data」——必须整体 `json.loads` 后按信封取。递归键是 `outlines`/`children`。
+  3. 校验脚本（`.build/validate.py`）固化为五项：SVG 内禁 HTML 标签、`url(#id)` 必须有定义、文本按 CJK 1.0em·ASCII 0.55em 估宽查右边界、`text y > viewBox 高`、section/div/figure/table/tr/pre/svg/text/defs 配平。本期 9 图 **0 issue**，一次通过。
+  4. **md 里的尖括号必须包在反引号内**（`List<Integer>`、`jmap -histo:live <pid>`），否则会被当 HTML 标签或被文档转换吞掉；本期先把 `&lt;` 实体写法全部改回反引号包裹再上传，云端标题层级才完全干净。
+  5. 内容组织的新手法：把「参数」全部写成「除法」（Eden=速率×间隔、Old=堆−New、堆=limit×60%），并在每节给「不及格/及格/良好/优秀」四档对照——这两招让调优这种虚话题有了可验证的刻度。
+- 下期建议主题：类加载机制与 Java 新特性实战（双亲委派四次被打破 / 类初始化时机与被动引用 / 自定义 ClassLoader / 元空间迁移 / JDK17+ record·sealed·虚拟线程·模式匹配，重点讲虚拟线程 pinning），已在文末做预告。
+
+## 2026-11-09 12:24（第 13 次执行）
+- 主题：第 13 期 类加载机制与 Java 新特性（L0 五阶段与命名空间 / L1 双亲委派四次打破 / L2 六主动三被动+clinit 死锁 / L3 自定义加载器与类卸载三条件 / L4 Metaspace 五元凶取证 / L5 record·sealed·模式匹配穷尽性 / L6 虚拟线程 StackChunk 与 mount·unmount / L7 pinning 两代（JEP 491）/ L8 ThreadLocal 两条静默故障+ScopedValue / L9 落地漏斗 / L10 CDS·AOT / L11 版本矩阵速查 / 14 问答 / 3 模拟题）
+- 产出：`java_interview_13_classloading_java_features.html`（93.6KB，10 图 + 15 代码块、校验 0 issue）、`.md`（29k 字符，1 H1 / 15 H2 / 55 H3）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（69KB）一次成功，file_id `PfOfffvwZZpL`，url https://docs.qq.com/doc/DUGZPZmZmdndaWnBM，回读 1/15/55 与本地完全一致
+- 关键经验：
+  1. base64 通道第 9 次验证稳定。driver 脚本（up.py / verify.py / validate.py）放 `.build/`，跑完整体 `rm -rf`。
+  2. **`get_outline` 会把自己的 JSON 直接 print 到 stdout**（不只是返回值），脚本里必须用 `contextlib.redirect_stdout` 捕获，否则日志 50KB 被截断落盘且无法 Read。取 `result.structuredContent.outlines`，递归键 `outlines`/`children`。
+  3. 校验脚本沿用六项（SVG 禁 HTML 标签 / url(#id) 有定义 / marker 未使用 / CJK1.0em·ASCII0.55em 估宽 / text y 越界 / 标签配平），本期抓出 1 处 fig2 右越界并修，最终 0 issue。
+  4. 第 11 期的「行首 `**标签：**` 后接表格→被解析成 H2」未复现：第 12 期有 29 处同类写法、云端层级完全正确。本期只把紧邻表格的 2 处改成普通句子（保险），其余保留，结果 H2/H3 与本地一致 → 该坑不必再过度规避。
+  5. 本期内容核对了版本事实：JEP 491 在 JDK 24 解除 synchronized pinning；残留 pinning 为 native/FFM、类加载与初始化、Linux 文件 I/O；`-Djdk.tracePinnedThreads` 在 24 起失效改用 JFR；ScopedValue 在 JDK 25 正式（JEP 506），结构化并发到 25 仍是第五次预览（JEP 505）。面试类内容报版本号必须核对，不能凭记忆。
+- 下期建议主题：集合框架深水区与并发容器（ArrayList 1.5 倍扩容由来 / HashMap 树化泊松账 / CHM sizeCtl 协助扩容 / COW 边界 / 七种 BlockingQueue 吞吐 / unmodifiableList 与不可变的区别），已在文末做预告。
+
+## 2026-11-09 14:40（第 14 次执行）
+- 主题：第 14 期 集合框架深水区与并发容器（L0 全景选型·复杂度表纠偏 / L1 ArrayList 1.5x 扩容 8 阶台阶与 2N 拷贝账 / L2 HashMap 8·6·64 泊松表 6e-8 / L3 LinkedHashMap 三钩子 LRU 与 Caffeine W-TinyLFU / L4 fail-fast 三边界 + COW 快照 / L5 CHM 锁粒度轴 + CounterCell / L6 七种 BlockingQueue + Little's Law 10s / L7 视图三兄弟 / L8 Comparator 契约 + TimSort 32 阈值 / L9 内存账本 40MB / L10 速查 12 数字 / L11 14 问答 + 3 模拟题四档）
+- 产出：`java_interview_14_collections_concurrent.html`（109KB，11 图 + 18 代码 + 7 表 + 12 H2/29 H3）、`.md`（32492 字符，1 H1 / 13 H2 / 35 H3 / 29 代码块）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（71760）一次成功，file_id `PlMnFrUHfTRL`，url https://docs.qq.com/doc/DUGxNbkZyVUhmVFJM，回读 1/13/35 与本地完全一致
+- 关键经验：
+  1. base64 通道第 10 次验证稳定（32.5k md / 72KB base64 无拦截）。
+  2. 本期 11 张图**全部用手绘 rect/text/polygon，不用 marker/defs**（箭头用 `<polygon>` 手画），校验脚本「url(#id) 必须有 def」自然为空，减少了 marker 未定义这类事故；代价是要自己算箭头三角形坐标。
+  3. 校验脚本六项沿用，本期 **0 issue 一次通过**（含标签配平、SVG 内禁 HTML、文本估宽、text y 越界、marker 冗余）。
+  4. HTML 高亮脚本修正：之前用 `&quot;...&quot;` 正则匹配字符串，但脚本只转义 `& < >`，引号保持原样 → 字符串永远不高亮。改为直接匹配 `"[^"]*"`，`node --check` 通过。
+  5. 与第 01 期去重的处理：01 讲 HashMap 结构与 CHM 基础，本期只深挖「8/6/64 迟滞窗口 + 泊松表」和「锁粒度演进轴 + CounterCell」，并在开头明示"01 讲过寻址与扰动，这里只深挖一件事"，避免重复感。
+  6. 内容上最有效的两处「数形结合」：① ArrayList 容量台阶 + 拷贝量条形对照（得出累计拷贝 ≈2N、累计申请 ≈3N）；② 100 万条数据四种 Map 的 40/48/40/40MB 堆叠柱。面试类内容说服力来自可算的数字，这期继续验证。
+- 下期建议主题：Spring Boot 自动配置与启动流程（@SpringBootApplication 三注解分工 / spring.factories → AutoConfiguration.imports / 12 个 @Conditional / 启动耗时分布 / starter 生效链路），已在文末做预告。
+
+## 2026-11-09 16:56（第 15 次执行）
+- 主题：第 15 期 Spring Boot 自动配置与启动流程（L0 三大承诺+两张网+耗时账单 / L1 三注解分工与扫描范围·proxyBeanMethods / L2 run() 11 步与类型判定 / L3 refresh() 12 步的三个插入点与三个就绪事件 / L4 自动配置六阶段 153→60→40 / L5 spring.factories 迁移+starter 三段式 / L6 12 个条件注解与三陷阱 / L7 耗时条形与五档优化 / L8 13 档优先级+bootstrap.yml 消失 / L9 六坑 / L10 数字速查 / L11 14 问答 / L12 3 模拟题四档）
+- 产出：`java_interview_15_springboot_autoconfig.html`（108KB，10 图 + 23 代码块 + 12 表 + 13 section）、`.md`（55.9KB / 36.9k 字符，1 H1 / 14 H2 / 22 H3）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（74.5KB）一次成功，file_id `PTVoxCCRJZCs`，url https://docs.qq.com/doc/DUFRWb3hDQ1JKWkNz，回读 1/14/22 与本地完全一致
+- 关键经验：
+  1. base64 通道第 11 次验证稳定（36.9k 字符 / 74.5KB base64 无 WAF 拦截）。
+  2. **本期换了事实获取方式**：不靠记忆，直接 `unzip -p <jar> META-INF/spring/...AutoConfiguration.imports | grep -c .` 数条目（3.4.4=153、3.2.5=152），再全模块扫描 Boot 4.1.0 确认"拆到 20+ 模块、核心包只剩 12 条"；`javap -p` 核对 `AutoConfigurationImportSelector` 与 `SpringApplication` 的真实方法名（3.4 起是 `Runner` 抽象而非直接 CommandLineRunner）。面试类内容涉及版本口径时，本地 .m2 就是最便宜的"源码"。
+  3. 校验脚本六项沿用，本期 10 图 **0 issue 一次通过**；唯一人工修的是 fig5 五个箭头尖端落进下一张卡片 2px，已改到贴边。
+  4. 本期新增有效表达：把"153→60→40"做成六张卡片上方的计数胶囊（图 5），把"哪一段能省"做成条形右侧的浮动注释（图 9），比纯框图的信息密度高。
+  5. 导入 `tencentdocs.py` 时用 `importlib.util.spec_from_file_location`，driver 与校验脚本都放 `.build/`，跑完 `rm -rf .build`。
+- 下期建议主题：分库分表与不停机数据迁移（单表 2000 万行的真实推导 / 分片键选错后的四类炸点 / 取模→一致性哈希→基因法 / 双写+影子表+校验补偿时序），已在文末做预告。
+
+## 2026-11-10 09:28（第 16 次执行）
+- 主题：第 16 期 分库分表与不停机数据迁移（L0 三层B+树容量公式 1170×1170×15=2053万 / L1 分片键四炸点+三条硬标准 / L2 路由四代 取模·一致性哈希·基因法·目录表 / L3 SQL 四变形 JOIN·AVG·深分页1600万·COUNT / L4 六阶段迁移+双写三时序+校验三级+回滚窗口 / L5 雪花位图·号段双buffer·异构索引与三层链路 / L6 成倍扩容位运算 50% / L7 聚合根同片与四种跨库方案 / L8 选型四隐藏成本 / L9 数字速查 / L10 14问答 / L11 3模拟题四档）
+- 产出：`java_interview_16_sharding_migration.html`（106KB，13 图 + 19 代码块 + 12 section）、`.md`（50729 字节 / 25443 字符，1 H1 / 13 H2 / 45 H3）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（67.7KB）一次成功，file_id `PSncAJrNfowW`，url https://docs.qq.com/doc/DUFNuY0FKck5mb3dX，回读 1/13/45 与本地完全一致
+- 关键经验：
+  1. base64 通道第 12 次验证稳定（25.4k 字符 / 67.7KB 无 WAF 拦截）。driver/verify/validate 三脚本放 `.build/`，跑完整体 `rm -rf`。
+  2. `get_outline` 用「找 `{"jsonrpc"` 起点 + 括号配平截取」比整体 `json.loads` 更稳（输出里混有日志行时不会报 Extra data）。递归键仍是 `outlines`/`children`。
+  3. 校验脚本六项沿用，本期 13 图 **一次通过 0 issue**。唯一人工修的是 fig7 中间 "50000×" 文字压到左右面板边框（gap 仅 36px）→ 改成 r=15 的 "VS" 圆徽 + 把倍数写进 figcaption。**教训：两栏图之间若用文字标"倍数/对比"，先量 gap 宽度（font-size × 0.55 × 字符数），不足就换成徽章或写进图注。**
+  4. 代码高亮脚本新增 SQL 风格：kw 里混入 SELECT/FROM/WHERE/ORDER/LIMIT 等，字符串匹配用 `'[^']*'` 一并高亮（Java 与 SQL 混排的稿子一次覆盖）。`node --check` 需先落盘成 .js（Windows 下进程替换 `<(...)` 生成 `/proc` 假路径会报 Cannot find module）。
+  5. 内容组织上继续用「可算的数字」：1170 扇出、2053 万、16 倍放大、1600 万 vs 320、50% 迁移量、409.6 万 ID/s。本期新增有效手法：把「三种失败时序」画成横向三行（✓/✗ 徽标 + 处理结论），比文字描述省一半篇幅且不易漏。
+- 下期建议主题：缓存架构与一致性（多级缓存容量账 / Cache Aside 四种时序与延迟双删的真实效果 / binlog 订阅解耦 / 热 key 滑窗探测 / 随机 TTL 为何常失效），已在文末做预告。
+
+## 2026-11-10 11:47（第 17 次执行）
+- 主题：第 17 期 缓存架构与一致性（L0 六层延迟账+Zipf 长尾税 / L1 本地缓存三笔账+版本号 / L2 Cache Aside 四种时序+延迟双删推导 / L3 失败率乘法 99.85% 与 1.35 亿次脏读 / L4 一致性四级 / L5 热 key 三形态 / L6 CMS 探测三段式 / L7 布隆三数字 / L8 击穿两方案+随机 TTL 的 R 公式 / L9 五道闸门+内存账+LFU 淘汰 / L10 速查 / L11 14 问答 / L12 3 模拟题四档）
+- 产出：`java_interview_17_cache_consistency.html`（136KB，14 图 + 17 代码块 + 13 section，校验 0 issue）、`.md`（33.2k 字符 / 59.7KB，1 H1 / 14 H2 / 27 H3 / 32 代码块）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（79.7KB）一次成功，file_id `PfRxXDCLwQpa`，url https://docs.qq.com/doc/DUGZSeFhEQ0x3UXBh，回读 1/14/27 与本地完全一致
+- 关键经验：
+  1. base64 通道第 13 次验证稳定（33k 字符 / 80KB 无 WAF 拦截）。
+  2. 新增有效表达：把「随机 TTL 为什么无效」推成公式 `R ≥ N / DB 容忍重建 QPS`（10 万 / 500 = 200s），这是本系列第一个「给出参数取值公式」而非「给现象」的例子，面试说服力最高。
+  3. 「双写失败率是乘法」这一节用 0.9995 × 0.999 = 99.85% → 150 条脏缓存 → 1.35 亿次脏读，把抽象的一致性风险换算成可感知的数字，是全篇最有杀伤力的一段，后续同类话题（幂等、分布式锁）可复用此手法。
+  4. 与第 06 期 Redis 去重：开头明示「06 讲过穿透击穿雪崩的定义，本期只算账和讲治理」，并把重点放在多级缓存一致性、binlog 解耦、热 key 探测、容量治理上，避免重复。
+  5. 校验脚本六项沿用，本期 14 图**一次通过 0 issue**；仅修 2 处文本越界（左越界 1 处、右越界 1 处），说明「先按坐标排版再填文本」流程已稳定。
+  6. HTML 分 6 块写 `.build/p1..p6.html` 再 cat 合并（第 9 期经验），单块 15~25KB，无截断。
+- 下期建议主题：接口幂等与防重设计（token / 唯一索引 / 状态机 / 分布式锁四方案边界，重复支付·重复下单·MQ 重复消费三种时序），已在文末做预告。
+
+## 2026-11-10 13:47（第 18 次执行）
+- 主题：第 18 期 接口幂等与防重设计（L0 幂等≠去重+四级强度 / L1 三重放大器 R^D / L2 唯一索引三坑 / L3 状态机+0行双重语义 / L4 token 原子消费 / L5 锁三bug+带租期CAS / L6 幂等表三态与"处理中"租期 / L7 重复支付15次·重复下单UUID时机·MQ ack丢失 / L8 幂等键四方式 / L9 能力矩阵+五道闸门 / L10 速查 / L11 14问答 / L12 3模拟题四档）
+- 产出：`java_interview_18_idempotency.html`（101KB，13 图 + 16 代码块 + 13 section + 10 表，校验 0 issue）、`.md`（26.6k 字符 / 47KB，1 H1 / 14 H2 / 46 H3 / 31 代码块）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（64.1KB）一次成功，file_id `PmxEXHabvGmd`，url https://docs.qq.com/doc/DUG14RVhIYWJ2R21k，回读 1/14/46 与本地完全一致
+- 关键经验：
+  1. base64 通道第 14 次验证稳定（26.6k 字符 / 64KB 无 WAF 拦截）。
+  2. `get_outline` 的 `level` 是字符串枚举 `HEADING_LEVEL_1/2/3`，**不是数字**。上一版脚本按 `lv+1` 递归会抛 `can only concatenate str`。正确做法：只统计 `HEADING_LEVEL_*` 键，子节点递归时不要对 level 做算术。
+  3. 校验脚本第 7 次沿用，本期 13 图只报 1 处（图 5 底部"合法迁移 12 条"单行 935px 越界）→ 拆两行 + viewBox 300→314。**教训：单行塞 6 条状态迁移必越界，凡"A→{B,C}"式枚举超过 3 组就换行。**
+  4. 人工补了两处机器查不出的缺陷：图 3 左侧分支横线(y=266)与竖线(y=318)之间有 52px 断口（改成从 266 直接落到 330）；图 9「超租期」文本基线 150 压在 y=146 分隔线上（下移到 166）。**这两类"连线断口 / 文本压线"是坐标校验的盲区，只能靠逐图读坐标发现。**
+  5. 本期最强表达：把"重试放大"做成 1→3→9→27→81→243 六节点链条图（图 2），比公式 `R^D` 直观一个量级；把支付回调 15 次重试按对数轴排点（图 10），前两次不再挤成一团。**对数轴是处理"指数级间隔时间轴"的有效手法，后续限流/退避类话题可复用。**
+  6. 与第 07 期（MQ 分布式事务）、第 06/17 期（缓存）无重复：开头明示"07 讲过消息可靠性、17 讲过缓存一致性，本期只讲幂等与去重的边界"，把重心放在"0 行双重语义""幂等键由意图决定""处理中必须带租期"三个原创性最强的点上。
+- 下期建议主题：分布式 ID 与时钟问题（雪花位分配与 QPS 上限 / 时钟回拨三种应对 / 号段双 buffer / UUID 导致页分裂的真实代价），已在文末做预告。
+
+## 2026-11-10 15:56（第 19 次执行）
+- 主题调整：原预告的「分布式 ID 与时钟」与第 10 期（五发号器）、第 16 期（雪花位图+号段双 buffer）重复度过高，**改为「Java NIO 与 Netty」**——18 期下来唯一没碰过的大块 Java 基础，且是后端高频题。
+- 主题：第 19 期 NIO 与 Netty（L0 四次拷贝/四次切换 + 四方案 CPU 拷贝条形 / L1 BIO 1 万线程 10GB 栈账 / L2 Buffer 四指针 flip 四态 + Selector / L3 select·poll·epoll 红黑树+就绪链表 + LT/ET / L4 Reactor 三模型 / L5 EventLoop 三铁律 / L6 Pipeline 双向 + ctx.write 跳编码器 / L7 ByteBuf 双指针·16MB Chunk·496B/4KB 分级·refCnt / L8 粘包三切法 + LengthField 五参数 / L9 零拷贝两级 / L10 水位线背压闭环 / L11 生产六坑 / L12 17 数字速查 / L13 14 问答 / L14 3 模拟题四档）
+- 产出：`java_interview_19_nio_netty.html`（133KB，14 图 + 26 代码块 + 15 表 + 16 section + 25 H3，校验 0 issue）、`.md`（37.6k 字符，1 H1 / 16 H2 / 36 H3 / 47 代码块）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（80KB）一次成功，file_id `PAoUglXMvhTk`，url https://docs.qq.com/doc/DUEFvVWdsWE12aFRr，回读 1/16/36 与本地完全一致
+- 关键经验：
+  1. base64 通道第 15 次验证稳定（37.6k 字符 / 80KB 无 WAF 拦截）。
+  2. 校验脚本这次扩成**七项**（新增 `<rect>/<line>` 坐标越界检查 `bounds.py`），一次跑完 14 图只报 1 处；最终 0 issue。图元越界是文本估宽查不出来的盲区（图 5 有 45 个 rect，靠肉眼根本数不过来），值得固化。
+  3. 人工查出 4 处脚本盲区，都是「元素的相对位置」问题：① 图 8 的 `Channel 1..800` 标签超出容器右边界 26px（改成 `#1-800`）；② 图 8 底部两行居中文字左越界 57px（改 anchor=start + 缩短）；③ 图 7 用 `transform="rotate(-90)"` 竖排文字会压在面板边框上（删掉，改正文）；④ 图 9 的虚线高亮框 y=58 压住 y=62 的 inbound 箭头（下移到 64）。**结论：旋转文字、居中长文本、跨图元的高亮框是三类固定雷区，写之前就要避开。**
+  4. 图 13（LengthField 五参数）第一版把 `lengthFieldOffset` 标签放在 x=48 + anchor=end，直接算到 -58 被脚本抓出 → 改为左留白 + 帧整体右移到 x=180 起，同时把右侧注释面板压到 280 宽。**含「左侧标签」的图要先给标签留 150px  gutter，再排主体。**
+  5. 高亮脚本这次改成「单次 alternation + 末尾空分支」的写法，`node --check` 通过、spans 配平（6/6）。注意 heredoc 写含正则的 node 脚本仍会被 bash 吃反斜杠（本次踩了一次），**必须用 Write 落盘**——第 7 期教训依然有效。
+- 下期建议主题：Java 线程池深水区与异步编排（ctl 32 位拆解 / execute 三次 CAS 与 addWorker 回滚 / allowCoreThreadTimeOut 的 1e9 技巧 / CompletableFuture 依赖栈与 thenApply 四种线程归属 / ForkJoinPool 工作窃取 / 虚拟线程下线程池要不要重写），已在文末做预告。

@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 19 · NIO 与 Netty：从 1 万线程到 1 个线程</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:28px; line-height:1.34; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:790px}
+  .sub b{color:#be123c}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.7px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21; line-height:1.6}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Java 面试深水区 · 第 19 期</div>
+  <h1>NIO 与 Netty<span class="arrow">→</span>从 1 万线程到 1 个线程</h1>
+  <p class="sub">被问「Netty 为什么快」，答「用了 NIO 和零拷贝」的人，这题基本就结束了。真正拉开差距的是下一句：<b>它到底省掉了哪几次拷贝、砍掉了几个线程、又为此付出了什么代价</b>。本期把 1 万连接从 10GB 栈压到 1 个线程，把 epoll 的 LT/ET 画成就绪队列，把 <code class="inl">LengthFieldBasedFrameDecoder</code> 的五个参数拆成一把尺子，把 sendfile 的 4 次拷贝减到 0 次 CPU 拷贝。</p>
+  <div class="meta">
+    <div><strong>15</strong>层递进</div>
+    <div><strong>14</strong>张手绘图</div>
+    <div><strong>26</strong>段可跑代码</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span>L0 四次拷贝</span><span>L1 线程账</span><span>L2 Buffer 指针</span>
+  <span class="on">L3 epoll</span><span>L4 Reactor</span><span>L5 EventLoop</span>
+  <span>L6 Pipeline</span><span>L7 ByteBuf</span><span>L8 粘包</span>
+  <span>L9 零拷贝</span><span>L10 背压</span><span>L11 六坑</span>
+  <span>L12 速查</span><span>L13 问答</span><span>L14 模拟题</span>
+</div>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>地基</em></div>
+  <h2>一次 write 背后：4 次拷贝、4 次切换</h2>
+  <p>先把地基打掉。所有 IO 优化——NIO、epoll、零拷贝、直接内存——都在动同一张账单上的两栏：<strong>内存拷贝次数</strong>和<strong>上下文切换次数</strong>。传统 <code class="inl">InputStream.read()</code> 把一个文件发到网络上，内核实际做了这些事。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 396" role="img" aria-label="一次文件发送的四次拷贝与四种方案的 CPU 拷贝量对比">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">上：read + write 的数据路径（4 次拷贝 / 4 次切换）</text>
+
+      <rect x="24" y="48" width="126" height="64" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="87" y="74" font-size="11.5" fill="#334155" font-weight="700" text-anchor="middle">磁盘</text>
+      <text x="87" y="94" font-size="9.8" fill="#94a3b8" text-anchor="middle">DMA 引擎</text>
+
+      <rect x="204" y="48" width="126" height="64" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="267" y="74" font-size="11.5" fill="#0369a1" font-weight="700" text-anchor="middle">内核页缓存</text>
+      <text x="267" y="94" font-size="9.8" fill="#64748b" text-anchor="middle">page cache</text>
+
+      <rect x="384" y="48" width="126" height="64" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="447" y="74" font-size="11.5" fill="#be123c" font-weight="700" text-anchor="middle">用户缓冲区</text>
+      <text x="447" y="94" font-size="9.8" fill="#64748b" text-anchor="middle">byte[] buf</text>
+
+      <rect x="564" y="48" width="126" height="64" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="627" y="74" font-size="11.5" fill="#334155" font-weight="700" text-anchor="middle">socket 缓冲</text>
+      <text x="627" y="94" font-size="9.8" fill="#94a3b8" text-anchor="middle">send buffer</text>
+
+      <rect x="744" y="48" width="126" height="64" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="807" y="74" font-size="11.5" fill="#334155" font-weight="700" text-anchor="middle">网卡</text>
+      <text x="807" y="94" font-size="9.8" fill="#94a3b8" text-anchor="middle">NIC buffer</text>
+
+      <line x1="154" y1="80" x2="196" y2="80" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="196,80 188,76 188,84" fill="#94a3b8"/>
+      <text x="175" y="42" font-size="9.6" fill="#b45309" text-anchor="middle" font-weight="700">DMA ①</text>
+
+      <line x1="334" y1="80" x2="376" y2="80" stroke="#be123c" stroke-width="1.6"/>
+      <polygon points="376,80 368,76 368,84" fill="#be123c"/>
+      <text x="355" y="42" font-size="9.6" fill="#be123c" text-anchor="middle" font-weight="700">CPU ②</text>
+
+      <line x1="514" y1="80" x2="556" y2="80" stroke="#be123c" stroke-width="1.6"/>
+      <polygon points="556,80 548,76 548,84" fill="#be123c"/>
+      <text x="535" y="42" font-size="9.6" fill="#be123c" text-anchor="middle" font-weight="700">CPU ③</text>
+
+      <line x1="694" y1="80" x2="736" y2="80" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="736,80 728,76 728,84" fill="#94a3b8"/>
+      <text x="715" y="42" font-size="9.6" fill="#b45309" text-anchor="middle" font-weight="700">DMA ④</text>
+
+      <text x="24" y="134" font-size="10.5" fill="#64748b">②③ 两次是纯 CPU 拷贝：发 1GB 文件就白走 2GB 内存带宽 —— 这就是「零拷贝」要省的生意</text>
+
+      <line x1="24" y1="152" x2="876" y2="152" stroke="#e2e8f0"/>
+
+      <text x="24" y="176" font-size="12.5" fill="#334155" font-weight="700">下：发 1GB 文件，四种方案的 CPU 拷贝量</text>
+
+      <text x="24" y="208" font-size="11" fill="#475569">read + write</text>
+      <rect x="150" y="196" width="240" height="18" rx="3" fill="#fecdd3"/>
+      <text x="400" y="210" font-size="10.5" fill="#be123c" font-weight="700">2 GB</text>
+
+      <text x="24" y="246" font-size="11" fill="#475569">mmap + write</text>
+      <rect x="150" y="234" width="120" height="18" rx="3" fill="#fed7aa"/>
+      <text x="280" y="248" font-size="10.5" fill="#b45309" font-weight="700">1 GB</text>
+
+      <text x="24" y="284" font-size="11" fill="#475569">sendfile</text>
+      <rect x="150" y="272" width="6" height="18" rx="2" fill="#a7f3d0"/>
+      <text x="166" y="286" font-size="10.5" fill="#047857" font-weight="700">0（数据不出内核，2 次 DMA + 2 次切换）</text>
+
+      <text x="24" y="322" font-size="11" fill="#475569">sendfile + SG</text>
+      <rect x="150" y="310" width="6" height="18" rx="2" fill="#a7f3d0"/>
+      <text x="166" y="324" font-size="10.5" fill="#047857" font-weight="700">0（DMA scatter-gather，连内核缓冲都不用拼）</text>
+
+      <text x="24" y="362" font-size="10.5" fill="#94a3b8">「零拷贝」从来不指零次拷贝，而是零次 CPU 拷贝 —— 这句话说错，后面全错</text>
+      <text x="24" y="382" font-size="10.5" fill="#94a3b8">另一栏更贵却常被忽略：上下文切换一次 3~8 μs，4 次就是 12~32 μs，比 1KB 数据的处理还贵</text>
+    </svg>
+    <figcaption><b>图 1</b>　同一条数据路径，四次拷贝里只有 ②③ 是 CPU 干的；下面四根条形是「发 1GB 时 CPU 白搬多少数据」的直观账</figcaption>
+  </figure>
+
+  <h3>阻塞与非阻塞，到底阻塞了什么</h3>
+  <p>初学者最容易混的一句：<strong>「阻塞」阻塞的是线程，不是数据。</strong> 拆成两个阶段看就清楚了。</p>
+  <table>
+    <tr><th>阶段</th><th>阻塞 IO (BIO)</th><th>非阻塞 IO (NIO)</th><th>IO 多路复用</th></tr>
+    <tr><td>① 等数据到达内核</td><td><strong>线程挂起等</strong></td><td>立刻返回 <code>EWOULDBLOCK</code>，自己轮询</td><td><strong>一个线程等 N 个 fd</strong></td></tr>
+    <tr><td>② 内核拷到用户</td><td>线程挂起等</td><td>线程挂起等</td><td>线程挂起等</td></tr>
+  </table>
+  <p>看懂这张表就明白：<strong>NIO 并不比 BIO 快</strong>，它甚至在单连接场景下更慢（多了轮询）。NIO 的唯一价值是<strong>把「等」这件事从 10000 个线程收敛到 1 个线程</strong>。所以「NIO 快」这个说法本身就是错的——应该说是「NIO 在<strong>高并发连接</strong>下省掉了线程成本」。</p>
+
+  <div class="oneline"><b>面试口径</b>「Java NIO 是非阻塞 IO」只是半句。完整说法是：JDK 的 NIO 在 Linux 上底层仍是 epoll 的 <strong>LT 模式（水平触发）</strong>，而 Netty 在其上封装出了 ET 语义的优化（<code class="inl">EpollEventLoopGroup</code>，需 native 传输）。能说出这一句，说明你不是只看过八股。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>线程账</em></div>
+  <h2>BIO：C10K 为什么死在 1 万线程</h2>
+  <p>「一个连接一个线程」听着没什么，算一遍账就知道它有多荒唐。</p>
+<pre><code>// 教科书式 BIO 服务器：能跑，但只能跑到几百连接
+ServerSocket server = new ServerSocket(8080);
+while (true) {
+    Socket socket = server.accept();            // 阻塞点 1
+    new Thread(() -&gt; {
+        try (BufferedReader in = new BufferedReader(
+                new InputStreamReader(socket.getInputStream()))) {
+            String line;
+            while ((line = in.readLine()) != null) {   // 阻塞点 2
+                // 业务处理
+            }
+        } catch (IOException e) { /* ... */ }
+    }).start();
+}</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 340" role="img" aria-label="BIO 与 NIO 在 1 万连接下的线程与内存对比">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">同样 1 万连接、平均 1% 活跃：两种模型的资源对比</text>
+
+      <rect x="24" y="40" width="410" height="164" rx="10" fill="#fff" stroke="#f5ccd4"/>
+      <text x="42" y="64" font-size="12" fill="#be123c" font-weight="700">BIO：1 万连接 = 1 万线程</text>
+
+      <g fill="#eef1f7" stroke="#d8dfea">
+        <rect x="42" y="78" width="18" height="18" rx="3"/><rect x="66" y="78" width="18" height="18" rx="3"/>
+        <rect x="90" y="78" width="18" height="18" rx="3"/><rect x="114" y="78" width="18" height="18" rx="3"/>
+        <rect x="138" y="78" width="18" height="18" rx="3"/><rect x="162" y="78" width="18" height="18" rx="3"/>
+        <rect x="186" y="78" width="18" height="18" rx="3"/><rect x="210" y="78" width="18" height="18" rx="3"/>
+        <rect x="234" y="78" width="18" height="18" rx="3"/><rect x="258" y="78" width="18" height="18" rx="3"/>
+        <rect x="282" y="78" width="18" height="18" rx="3"/><rect x="306" y="78" width="18" height="18" rx="3"/>
+        <rect x="330" y="78" width="18" height="18" rx="3"/><rect x="354" y="78" width="18" height="18" rx="3"/>
+        <rect x="378" y="78" width="18" height="18" rx="3"/><rect x="402" y="78" width="18" height="18" rx="3"/>
+        <rect x="42" y="102" width="18" height="18" rx="3"/><rect x="66" y="102" width="18" height="18" rx="3"/>
+        <rect x="90" y="102" width="18" height="18" rx="3"/><rect x="114" y="102" width="18" height="18" rx="3"/>
+        <rect x="138" y="102" width="18" height="18" rx="3"/><rect x="162" y="102" width="18" height="18" rx="3"/>
+        <rect x="186" y="102" width="18" height="18" rx="3"/><rect x="210" y="102" width="18" height="18" rx="3"/>
+        <rect x="234" y="102" width="18" height="18" rx="3"/><rect x="258" y="102" width="18" height="18" rx="3"/>
+        <rect x="282" y="102" width="18" height="18" rx="3"/><rect x="306" y="102" width="18" height="18" rx="3"/>
+        <rect x="330" y="102" width="18" height="18" rx="3"/><rect x="354" y="102" width="18" height="18" rx="3"/>
+        <rect x="378" y="102" width="18" height="18" rx="3"/><rect x="402" y="102" width="18" height="18" rx="3"/>
+        <rect x="42" y="126" width="18" height="18" rx="3"/><rect x="66" y="126" width="18" height="18" rx="3"/>
+        <rect x="90" y="126" width="18" height="18" rx="3"/><rect x="114" y="126" width="18" height="18" rx="3"/>
+        <rect x="138" y="126" width="18" height="18" rx="3"/><rect x="162" y="126" width="18" height="18" rx="3"/>
+        <rect x="186" y="126" width="18" height="18" rx="3"/><rect x="210" y="126" width="18" height="18" rx="3"/>
+        <rect x="234" y="126" width="18" height="18" rx="3"/><rect x="258" y="126" width="18" height="18" rx="3"/>
+        <rect x="282" y="126" width="18" height="18" rx="3"/><rect x="306" y="126" width="18" height="18" rx="3"/>
+        <rect x="330" y="126" width="18" height="18" rx="3"/><rect x="354" y="126" width="18" height="18" rx="3"/>
+        <rect x="378" y="126" width="18" height="18" rx="3"/><rect x="402" y="126" width="18" height="18" rx="3"/>
+      </g>
+      <rect x="42" y="126" width="18" height="18" rx="3" fill="#be123c"/>
+      <text x="330" y="142" font-size="9.8" fill="#be123c" font-weight="700">只有这一格在干活</text>
+      <text x="42" y="168" font-size="10.5" fill="#64748b">灰色 = 9999 个线程卡在 readLine() 上 Sleeping</text>
+      <text x="42" y="188" font-size="10.5" fill="#be123c" font-weight="700">10 GB 栈 + 每秒上万次上下文切换，换来 9999 份「我在等」</text>
+
+      <rect x="466" y="40" width="410" height="164" rx="10" fill="#fff" stroke="#bcdcf2"/>
+      <text x="484" y="64" font-size="12" fill="#0369a1" font-weight="700">NIO：1 万连接 = 1 个线程 + 1 个 Selector</text>
+
+      <rect x="484" y="82" width="120" height="70" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="544" y="108" font-size="11" fill="#0369a1" font-weight="700" text-anchor="middle">Selector</text>
+      <text x="544" y="126" font-size="9.6" fill="#64748b" text-anchor="middle">epoll_wait</text>
+      <text x="544" y="142" font-size="9.6" fill="#047857" text-anchor="middle">1 次 syscall</text>
+
+      <line x1="604" y1="117" x2="640" y2="117" stroke="#0369a1" stroke-width="1.6"/>
+      <polygon points="640,117 632,113 632,121" fill="#0369a1"/>
+      <text x="622" y="108" font-size="9.4" fill="#0369a1" text-anchor="middle">就绪 100</text>
+
+      <rect x="644" y="82" width="212" height="70" rx="8" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="660" y="104" font-size="10.4" fill="#047857" font-weight="700">只处理「已就绪」的 100 个</text>
+      <text x="660" y="122" font-size="10.4" fill="#64748b">剩下 9900 个仍在 epoll 里躺着，</text>
+      <text x="660" y="140" font-size="10.4" fill="#64748b">不占线程、不占栈、不切换</text>
+
+      <text x="484" y="176" font-size="10.5" fill="#0369a1" font-weight="700">线程数 1，且负载与「总连接数」无关</text>
+      <text x="484" y="194" font-size="10.5" fill="#64748b">只与「就绪数 × 单次处理耗时」有关</text>
+
+      <line x1="24" y1="224" x2="876" y2="224" stroke="#e2e8f0"/>
+
+      <rect x="24" y="240" width="270" height="58" rx="8" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="42" y="262" font-size="10.4" fill="#64748b">线程栈</text>
+      <text x="42" y="286" font-size="14" fill="#be123c" font-weight="800">10 GB　→　1 MB</text>
+
+      <rect x="310" y="240" width="270" height="58" rx="8" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="328" y="262" font-size="10.4" fill="#64748b">一轮上下文切换</text>
+      <text x="328" y="286" font-size="14" fill="#be123c" font-weight="800">60 ms　→　0</text>
+
+      <rect x="596" y="240" width="280" height="58" rx="8" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="614" y="262" font-size="10.4" fill="#64748b">每次事件循环的 syscall</text>
+      <text x="614" y="286" font-size="14" fill="#be123c" font-weight="800">10000 次　→　1 次</text>
+
+      <text x="24" y="322" font-size="10.5" fill="#94a3b8">C10K 的本质不是「机器扛不住 1 万 socket」，而是扛不住 1 万个栈 + 调度实体</text>
+    </svg>
+    <figcaption><b>图 2</b>　左边那一片灰格子就是 BIO 的全部真相：你花 10GB 内存买的不是并发能力，是 9999 份「我在等」的证明</figcaption>
+  </figure>
+
+  <h3>线程池化能救吗</h3>
+  <p>能救一点，救不彻底，还会引入新问题。</p>
+<pre><code>// 线程池版 BIO：连接数 &gt; 线程数时，新连接只能排队
+ExecutorService pool = new ThreadPoolExecutor(
+    200, 200, 0L, TimeUnit.MILLISECONDS,
+    new ArrayBlockingQueue&lt;&gt;(100),             // 队列 100 → 最多 300 连接
+    new ThreadPoolExecutor.AbortPolicy());     // 第 301 个连接直接抛异常</code></pre>
+  <p>代价是<strong>连接被「降级」成队列元素</strong>：队列里的连接不发数据，但也没法让出线程给后面的人。200 个线程全卡在 200 个慢连接的 <code class="inl">read()</code> 上时，第 201 个连接哪怕毫秒级完成，也得等前面某个连接超时。<strong>线程池把「内存爆炸」换成了「尾延迟爆炸」。</strong></p>
+  <p>这就是为什么 <code class="inl">Tomcat 8.5+</code> 的默认连接器是 NIO 而不是 BIO——不是因为它更快，而是因为它<strong>在 8000 连接下只需要 200 个线程</strong>。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L2</span><em>三件套</em></div>
+  <h2>NIO 三件套：Channel、Buffer、Selector</h2>
+  <p>三个角色，一句话记住：<strong>Channel</strong> 是双向的管道（BIO 的 Stream 是单向的，读和写要两条流）；<strong>Buffer</strong> 是数据容器，容量固定、指针自己管；<strong>Selector</strong> 是登记处，一个线程在这里问「谁准备好了」。</p>
+
+  <h3>Buffer 的四个指针，是全章最该动手画的东西</h3>
+  <p><code class="inl">ByteBuffer</code> 里有 <code class="inl">capacity / limit / position / mark</code> 四个值，初学者 90% 的 bug 都在这里。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="ByteBuffer 在写入、flip、clear 三种状态下的指针变化">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">同一个 allocate(8) 的缓冲区，四个时刻的指针状态</text>
+
+      <text x="60" y="48" font-size="11" fill="#334155" font-weight="700">① 刚分配：全空</text>
+      <g>
+        <rect x="60" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="94" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="128" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="162" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="196" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="230" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="264" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="298" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+      </g>
+      <polygon points="60,98 68,106 76,98" fill="#0369a1"/>
+      <polygon points="332,98 324,106 316,98" fill="#b45309"/>
+      <text x="60" y="124" font-size="10.2" fill="#0369a1">position=0</text>
+      <text x="252" y="124" font-size="10.2" fill="#b45309">limit=8</text>
+      <text x="60" y="140" font-size="10" fill="#94a3b8">capacity=8，mark 未设置</text>
+
+      <text x="500" y="48" font-size="11" fill="#334155" font-weight="700">② put("hello") 之后</text>
+      <g>
+        <rect x="500" y="56" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="534" y="56" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="568" y="56" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="602" y="56" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="636" y="56" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="670" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="704" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="738" y="56" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+      </g>
+      <text x="505" y="79" font-size="12" fill="#0369a1" text-anchor="middle">h</text>
+      <text x="539" y="79" font-size="12" fill="#0369a1" text-anchor="middle">e</text>
+      <text x="573" y="79" font-size="12" fill="#0369a1" text-anchor="middle">l</text>
+      <text x="607" y="79" font-size="12" fill="#0369a1" text-anchor="middle">l</text>
+      <text x="641" y="79" font-size="12" fill="#0369a1" text-anchor="middle">o</text>
+      <polygon points="670,98 678,106 686,98" fill="#0369a1"/>
+      <polygon points="772,98 764,106 756,98" fill="#b45309"/>
+      <text x="660" y="124" font-size="10.2" fill="#0369a1">position=5（写指针）</text>
+      <text x="660" y="140" font-size="10" fill="#b45309">limit=8</text>
+
+      <line x1="24" y1="158" x2="876" y2="158" stroke="#e2e8f0"/>
+
+      <text x="60" y="184" font-size="11" fill="#334155" font-weight="700">③ flip() 之后：准备读</text>
+      <g>
+        <rect x="60" y="192" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="94" y="192" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="128" y="192" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="162" y="192" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="196" y="192" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="230" y="192" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="264" y="192" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="298" y="192" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+      </g>
+      <text x="65" y="215" font-size="12" fill="#0369a1" text-anchor="middle">h</text>
+      <text x="99" y="215" font-size="12" fill="#0369a1" text-anchor="middle">e</text>
+      <text x="133" y="215" font-size="12" fill="#0369a1" text-anchor="middle">l</text>
+      <text x="167" y="215" font-size="12" fill="#0369a1" text-anchor="middle">l</text>
+      <text x="201" y="215" font-size="12" fill="#0369a1" text-anchor="middle">o</text>
+      <polygon points="60,234 68,242 76,234" fill="#0369a1"/>
+      <polygon points="234,234 226,242 218,234" fill="#b45309"/>
+      <text x="60" y="260" font-size="10.2" fill="#0369a1">position=0（读指针）</text>
+      <text x="248" y="260" font-size="10.2" fill="#b45309">limit=5（原写指针变上限）</text>
+      <text x="60" y="278" font-size="10" fill="#94a3b8">remaining() = limit - position = 5</text>
+
+      <text x="500" y="184" font-size="11" fill="#334155" font-weight="700">④ clear() 之后：准备重写</text>
+      <g fill="#f8fafc" stroke="#e3e7ef">
+        <rect x="500" y="192" width="34" height="34"/>
+        <rect x="534" y="192" width="34" height="34"/>
+        <rect x="568" y="192" width="34" height="34"/>
+        <rect x="602" y="192" width="34" height="34"/>
+        <rect x="636" y="192" width="34" height="34"/>
+        <rect x="670" y="192" width="34" height="34"/>
+        <rect x="704" y="192" width="34" height="34"/>
+        <rect x="738" y="192" width="34" height="34"/>
+      </g>
+      <text x="505" y="215" font-size="11" fill="#cbd5e1" text-anchor="middle">h</text>
+      <text x="539" y="215" font-size="11" fill="#cbd5e1" text-anchor="middle">e</text>
+      <text x="573" y="215" font-size="11" fill="#cbd5e1" text-anchor="middle">l</text>
+      <text x="607" y="215" font-size="11" fill="#cbd5e1" text-anchor="middle">l</text>
+      <text x="641" y="215" font-size="11" fill="#cbd5e1" text-anchor="middle">o</text>
+      <polygon points="500,234 508,242 516,234" fill="#0369a1"/>
+      <polygon points="772,234 764,242 756,234" fill="#b45309"/>
+      <text x="500" y="260" font-size="10.2" fill="#0369a1">position=0</text>
+      <text x="640" y="260" font-size="10.2" fill="#b45309">limit=capacity=8</text>
+      <text x="500" y="278" font-size="10" fill="#be123c">数据没被擦除！只是指针复位</text>
+    </svg>
+    <figcaption><b>图 3</b>　<code>flip()</code> 的本质就是「<code>limit = position; position = 0</code>」。注意 ④：<code>clear()</code> 从不擦除数据，只是把两个指针掰回去——所以「以为 clear 了就不会读到旧数据」是经典误区</figcaption>
+  </figure>
+
+  <p>三条铁律，背下来：</p>
+  <ul>
+    <li><strong><code class="inl">flip()</code> = <code class="inl">limit = position; position = 0</code></strong> —— 写完要读，必调。</li>
+    <li><strong><code class="inl">clear()</code> 不删数据</strong>，只是把两个指针复位；<code class="inl">compact()</code> 才保留未读部分。</li>
+    <li><strong><code class="inl">remaining() = limit - position</code></strong> —— 永远用这个判断「还能读多少」，别自己算。</li>
+  </ul>
+
+<pre><code>// 最常见的两个 bug
+ByteBuffer buf = ByteBuffer.allocate(8);
+buf.put("hello".getBytes());
+// 忘了 flip() → buf.get() 直接抛 BufferUnderflowException
+
+// 另一个：读之前不判断 hasRemaining()，靠异常兜底
+while (buf.hasRemaining()) {        // 正确写法
+    byte b = buf.get();
+}</code></pre>
+
+  <div class="oneline"><b>面试追问</b>「<code class="inl">ByteBuffer</code> 为什么不设计成读写两个指针？」答：它是 JDK 的历史包袱，<code class="inl">flip()</code> 这个操作本身就是「模式切换有成本」的证据。Netty 的 <code class="inl">ByteBuf</code> 用 <code class="inl">readerIndex / writerIndex</code> 双指针把这次切换干掉了——见 L7。</div>
+
+  <h3>Selector：把 1 万个 read() 变成 1 次 epoll_wait()</h3>
+<pre><code>Selector selector = Selector.open();
+ServerSocketChannel ssc = ServerSocketChannel.open();
+ssc.bind(new InetSocketAddress(8080));
+ssc.configureBlocking(false);                    // 必须非阻塞
+ssc.register(selector, SelectionKey.OP_ACCEPT);  // 登记「我关心连接事件」
+
+while (true) {
+    int n = selector.select();          // 阻塞在这里，直到有事件就绪
+    if (n == 0) continue;
+    Iterator&lt;SelectionKey&gt; it = selector.selectedKeys().iterator();
+    while (it.hasNext()) {
+        SelectionKey key = it.next();
+        it.remove();                    // 必须手动移除，否则下次重复处理
+        if (key.isAcceptable()) {
+            SocketChannel sc = ((ServerSocketChannel) key.channel()).accept();
+            sc.configureBlocking(false);
+            sc.register(selector, SelectionKey.OP_READ);
+        } else if (key.isReadable()) {
+            // 有数据了，放心读
+        }
+    }
+}</code></pre>
+  <p><strong>关键账本</strong>：1 万连接、平均 1% 活跃。</p>
+  <table>
+    <tr><th>方案</th><th>线程数</th><th>每次事件循环的系统调用</th><th>实际干活的连接</th></tr>
+    <tr><td>BIO</td><td>10000</td><td>10000 次 <code>read()</code></td><td>100 个（9900 次返回 EAGAIN）</td></tr>
+    <tr><td>NIO + Selector</td><td><strong>1</strong></td><td><strong>1 次</strong> <code>epoll_wait()</code></td><td>100 个（只拿到已就绪的）</td></tr>
+  </table>
+  <p>这就是「一个线程管一万连接」的全部秘密：<strong>不是让一个线程干一万份活，而是让一个线程只处理「已经准备好」的那 100 份。</strong></p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L3</span><em>分水岭</em></div>
+  <h2>select / poll / epoll：O(N) 与 O(1) 的分水岭</h2>
+  <p>三个东西常被当成「一代比一代强」，其实差别只有一个：<strong>谁来告诉你「哪个 fd 就绪了」</strong>。</p>
+
+  <h3>select 的三道硬伤</h3>
+<pre><code>fd_set readfds;                    // 位图，FD_SETSIZE 默认 1024
+FD_ZERO(&amp;readfds);
+FD_SET(fd, &amp;readfds);
+int n = select(maxfd + 1, &amp;readfds, NULL, NULL, &amp;timeout);
+// 返回后必须遍历 0..maxfd，用 FD_ISSET 逐个问「你好了吗」
+for (int i = 0; i &lt;= maxfd; i++)
+    if (FD_ISSET(i, &amp;readfds)) { /* 处理 */ }</code></pre>
+  <ol>
+    <li><strong>1024 上限</strong>：<code class="inl">fd_set</code> 是定长位图，改它要重编内核。</li>
+    <li><strong>每次调用都要把整个 fd 集合从用户态拷到内核态</strong>：1 万 fd = 每次 1.25KB 拷贝（还只是位图）。</li>
+    <li><strong>返回后要 O(N) 遍历</strong>：内核只告诉你「有几个好了」，不告诉你是哪几个。</li>
+  </ol>
+  <p><code class="inl">poll</code> 只解了一半：它用 <code class="inl">struct pollfd</code> 数组去掉了 1024 上限，<strong>但拷贝和遍历都还在</strong>。1 万连接、100 个活跃时，9900 次判断是纯浪费。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 372" role="img" aria-label="epoll 的红黑树与就绪链表示意图">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">epoll 的核心：关注集合放红黑树，就绪的放链表 —— 取的时候不碰树</text>
+
+      <rect x="24" y="34" width="852" height="68" rx="8" fill="#fbfcfe" stroke="#e3e7ef" stroke-dasharray="4 3"/>
+      <text x="36" y="54" font-size="10" fill="#94a3b8" font-weight="700" letter-spacing="1">用户态</text>
+
+      <rect x="120" y="48" width="130" height="40" rx="7" fill="#fff" stroke="#dbe3ee"/>
+      <text x="185" y="73" font-size="10.6" fill="#334155" text-anchor="middle">应用线程</text>
+
+      <rect x="290" y="48" width="160" height="40" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="370" y="73" font-size="10.6" fill="#0369a1" text-anchor="middle">epoll_ctl(ADD)</text>
+
+      <rect x="490" y="48" width="150" height="40" rx="7" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="565" y="73" font-size="10.6" fill="#047857" text-anchor="middle">epoll_wait()</text>
+
+      <rect x="680" y="48" width="176" height="40" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="768" y="73" font-size="10.6" fill="#be123c" text-anchor="middle">拿到就绪 fd 列表</text>
+
+      <line x1="250" y1="68" x2="282" y2="68" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="282,68 275,65 275,71" fill="#94a3b8"/>
+      <line x1="450" y1="68" x2="482" y2="68" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="482,68 475,65 475,71" fill="#94a3b8"/>
+      <line x1="640" y1="68" x2="672" y2="68" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="672,68 665,65 665,71" fill="#94a3b8"/>
+
+      <rect x="24" y="118" width="852" height="212" rx="8" fill="#fff" stroke="#e3e7ef" stroke-dasharray="4 3"/>
+      <text x="36" y="138" font-size="10" fill="#94a3b8" font-weight="700" letter-spacing="1">内核态</text>
+
+      <line x1="370" y1="88" x2="370" y2="168" stroke="#0369a1" stroke-width="1.6" stroke-dasharray="4 3"/>
+      <text x="376" y="112" font-size="9.6" fill="#0369a1">登记 fd=5/7/9…</text>
+
+      <text x="60" y="168" font-size="10.6" fill="#334155" font-weight="700">关注集合：红黑树 O(logN)</text>
+
+      <circle cx="220" cy="196" r="15" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="220" y="200" font-size="9.6" fill="#0369a1" text-anchor="middle">root</text>
+      <line x1="208" y1="208" x2="178" y2="228" stroke="#cbd5e1" stroke-width="1.4"/>
+      <line x1="232" y1="208" x2="262" y2="228" stroke="#cbd5e1" stroke-width="1.4"/>
+      <circle cx="170" cy="240" r="15" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="170" y="244" font-size="9.6" fill="#0369a1" text-anchor="middle">fd5</text>
+      <circle cx="270" cy="240" r="15" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="270" y="244" font-size="9.6" fill="#0369a1" text-anchor="middle">fd7</text>
+      <line x1="160" y1="253" x2="136" y2="272" stroke="#cbd5e1" stroke-width="1.4"/>
+      <line x1="182" y1="253" x2="206" y2="272" stroke="#cbd5e1" stroke-width="1.4"/>
+      <circle cx="130" cy="284" r="15" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="130" y="288" font-size="9.4" fill="#0369a1" text-anchor="middle">fd9</text>
+      <circle cx="212" cy="284" r="15" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="212" y="288" font-size="9.4" fill="#0369a1" text-anchor="middle">fd12</text>
+      <text x="60" y="316" font-size="9.8" fill="#94a3b8">每个节点挂一个回调 ep_poll_callback</text>
+
+      <line x1="296" y1="222" x2="424" y2="222" stroke="#b45309" stroke-width="1.6"/>
+      <polygon points="424,222 417,219 417,225" fill="#b45309"/>
+      <text x="360" y="214" font-size="9.4" fill="#b45309" text-anchor="middle">数据到达 / 网卡中断</text>
+      <text x="360" y="240" font-size="9.4" fill="#b45309" text-anchor="middle">回调把节点挂到链表</text>
+
+      <text x="452" y="168" font-size="10.6" fill="#047857" font-weight="700">就绪链表 rdllist</text>
+      <rect x="452" y="232" width="70" height="40" rx="7" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="487" y="257" font-size="10" fill="#047857" text-anchor="middle">fd7</text>
+      <rect x="546" y="232" width="70" height="40" rx="7" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="581" y="257" font-size="10" fill="#047857" text-anchor="middle">fd9</text>
+      <rect x="640" y="232" width="70" height="40" rx="7" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="675" y="257" font-size="10" fill="#047857" text-anchor="middle">fd12</text>
+      <line x1="522" y1="252" x2="540" y2="252" stroke="#047857" stroke-width="1.5"/>
+      <polygon points="540,252 533,249 533,255" fill="#047857"/>
+      <line x1="616" y1="252" x2="634" y2="252" stroke="#047857" stroke-width="1.5"/>
+      <polygon points="634,252 627,249 627,255" fill="#047857"/>
+
+      <line x1="565" y1="88" x2="565" y2="226" stroke="#047857" stroke-width="1.6" stroke-dasharray="4 3"/>
+      <text x="571" y="112" font-size="9.6" fill="#047857">只读这条链，不遍历树</text>
+
+      <text x="730" y="240" font-size="9.8" fill="#047857" font-weight="700">返回 3 个</text>
+      <text x="730" y="258" font-size="9.8" fill="#64748b">而不是 10000 个</text>
+      <text x="452" y="300" font-size="9.8" fill="#94a3b8">复杂度 = O(就绪数)，与总连接数无关</text>
+
+      <text x="24" y="354" font-size="10.5" fill="#94a3b8">一句话：select/poll 是你每次去问「谁好了」；epoll 是内核主动把「好了的」放进链表，你直接取</text>
+    </svg>
+    <figcaption><b>图 4</b>　epoll 三个系统调用各管一段：<code>epoll_ctl</code> 维护红黑树，网卡中断触发回调把节点挂进就绪链表，<code>epoll_wait</code> 只读链表——所以它从不遍历全量 fd</figcaption>
+  </figure>
+
+  <figure>
+    <svg viewBox="0 0 900 250" role="img" aria-label="select 与 epoll 在一次事件循环中的判断次数对比">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">40 个 fd、4 个就绪：一次事件循环的判断次数</text>
+
+      <text x="24" y="60" font-size="10.8" fill="#be123c" font-weight="700">select / poll</text>
+      <g fill="#fee2e2" stroke="#fecdd3">
+        <rect x="150" y="46" width="16" height="16" rx="2"/><rect x="170" y="46" width="16" height="16" rx="2"/>
+        <rect x="190" y="46" width="16" height="16" rx="2"/><rect x="210" y="46" width="16" height="16" rx="2"/>
+        <rect x="230" y="46" width="16" height="16" rx="2"/><rect x="250" y="46" width="16" height="16" rx="2"/>
+        <rect x="270" y="46" width="16" height="16" rx="2"/><rect x="290" y="46" width="16" height="16" rx="2"/>
+        <rect x="310" y="46" width="16" height="16" rx="2"/><rect x="330" y="46" width="16" height="16" rx="2"/>
+        <rect x="350" y="46" width="16" height="16" rx="2"/><rect x="370" y="46" width="16" height="16" rx="2"/>
+        <rect x="390" y="46" width="16" height="16" rx="2"/><rect x="410" y="46" width="16" height="16" rx="2"/>
+        <rect x="430" y="46" width="16" height="16" rx="2"/><rect x="450" y="46" width="16" height="16" rx="2"/>
+        <rect x="470" y="46" width="16" height="16" rx="2"/><rect x="490" y="46" width="16" height="16" rx="2"/>
+        <rect x="510" y="46" width="16" height="16" rx="2"/><rect x="530" y="46" width="16" height="16" rx="2"/>
+        <rect x="550" y="46" width="16" height="16" rx="2"/><rect x="570" y="46" width="16" height="16" rx="2"/>
+        <rect x="590" y="46" width="16" height="16" rx="2"/><rect x="610" y="46" width="16" height="16" rx="2"/>
+        <rect x="630" y="46" width="16" height="16" rx="2"/><rect x="650" y="46" width="16" height="16" rx="2"/>
+        <rect x="670" y="46" width="16" height="16" rx="2"/><rect x="690" y="46" width="16" height="16" rx="2"/>
+        <rect x="710" y="46" width="16" height="16" rx="2"/><rect x="730" y="46" width="16" height="16" rx="2"/>
+        <rect x="750" y="46" width="16" height="16" rx="2"/><rect x="770" y="46" width="16" height="16" rx="2"/>
+        <rect x="790" y="46" width="16" height="16" rx="2"/><rect x="810" y="46" width="16" height="16" rx="2"/>
+        <rect x="830" y="46" width="16" height="16" rx="2"/><rect x="850" y="46" width="16" height="16" rx="2"/>
+      </g>
+      <rect x="270" y="46" width="16" height="16" rx="2" fill="#be123c"/>
+      <rect x="450" y="46" width="16" height="16" rx="2" fill="#be123c"/>
+      <rect x="630" y="46" width="16" height="16" rx="2" fill="#be123c"/>
+      <rect x="810" y="46" width="16" height="16" rx="2" fill="#be123c"/>
+      <text x="24" y="82" font-size="9.8" fill="#be123c">判断 40 次（真实规模 10000 次），其中 36 次是在问「你还没好吗」</text>
+      <text x="24" y="98" font-size="9.8" fill="#94a3b8">还要把整张位图/数组从用户态拷进内核</text>
+
+      <line x1="24" y1="118" x2="876" y2="118" stroke="#e2e8f0"/>
+
+      <text x="24" y="156" font-size="10.8" fill="#047857" font-weight="700">epoll</text>
+      <rect x="150" y="142" width="16" height="16" rx="2" fill="#047857"/>
+      <rect x="170" y="142" width="16" height="16" rx="2" fill="#047857"/>
+      <rect x="190" y="142" width="16" height="16" rx="2" fill="#047857"/>
+      <rect x="210" y="142" width="16" height="16" rx="2" fill="#047857"/>
+      <text x="238" y="155" font-size="10" fill="#64748b">← 链表里只有这 4 个，判断 4 次就结束</text>
+      <text x="24" y="178" font-size="9.8" fill="#047857">判断 4 次，零拷贝：fd 的注册只在 epoll_ctl 时发生一次，之后不再重复传</text>
+      <text x="24" y="194" font-size="9.8" fill="#94a3b8">40 → 4 是 10 倍；100 万 → 1 万 是 100 倍 —— 这就是 C1000K 的现实方案</text>
+
+      <rect x="24" y="210" width="852" height="30" rx="6" fill="#fffbeb" stroke="#fde68a"/>
+      <text x="38" y="230" font-size="10.2" fill="#b45309">但注意：连接数只有几百时，epoll 反而比 poll 慢一点点（多了红黑树维护）—— 技术选型必须说清「在什么规模下」</text>
+    </svg>
+    <figcaption><b>图 5</b>　同样是 4 个就绪，一个问 40 次、一个问 4 次。规模越大差距越离谱：这不是「优化」，是复杂度不同的算法</figcaption>
+  </figure>
+
+  <h3>LT 与 ET：一个必考、一个必踩</h3>
+  <p><strong>LT（水平触发，默认）</strong>：只要缓冲区还有数据，<code class="inl">epoll_wait</code> <strong>每次都会返回</strong>这个 fd；<strong>ET（边缘触发，<code class="inl">EPOLLET</code>）</strong>：状态<strong>变化</strong>时才通知一次，你必须<strong>一次读到 <code class="inl">EAGAIN</code></strong>，否则剩下的数据再也不会通知你——<strong>事件丢了，连接假死</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="LT 与 ET 的事件通知次数对比时间轴">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">同一段「数据陆续到达、应用处理较慢」的时间线，两种触发模式的差别</text>
+
+      <text x="24" y="62" font-size="10.8" fill="#be123c" font-weight="700">LT 水平触发</text>
+      <line x1="130" y1="58" x2="860" y2="58" stroke="#cbd5e1" stroke-width="1.6"/>
+      <polygon points="860,58 851,54 851,62" fill="#cbd5e1"/>
+      <line x1="200" y1="58" x2="200" y2="80" stroke="#be123c" stroke-width="1.6"/>
+      <polygon points="200,86 196,78 204,78" fill="#be123c"/>
+      <line x1="320" y1="58" x2="320" y2="80" stroke="#be123c" stroke-width="1.6"/>
+      <polygon points="320,86 316,78 324,78" fill="#be123c"/>
+      <line x1="440" y1="58" x2="440" y2="80" stroke="#be123c" stroke-width="1.6"/>
+      <polygon points="440,86 436,78 444,78" fill="#be123c"/>
+      <text x="200" y="104" font-size="9.6" fill="#be123c" text-anchor="middle">返回</text>
+      <text x="320" y="104" font-size="9.6" fill="#be123c" text-anchor="middle">又返回</text>
+      <text x="440" y="104" font-size="9.6" fill="#be123c" text-anchor="middle">再返回</text>
+      <text x="560" y="104" font-size="9.8" fill="#64748b">只要没读完，每次都通知 —— 漏读也补得回来，但可能「事件风暴」</text>
+
+      <line x1="24" y1="146" x2="876" y2="146" stroke="#e2e8f0"/>
+
+      <text x="24" y="186" font-size="10.8" fill="#047857" font-weight="700">ET 边缘触发</text>
+      <line x1="130" y1="182" x2="860" y2="182" stroke="#cbd5e1" stroke-width="1.6"/>
+      <polygon points="860,182 851,178 851,186" fill="#cbd5e1"/>
+      <line x1="200" y1="182" x2="200" y2="204" stroke="#047857" stroke-width="1.6"/>
+      <polygon points="200,210 196,202 204,202" fill="#047857"/>
+      <text x="200" y="228" font-size="9.6" fill="#047857" text-anchor="middle">只返回一次</text>
+
+      <rect x="230" y="168" width="330" height="28" rx="6" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="244" y="187" font-size="9.8" fill="#047857">应用必须自己 while 循环读到 -1（EAGAIN）</text>
+
+      <text x="580" y="228" font-size="9.8" fill="#be123c">没读干净 → 剩下的数据永远收不到通知 → 连接假死</text>
+
+      <line x1="620" y1="182" x2="620" y2="204" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="3 3"/>
+      <text x="620" y="216" font-size="9.4" fill="#94a3b8" text-anchor="middle">不会再通知</text>
+
+      <rect x="24" y="248" width="852" height="40" rx="8" fill="#fffbeb" stroke="#fde68a"/>
+      <text x="38" y="264" font-size="10.2" fill="#b45309">Netty 默认 NioEventLoop 走 JDK Selector（LT）；要 ET 必须换 EpollEventLoopGroup（netty-transport-native-epoll，仅 Linux）</text>
+      <text x="38" y="280" font-size="10.2" fill="#64748b">ET 的价值：把一次事件循环里的 syscall 减少一个数量级；代价：漏读一次就是永久丢事件</text>
+    </svg>
+    <figcaption><b>图 6</b>　LT 是「你不读完我就一直提醒你」，ET 是「只提醒你一次，后果自负」。所以 ET 必须配 <code>while</code> 读到 EAGAIN 的读法</figcaption>
+  </figure>
+
+<pre><code>// ET 模式的正确读法：必须循环读到 -1 (EAGAIN)
+while (true) {
+    int n = channel.read(buf);
+    if (n &gt; 0) { /* 处理 */ buf.clear(); }
+    else if (n == 0) break;              // 对端关闭
+    else break;                          // n == -1 且 EAGAIN → 读干净了，退出
+}</code></pre>
+
+  <div class="warn"><b>面试要能说出的差别</b>：LT 模式下，一次 <code class="inl">epoll_wait</code> 可能反复返回同一个 fd（如果处理速度跟不上到达速度），产生「事件风暴」；ET 保证每个就绪状态只通知一次，<strong>系统调用次数能少一个数量级</strong>。所以选 ET 不是为了「更快」，是为了「更少 syscall」——代价是写法要求严得多。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L4</span><em>线程模型</em></div>
+  <h2>Reactor 三模型：谁来 accept，谁来干活</h2>
+  <p>有了 epoll，下一个问题是<strong>「谁来处理事件」</strong>。Reactor 模式把它拆成两个角色：<strong>Reactor（监听 + 分发）</strong>和 <strong>Handler（干活）</strong>。三种经典组合，本质是<strong>把「分发」和「处理」拆到几个线程上</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 356" role="img" aria-label="Reactor 三种线程模型并排对比">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">三代模型的演进：线程越拆越多，锁越来越少，复杂度越来越高</text>
+
+      <rect x="24" y="34" width="272" height="264" rx="10" fill="#fff" stroke="#e3e7ef"/>
+      <text x="40" y="56" font-size="11.4" fill="#be123c" font-weight="700">① 单 Reactor 单线程</text>
+      <rect x="40" y="68" width="240" height="196" rx="9" fill="#fff5f6" stroke="#f5ccd4" stroke-dasharray="4 3"/>
+      <text x="52" y="86" font-size="9.6" fill="#be123c">1 个线程全包</text>
+
+      <rect x="56" y="96" width="208" height="52" rx="7" fill="#fff" stroke="#dbe3ee"/>
+      <text x="160" y="118" font-size="10.6" fill="#334155" text-anchor="middle">Selector</text>
+      <text x="160" y="136" font-size="9.6" fill="#94a3b8" text-anchor="middle">epoll_wait</text>
+
+      <line x1="160" y1="148" x2="160" y2="168" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="160,168 156,161 164,161" fill="#94a3b8"/>
+
+      <rect x="56" y="172" width="208" height="76" rx="7" fill="#fff" stroke="#dbe3ee"/>
+      <text x="160" y="194" font-size="10.4" fill="#334155" text-anchor="middle">accept / read / write</text>
+      <text x="160" y="212" font-size="10.4" fill="#be123c" text-anchor="middle">解码 + 业务 + 编码</text>
+      <text x="160" y="232" font-size="9.6" fill="#94a3b8" text-anchor="middle">全在同一条线程上</text>
+
+      <text x="44" y="284" font-size="9.8" fill="#64748b">代表：Redis 6.0 之前</text>
+
+      <rect x="314" y="34" width="272" height="264" rx="10" fill="#fff" stroke="#e3e7ef"/>
+      <text x="330" y="56" font-size="11.4" fill="#b45309" font-weight="700">② 单 Reactor 多线程</text>
+
+      <rect x="330" y="68" width="240" height="60" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="450" y="90" font-size="10.6" fill="#0369a1" text-anchor="middle">Reactor 线程</text>
+      <text x="450" y="108" font-size="9.6" fill="#64748b" text-anchor="middle">accept + read + 解码</text>
+
+      <line x1="450" y1="128" x2="450" y2="150" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="450,150 446,143 454,143" fill="#94a3b8"/>
+      <text x="458" y="144" font-size="9.2" fill="#94a3b8">投递任务</text>
+
+      <rect x="330" y="154" width="240" height="60" rx="7" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="450" y="176" font-size="10.6" fill="#b45309" text-anchor="middle">业务线程池 × N</text>
+      <text x="450" y="194" font-size="9.6" fill="#64748b" text-anchor="middle">业务处理 + 编码</text>
+
+      <line x1="578" y1="184" x2="578" y2="98" stroke="#b45309" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <polygon points="578,98 574,106 582,106" fill="#b45309"/>
+      
+
+      <text x="334" y="240" font-size="9.8" fill="#b45309">代价：回写要 selector.wakeup()，5~20 μs</text>
+      <text x="334" y="260" font-size="9.8" fill="#64748b">代表：Tomcat NIO、Dubbo 分发</text>
+      <text x="334" y="284" font-size="9.8" fill="#94a3b8">业务轻、连接多时这次切换纯属浪费</text>
+
+      <rect x="604" y="34" width="272" height="264" rx="10" fill="#fff" stroke="#e3e7ef"/>
+      <text x="620" y="56" font-size="11.4" fill="#047857" font-weight="700">③ 主从 Reactor（Netty）</text>
+
+      <rect x="620" y="66" width="240" height="52" rx="7" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="740" y="86" font-size="10.6" fill="#047857" text-anchor="middle">bossGroup × 1</text>
+      <text x="740" y="104" font-size="9.6" fill="#64748b" text-anchor="middle">只做 accept，逻辑上永不排队</text>
+
+      <line x1="740" y1="118" x2="740" y2="136" stroke="#047857" stroke-width="1.5"/>
+      <polygon points="740,136 736,129 744,129" fill="#047857"/>
+      <text x="748" y="131" font-size="9.2" fill="#047857">register</text>
+
+      <rect x="620" y="140" width="240" height="124" rx="8" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="632" y="150" width="66" height="50" rx="6" fill="#fff" stroke="#bcdcf2"/>
+      <text x="665" y="171" font-size="9.4" fill="#0369a1" text-anchor="middle">EL-0</text>
+      <text x="665" y="187" font-size="8.6" fill="#94a3b8" text-anchor="middle">read</text>
+      <rect x="707" y="150" width="66" height="50" rx="6" fill="#fff" stroke="#bcdcf2"/>
+      <text x="740" y="171" font-size="9.4" fill="#0369a1" text-anchor="middle">EL-1</text>
+      <text x="740" y="187" font-size="8.6" fill="#94a3b8" text-anchor="middle">decode</text>
+      <rect x="782" y="150" width="66" height="50" rx="6" fill="#fff" stroke="#bcdcf2"/>
+      <text x="815" y="171" font-size="9.4" fill="#0369a1" text-anchor="middle">EL-2</text>
+      <text x="815" y="187" font-size="8.6" fill="#94a3b8" text-anchor="middle">业务</text>
+      <text x="740" y="220" font-size="9.6" fill="#64748b" text-anchor="middle">workerGroup × CPU×2</text>
+      <text x="740" y="240" font-size="9.6" fill="#64748b" text-anchor="middle">每个 EL = 1 线程 + 1 Selector</text>
+      <text x="740" y="258" font-size="9.4" fill="#94a3b8" text-anchor="middle">8 核机器：1 + 16 = 17 个 IO 线程</text>
+
+      <text x="624" y="284" font-size="9.8" fill="#94a3b8">Netty / Nginx / Kafka 网络层都是这个形状</text>
+    </svg>
+    <figcaption><b>图 7</b>　三代模型的差别不在「几个线程」，而在<strong>「谁承担了跨线程投递的成本」</strong>：① 全串行无成本，② 每笔回写都付费，③ 把成本提前拆成「accept / IO」两段固定开销</figcaption>
+  </figure>
+
+  <div class="good"><b>为什么 accept 要单独一个组</b>：<code class="inl">accept</code> 是「低频、但一旦发生就必须立刻处理」的操作。建连高峰时（比如 1 秒 5000 个新连接），如果 accept 和 read 抢同一个线程，已经在服务的连接会被拖慢。拆开后 boss 线程只干一件事，<strong>逻辑上永远不排队</strong>。</div>
+
+<pre><code>// NioEventLoopGroup 默认线程数 = max(1, CPU 核数 × 2)
+// 8 核机器 → boss 1 个 + worker 16 个 = 17 个 IO 线程
+EventLoopGroup boss   = new NioEventLoopGroup(1);   // 通常 1 就够
+EventLoopGroup worker = new NioEventLoopGroup();    // 默认 CPU × 2</code></pre>
+
+  <table>
+    <tr><th>配置</th><th>线程数</th><th>适用</th></tr>
+    <tr><td>boss=1, worker=CPU×2</td><td>17</td><td><strong>默认，90% 场景够用</strong></td></tr>
+    <tr><td>boss=1, worker=CPU</td><td>9</td><td>业务全异步、无阻塞调用</td></tr>
+    <tr><td>boss=1, worker=CPU×4</td><td>33</td><td>有少量阻塞（日志落盘、本地缓存）</td></tr>
+    <tr><td>worker=100</td><td>100+</td><td><strong>反模式</strong>：线程多了只增加切换，不增加吞吐</td></tr>
+  </table>
+
+  <div class="oneline"><b>面试口径</b>「Netty 线程池开多大」不是越大越好。<code class="inl">EventLoop</code> 是<strong>串行无锁</strong>的，线程多了只是把「单核串行」变成「多核并行」，每个 Channel 的处理仍然是串行的。真正的上限取决于<strong>每个 Channel 的处理耗时</strong>：如果每个 handler 只花 50μs，16 个线程能撑 32 万 QPS；如果某个 handler 里查了一次 DB（20ms），那 16 个线程只能撑 800 QPS——<strong>这才是要调的地方</strong>。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L5</span><em>心脏</em></div>
+  <h2>EventLoop：Netty 最重要的三条铁律</h2>
+  <p><code class="inl">EventLoop</code> 本质是<strong>「一个 Selector + 一个任务队列 + 一个永不退出的线程」</strong>。它整个 <code class="inl">run()</code> 方法就三行，却决定了 Netty 全部的设计约束。</p>
+
+<pre><code>// 抄自 NioEventLoop.run() 的核心结构
+protected void run() {
+    for (;;) {                                  // 死循环，永不退出
+        select();                               // ① epoll_wait，有超时
+        processSelectedKeys();                  // ② 处理 IO 事件（read/write/accept）
+        runAllTasks();                          // ③ 处理投递进来的普通任务
+    }
+}</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 372" role="img" aria-label="Netty 的 bossGroup 与 workerGroup 以及 Channel 到 EventLoop 的绑定关系">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">一个 Channel 终生只属于一个 EventLoop；一个 EventLoop 串行处理它名下所有 Channel</text>
+
+      <rect x="30" y="108" width="156" height="72" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="108" y="132" font-size="11" fill="#047857" text-anchor="middle" font-weight="700">bossGroup</text>
+      <text x="108" y="150" font-size="9.6" fill="#64748b" text-anchor="middle">1 个 EventLoop</text>
+      <text x="108" y="168" font-size="9.6" fill="#64748b" text-anchor="middle">只做 accept</text>
+
+      <line x1="186" y1="144" x2="246" y2="144" stroke="#047857" stroke-width="1.6"/>
+      <polygon points="246,144 239,141 239,147" fill="#047857"/>
+      <text x="216" y="136" font-size="9.4" fill="#047857" text-anchor="middle">register</text>
+
+      <rect x="252" y="44" width="330" height="268" rx="10" fill="#fbfcfe" stroke="#dbe3ee"/>
+      <text x="266" y="64" font-size="10.4" fill="#0369a1" font-weight="700">workerGroup（8 核 → 16 个 EventLoop）</text>
+
+      <rect x="266" y="76" width="150" height="46" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="341" y="96" font-size="10" fill="#0369a1" text-anchor="middle" font-weight="700">EventLoop-0</text>
+      <text x="341" y="112" font-size="8.8" fill="#64748b" text-anchor="middle">1 线程 + 1 Selector</text>
+      <rect x="432" y="86" width="24" height="16" rx="3" fill="#fff" stroke="#bcdcf2"/>
+      <rect x="462" y="86" width="24" height="16" rx="3" fill="#fff" stroke="#bcdcf2"/>
+      <rect x="492" y="86" width="24" height="16" rx="3" fill="#fff" stroke="#bcdcf2"/>
+      <text x="528" y="98" font-size="8.6" fill="#94a3b8">#1-800</text>
+
+      <rect x="266" y="132" width="150" height="46" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="341" y="152" font-size="10" fill="#0369a1" text-anchor="middle" font-weight="700">EventLoop-1</text>
+      <text x="341" y="168" font-size="8.8" fill="#64748b" text-anchor="middle">1 线程 + 1 Selector</text>
+      <rect x="432" y="142" width="24" height="16" rx="3" fill="#fff" stroke="#bcdcf2"/>
+      <rect x="462" y="142" width="24" height="16" rx="3" fill="#fff" stroke="#bcdcf2"/>
+      <rect x="492" y="142" width="24" height="16" rx="3" fill="#fff" stroke="#bcdcf2"/>
+      <text x="528" y="154" font-size="8.6" fill="#94a3b8">#801-1600</text>
+
+      <rect x="266" y="188" width="150" height="46" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="341" y="208" font-size="10" fill="#0369a1" text-anchor="middle" font-weight="700">EventLoop-2</text>
+      <text x="341" y="224" font-size="8.8" fill="#64748b" text-anchor="middle">1 线程 + 1 Selector</text>
+      <rect x="432" y="198" width="24" height="16" rx="3" fill="#fff" stroke="#bcdcf2"/>
+      <rect x="462" y="198" width="24" height="16" rx="3" fill="#fff" stroke="#bcdcf2"/>
+      <rect x="492" y="198" width="24" height="16" rx="3" fill="#fff" stroke="#bcdcf2"/>
+      <text x="528" y="210" font-size="8.6" fill="#94a3b8">#1601-2400</text>
+
+      <text x="341" y="258" font-size="9.6" fill="#64748b" text-anchor="middle">…… 共 16 个</text>
+      <text x="266" y="278" font-size="9.4" fill="#be123c">同一 EL 上的 Channel 全部串行，一次阻塞乘 800</text>
+      <text x="266" y="298" font-size="9.4" fill="#94a3b8">50 万连接 ÷ 16 = 每个 EL 承担 3.1 万个</text>
+
+      <rect x="600" y="44" width="276" height="268" rx="10" fill="#fff" stroke="#e3e7ef"/>
+      <text x="614" y="64" font-size="10.4" fill="#334155" font-weight="700">三条铁律（背下来就能答八成题）</text>
+
+      <text x="614" y="88" font-size="9.8" fill="#be123c" font-weight="700">① 绑定不可变</text>
+      <text x="614" y="105" font-size="9.4" fill="#64748b">Channel 注册后终生属于一个 EventLoop，</text>
+      <text x="614" y="120" font-size="9.4" fill="#64748b">因为它的状态全都没有加锁</text>
+
+      <text x="614" y="146" font-size="9.8" fill="#be123c" font-weight="700">② 绝不能阻塞</text>
+      <text x="614" y="163" font-size="9.4" fill="#64748b">DB 查询 5ms × 800 Channel = 全组 +5ms，</text>
+      <text x="614" y="178" font-size="9.4" fill="#64748b">sleep(1s) 直接让 P99 爆到秒级</text>
+
+      <text x="614" y="204" font-size="9.8" fill="#be123c" font-weight="700">③ 串行无锁，所以 P99 = 最慢那次</text>
+      <text x="614" y="221" font-size="9.4" fill="#64748b">一轮循环耗时 = 800 个 Channel 处理时间之和</text>
+      <text x="614" y="236" font-size="9.4" fill="#64748b">每 Channel 30μs → 一轮 24ms</text>
+
+      <rect x="614" y="252" width="248" height="46" rx="7" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="626" y="270" font-size="9.2" fill="#047857">所以 write 是线程安全的（自动切回 EL），</text>
+      <text x="626" y="286" font-size="9.2" fill="#be123c">但多次 write 不保证原子顺序</text>
+
+      <text x="24" y="340" font-size="10.5" fill="#94a3b8">一句话：Netty 用「线程封闭」替掉了锁 —— 这是它性能的地基，也是「handler 里不能阻塞」这条纪律的来源</text>
+    </svg>
+    <figcaption><b>图 8</b>　注意右边三条铁律不是三个知识点，是同一件事的三个推论：因为不加锁，所以不能换 EventLoop、不能阻塞、P99 取决于最慢的那次处理</figcaption>
+  </figure>
+
+  <h3>铁律一：一个 Channel 终生只属于一个 EventLoop</h3>
+  <p>因为 <code class="inl">Channel</code> 的所有状态（pipeline、unsafe、缓冲区）都<strong>没有加锁</strong>。如果允许两个 EventLoop 同时操作一个 Channel，就必须加锁——那 Netty 的性能优势立刻归零。这条铁律的直接推论是：</p>
+<pre><code>// 在任何线程里写数据，都会先调度回该 Channel 的 EventLoop
+channel.writeAndFlush(msg);
+// 内部：if (inEventLoop()) doWrite(); else eventLoop.execute(() -&gt; doWrite());</code></pre>
+  <p>所以 <strong>Channel 的 write 是线程安全的</strong>（它会自动切回自己的 EventLoop），<strong>但多步操作不原子</strong>：</p>
+<pre><code>// 反模式：3 个线程同时执行，顺序不可控
+channel.write(a);
+channel.write(b);
+channel.writeAndFlush(c);
+// 结果可能是 a, c, b —— 因为三次都是「投递任务」，线程调度决定顺序
+
+// 正确：合并成一次投递，保证原子性
+channel.eventLoop().execute(() -&gt; {
+    channel.write(a).write(b).writeAndFlush(c);   // 同一个 EventLoop 内，顺序确定
+});</code></pre>
+
+  <h3>铁律二：EventLoop 里绝不能有阻塞调用（生产事故第一名）</h3>
+  <table>
+    <tr><th>阻塞操作</th><th>单次耗时</th><th>卡住 1000 个 Channel 的代价</th></tr>
+    <tr><td>一次 MySQL 查询</td><td>5 ms</td><td>该线程上 1000 个请求全部 +5ms 尾延迟</td></tr>
+    <tr><td>一次 HTTP 远程调用</td><td>50 ms</td><td>全部 +50ms，且排队累积</td></tr>
+    <tr><td><code>Thread.sleep(1000)</code></td><td>1000 ms</td><td>直接 P99 爆到秒级</td></tr>
+    <tr><td>读一个大文件</td><td>200 ms</td><td>连接超时、心跳丢失、误判断线</td></tr>
+  </table>
+<pre><code>// 方案 A：给这组 handler 单独的 EventExecutorGroup
+pipeline.addLast(new DefaultEventExecutorGroup(16), new SlowBusinessHandler());
+
+// 方案 B：handler 内部手动丢线程池
+public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    bizPool.execute(() -&gt; {
+        Result r = doSlowQuery(msg);              // 阻塞在这里无所谓
+        ctx.writeAndFlush(r);                     // write 是线程安全的
+    });
+}</code></pre>
+  <div class="trap"><b>辨别技巧</b>：<code class="inl">channelRead</code> 里出现 <code class="inl">jdbc</code>、<code class="inl">http</code>、<code class="inl">sleep</code>、<code class="inl">synchronized(全局锁)</code>、<code class="inl">File</code>，一律是事故。用 <code class="inl">arthas trace</code> 打一下 <code class="inl">NioEventLoop.run</code>，如果 <code class="inl">processSelectedKeys</code> 耗时超过 1ms 就该查了。</div>
+
+  <h3>铁律三：一轮循环的耗时是「名下所有 Channel 之和」</h3>
+  <p>因为一个 EventLoop 一个线程、串行处理它名下所有 Channel 的事件，所以任何单个请求的<strong>等待时间上界</strong>等于「一轮事件循环的总耗时」：</p>
+<pre><code>EventLoop-3 上挂了 800 个 Channel
+一轮循环 = 800 × 单次处理 30μs ≈ 24ms
+→ 任何请求最坏要等 24ms 才被处理
+
+这就是「在 handler 里加一行同步日志就掉性能」的原因：
+单次 2μs 看起来无害，乘以 800 就是 1.6ms</code></pre>
+  <p><strong>容量估算公式</strong>：<code class="inl">单 EventLoop 能扛的连接数 ≈ 1 秒 ÷ (单连接每秒事件数 × 单次处理耗时)</code>。1 万连接、每连接每秒 1 个事件、每次 10μs → 需要 100ms/秒，一个线程理论上够，但为了抗抖动按 CPU×2 配。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L6</span><em>责任链</em></div>
+  <h2>Pipeline 与 Handler：事件往哪个方向流</h2>
+  <p><code class="inl">Pipeline</code> 是 Netty 对责任链的实现，但比 GoF 那个难一个量级，因为<strong>事件是双向的</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 356" role="img" aria-label="Pipeline 的双向事件传播与 ctx.write 跳过编码器的示意">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">同一条链，两个方向：inbound 从 head 走到 tail，outbound 从 tail 走回 head</text>
+
+      <rect x="30" y="72" width="70" height="52" rx="7" fill="#f1f5f9" stroke="#cbd5e1"/>
+      <text x="65" y="103" font-size="10.4" fill="#475569" text-anchor="middle">head</text>
+
+      <rect x="124" y="72" width="120" height="52" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="184" y="94" font-size="10" fill="#0369a1" text-anchor="middle">decoder</text>
+      <text x="184" y="111" font-size="8.8" fill="#64748b" text-anchor="middle">inbound</text>
+
+      <rect x="268" y="72" width="120" height="52" rx="7" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="328" y="94" font-size="10" fill="#b45309" text-anchor="middle">business</text>
+      <text x="328" y="111" font-size="8.8" fill="#64748b" text-anchor="middle">inbound</text>
+
+      <rect x="412" y="72" width="120" height="52" rx="7" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="472" y="94" font-size="10" fill="#047857" text-anchor="middle">encoder</text>
+      <text x="472" y="111" font-size="8.8" fill="#64748b" text-anchor="middle">outbound</text>
+
+      <rect x="556" y="72" width="70" height="52" rx="7" fill="#f1f5f9" stroke="#cbd5e1"/>
+      <text x="591" y="103" font-size="10.4" fill="#475569" text-anchor="middle">tail</text>
+
+      <line x1="100" y1="62" x2="548" y2="62" stroke="#0369a1" stroke-width="1.6"/>
+      <polygon points="548,62 541,59 541,65" fill="#0369a1"/>
+      <text x="324" y="54" font-size="9.6" fill="#0369a1" text-anchor="middle">inbound：channelRead / channelActive → 向右</text>
+
+      <line x1="556" y1="138" x2="108" y2="138" stroke="#047857" stroke-width="1.6"/>
+      <polygon points="108,138 115,135 115,141" fill="#047857"/>
+      <text x="332" y="156" font-size="9.6" fill="#047857" text-anchor="middle">outbound：write / flush / close → 向左</text>
+
+      <text x="30" y="192" font-size="10.4" fill="#047857" font-weight="700">路径 A：channel.writeAndFlush(msg)</text>
+      <line x1="591" y1="212" x2="72" y2="212" stroke="#047857" stroke-width="2"/>
+      <polygon points="72,212 80,208 80,216" fill="#047857"/>
+      <text x="600" y="216" font-size="9.6" fill="#047857">从 tail 出发 → 经过 encoder ✓</text>
+      <text x="600" y="232" font-size="9.4" fill="#64748b">所有 outbound handler 都会执行</text>
+
+      <text x="30" y="262" font-size="10.4" fill="#be123c" font-weight="700">路径 B：在 business 里调 ctx.write(msg)</text>
+      <line x1="328" y1="282" x2="72" y2="282" stroke="#be123c" stroke-width="2" stroke-dasharray="5 4"/>
+      <polygon points="72,282 80,278 80,286" fill="#be123c"/>
+      <text x="336" y="286" font-size="9.6" fill="#be123c">从当前节点往 head 走 → 跳过 encoder ✗</text>
+      <text x="336" y="302" font-size="9.4" fill="#be123c" font-weight="700">结果：长度头没加上，对端解析全乱</text>
+
+      <rect x="408" y="64" width="128" height="68" rx="9" fill="none" stroke="#be123c" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <text x="472" y="178" font-size="9.2" fill="#be123c" text-anchor="middle">路径 B 完全碰不到这里</text>
+
+      <rect x="30" y="316" width="846" height="32" rx="7" fill="#fffbeb" stroke="#fde68a"/>
+      <text x="44" y="336" font-size="9.8" fill="#b45309">口诀：ctx.write 只往 head 走，channel.write 从 tail 走 —— 需要经过前面的编码器时，必须用后者</text>
+    </svg>
+    <figcaption><b>图 9</b>　「能连上但对端数据错位」的头号原因就是路径 B。判断标准只有一条：<strong>你的编码器在 handler 的哪一侧</strong>——它在靠 tail 那边，<code>ctx.write()</code> 就永远碰不到它</figcaption>
+  </figure>
+
+  <h3>入站/出站的方向由「handler 类型」决定，不是由「添加顺序」决定</h3>
+<pre><code>pipeline.addLast("decoder",  new LengthFieldBasedFrameDecoder(...));  // inbound
+pipeline.addLast("encoder",  new LengthFieldPrepender(4));            // outbound
+pipeline.addLast("business", new BusinessHandler());                 // inbound</code></pre>
+  <p><code class="inl">addLast</code> 的顺序只决定<strong>链上的位置</strong>，事件传播方向由 handler 实现了哪个方法决定：实现 <code class="inl">channelRead</code> / <code class="inl">channelActive</code> 就是 inbound（head→tail），实现 <code class="inl">write</code> / <code class="inl">flush</code> / <code class="inl">close</code> 就是 outbound（tail→head）。</p>
+
+  <h3>@Sharable 只对「无状态 handler」合法</h3>
+<pre><code>@ChannelHandler.Sharable          // 声明：这个实例可以挂到多个 Channel 上
+public class AuthHandler extends ChannelInboundHandlerAdapter {
+    private int counter = 0;      // 有状态！共享 = 竞态
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+        counter++;                // 多个 EventLoop 并发 ++，必错
+    }
+}</code></pre>
+  <p><code class="inl">@Sharable</code> 的作用是<strong>复用同一个 handler 实例</strong>（省内存：10 万连接 × 每个 handler 200B = 20MB）。但一旦实例被共享，所有字段都变成<strong>跨 Channel 的共享状态</strong>，而多个 Channel 可能落在<strong>不同 EventLoop 线程</strong>上——直接数据竞争。</p>
+  <table>
+    <tr><th>场景</th><th>是否加 <code>@Sharable</code></th></tr>
+    <tr><td>无状态编解码器（<code>LengthFieldPrepender</code>）</td><td>可以，官方自带的就是 sharable</td></tr>
+    <tr><td>无状态鉴权 / 日志</td><td>可以</td></tr>
+    <tr><td>带计数器、带本地缓存、带 <code>ByteBuf</code> 字段</td><td><strong>绝不能</strong></td></tr>
+    <tr><td>每个连接需要独立状态</td><td>每个连接 <code>new</code> 一个（<code>ChannelInitializer</code> 里 new 就对了）</td></tr>
+  </table>
+  <div class="good"><b>顺带一个必答点</b>：<code class="inl">ChannelInitializer</code> 本身是 <code class="inl">@Sharable</code> 的（框架声明了），但它的 <code class="inl">initChannel</code> 每次连接都会执行，所以里面 <code class="inl">new</code> 出来的 handler 都是<strong>每个连接独享</strong>的——这就是 Netty 的推荐写法。</div>
+
+  <h3>异常传播：exceptionCaught 只往一个方向走</h3>
+<pre><code>public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+    // inbound 方向的异常，只会传给「后面的」inbound handler
+    // 如果在这里 swallow 掉（不调 ctx.fireExceptionCaught），后面永远不知道
+    log.error("boom", cause);
+    ctx.close();                  // 最常见处理：记日志 + 关连接
+}</code></pre>
+  <p>注意：<code class="inl">exceptionCaught</code> 只处理 <strong>inbound</strong> 链上的异常。<strong>outbound</strong> 操作（<code class="inl">write</code>）抛的异常会作为 Promise 失败回调返回，不会自动进 <code class="inl">exceptionCaught</code>：</p>
+<pre><code>channel.writeAndFlush(msg).addListener(future -&gt; {
+    if (!future.isSuccess()) log.error("write failed", future.cause());  // 必须自己接
+});</code></pre>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L7</span><em>内存</em></div>
+  <h2>ByteBuf：双指针、池化、引用计数</h2>
+  <p><code class="inl">ByteBuf</code> 是 Netty 相对 JDK <code class="inl">ByteBuffer</code> 最大的改进。三个设计点，每一个都能单独出一道题。</p>
+
+  <h3>① 双指针：干掉 flip()</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 292" role="img" aria-label="ByteBuffer 单 position 与 ByteBuf 双指针的对比">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">同样的缓冲区，一个要「切换模式」，一个不需要</text>
+
+      <text x="24" y="52" font-size="10.6" fill="#be123c" font-weight="700">ByteBuffer：只有一个 position，写完想读必须 flip()</text>
+      <g>
+        <rect x="60" y="62" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="94" y="62" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="128" y="62" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="162" y="62" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="196" y="62" width="34" height="34" fill="#eff6fc" stroke="#bcdcf2"/>
+        <rect x="230" y="62" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="264" y="62" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="298" y="62" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+      </g>
+      <text x="65" y="85" font-size="12" fill="#0369a1" text-anchor="middle">h</text>
+      <text x="99" y="85" font-size="12" fill="#0369a1" text-anchor="middle">e</text>
+      <text x="133" y="85" font-size="12" fill="#0369a1" text-anchor="middle">l</text>
+      <text x="167" y="85" font-size="12" fill="#0369a1" text-anchor="middle">l</text>
+      <text x="201" y="85" font-size="12" fill="#0369a1" text-anchor="middle">o</text>
+      <polygon points="230,104 238,112 246,104" fill="#be123c"/>
+      <text x="238" y="132" font-size="9.8" fill="#be123c" text-anchor="middle">position=5</text>
+
+      <path d="M 300 118 C 340 118, 340 60, 300 60" fill="none" stroke="#be123c" stroke-width="1.6" stroke-dasharray="4 3"/>
+      <polygon points="300,60 308,57 308,64" fill="#be123c"/>
+      <text x="352" y="86" font-size="9.8" fill="#be123c">flip() 一次，才能开始读</text>
+      <text x="352" y="104" font-size="9.8" fill="#64748b">读之前 position 只能指向「写完的位置」，</text>
+      <text x="352" y="120" font-size="9.8" fill="#64748b">所以读指针只能靠一次赋值借来</text>
+
+      <line x1="24" y1="150" x2="876" y2="150" stroke="#e2e8f0"/>
+
+      <text x="24" y="180" font-size="10.6" fill="#047857" font-weight="700">ByteBuf：readerIndex 与 writerIndex 同时存在，读写随时切</text>
+      <g>
+        <rect x="60" y="190" width="34" height="34" fill="#f2fbf6" stroke="#cceddc"/>
+        <rect x="94" y="190" width="34" height="34" fill="#f2fbf6" stroke="#cceddc"/>
+        <rect x="128" y="190" width="34" height="34" fill="#f2fbf6" stroke="#cceddc"/>
+        <rect x="162" y="190" width="34" height="34" fill="#f2fbf6" stroke="#cceddc"/>
+        <rect x="196" y="190" width="34" height="34" fill="#f2fbf6" stroke="#cceddc"/>
+        <rect x="230" y="190" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="264" y="190" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+        <rect x="298" y="190" width="34" height="34" fill="#fff" stroke="#d8dfea"/>
+      </g>
+      <text x="65" y="213" font-size="12" fill="#047857" text-anchor="middle">h</text>
+      <text x="99" y="213" font-size="12" fill="#047857" text-anchor="middle">e</text>
+      <text x="133" y="213" font-size="12" fill="#047857" text-anchor="middle">l</text>
+      <text x="167" y="213" font-size="12" fill="#047857" text-anchor="middle">l</text>
+      <text x="201" y="213" font-size="12" fill="#047857" text-anchor="middle">o</text>
+      <polygon points="230,230 238,238 246,230" fill="#b45309"/>
+
+      <text x="60" y="170" font-size="9.4" fill="#0369a1">↓ readerIndex=0</text>
+      <text x="214" y="170" font-size="9.4" fill="#b45309">↓ writerIndex=5</text>
+      <text x="238" y="262" font-size="9.8" fill="#b45309" text-anchor="middle">writerIndex</text>
+
+      <rect x="60" y="238" width="170" height="22" rx="4" fill="#e0f2fe" opacity="0.7"/>
+      <text x="145" y="253" font-size="9.2" fill="#0369a1" text-anchor="middle">可读区 = writerIndex − readerIndex</text>
+
+      <text x="352" y="206" font-size="9.8" fill="#047857">读指针在 0、写指针在 5，互不干扰：</text>
+      <text x="352" y="224" font-size="9.8" fill="#64748b">读完 3 字节 → readerIndex=3，还能继续写</text>
+      <text x="352" y="240" font-size="9.8" fill="#64748b">不需要 flip、不需要 compact、不需要模式切换</text>
+      <text x="352" y="262" font-size="9.8" fill="#be123c" font-weight="700">代价：内部逻辑更复杂，且必须管 release()</text>
+    </svg>
+    <figcaption><b>图 10</b>　<code>flip()</code> 的存在本身就是设计缺陷的证据：一个变量无法同时表达「写到哪」和「读到哪」，所以只能靠一次人为的模式切换来借</figcaption>
+  </figure>
+
+  <table>
+    <tr><th>对比项</th><th><code>ByteBuffer</code></th><th><code>ByteBuf</code></th></tr>
+    <tr><td>模式切换</td><td>必须 <code>flip()</code> / <code>clear()</code> / <code>compact()</code></td><td><strong>不需要</strong>，读写指针独立</td></tr>
+    <tr><td>扩容</td><td><strong>不能</strong>（<code>allocate</code> 定死）</td><td>可自动扩到 <code>maxCapacity</code></td></tr>
+    <tr><td>引用计数</td><td>无，靠 GC</td><td><strong>有 <code>refCnt</code></strong>，必须手动 <code>release()</code></td></tr>
+    <tr><td>池化</td><td>无</td><td><code>PooledByteBufAllocator</code>（默认）</td></tr>
+    <tr><td>切片/合并</td><td><code>slice()</code> 有独立 position</td><td><code>slice()</code> / <code>duplicate()</code> / <code>CompositeByteBuf</code></td></tr>
+    <tr><td>字节序</td><td>全局 <code>order()</code></td><td>每个实例可独立设（处理协议头很实用）</td></tr>
+  </table>
+
+  <p><strong>扩容细节（常考）</strong>：<code class="inl">writeXxx</code> 时若 <code class="inl">writerIndex + n &gt; capacity</code>，触发 <code class="inl">ensureWritable0</code>，新容量按 <code class="inl">4MB 阈值</code>分档增长——核心是「先翻倍」。<strong>而扩容会拷贝全部数据</strong>，所以高并发下 <code class="inl">Unpooled.buffer()</code> 不估容量，就是大量「翻倍 → 拷贝 → 丢弃旧数组」，这正是池化要解决的第一件事。</p>
+
+  <h3>② 池化：Netty 的内存账本</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="Netty 池化内存的四级结构与规格分级">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">借鉴 jemalloc 的四级结构：Arena → Chunk → Page → Subpage</text>
+
+      <rect x="24" y="38" width="500" height="238" rx="10" fill="#fbfcfe" stroke="#dbe3ee" stroke-dasharray="4 3"/>
+      <text x="38" y="58" font-size="10.4" fill="#334155" font-weight="700">PoolArena（每个 EventLoop 一个，减少跨线程竞争）</text>
+
+      <rect x="40" y="70" width="330" height="192" rx="9" fill="#fff" stroke="#bcdcf2"/>
+      <text x="54" y="90" font-size="10.2" fill="#0369a1" font-weight="700">PoolChunk = 16 MB 连续内存</text>
+
+      <g fill="#eff6fc" stroke="#bcdcf2">
+        <rect x="56" y="102" width="66" height="28" rx="4"/><rect x="132" y="102" width="66" height="28" rx="4"/>
+        <rect x="208" y="102" width="66" height="28" rx="4"/><rect x="284" y="102" width="66" height="28" rx="4"/>
+        <rect x="56" y="138" width="66" height="28" rx="4"/><rect x="132" y="138" width="66" height="28" rx="4"/>
+        <rect x="208" y="138" width="66" height="28" rx="4"/><rect x="284" y="138" width="66" height="28" rx="4"/>
+        <rect x="56" y="174" width="66" height="28" rx="4"/><rect x="132" y="174" width="66" height="28" rx="4"/>
+        <rect x="208" y="174" width="66" height="28" rx="4"/><rect x="284" y="174" width="66" height="28" rx="4"/>
+      </g>
+      <text x="203" y="122" font-size="8.6" fill="#0369a1" text-anchor="middle">Page 8KB</text>
+      <text x="203" y="158" font-size="8.6" fill="#0369a1" text-anchor="middle">Page 8KB</text>
+      <text x="203" y="194" font-size="8.6" fill="#0369a1" text-anchor="middle">Page 8KB</text>
+      <text x="203" y="222" font-size="9.4" fill="#64748b" text-anchor="middle">共 2048 页（16MB ÷ 8KB）</text>
+      <text x="203" y="242" font-size="9.2" fill="#94a3b8" text-anchor="middle">用 bitmap 标记每个 Page 的分配状态</text>
+
+      <rect x="386" y="102" width="130" height="86" rx="7" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="451" y="122" font-size="9.8" fill="#047857" text-anchor="middle" font-weight="700">PoolSubpage</text>
+      <text x="451" y="140" font-size="8.8" fill="#64748b" text-anchor="middle">一页内再细分</text>
+      <text x="451" y="156" font-size="8.8" fill="#64748b" text-anchor="middle">按 16B 步长切</text>
+      <text x="451" y="174" font-size="8.8" fill="#047857" text-anchor="middle">≤ 4KB 走这里</text>
+
+      <text x="40" y="252" font-size="9.2" fill="#94a3b8">小于 8KB 的请求不独占整页，在 Subpage 里按 16 字节步长切 —— 这就是「1KB 请求不浪费 8KB」的原因</text>
+
+      <rect x="540" y="38" width="336" height="238" rx="10" fill="#fff" stroke="#e3e7ef"/>
+      <text x="554" y="58" font-size="10.4" fill="#334155" font-weight="700">四档规格与分配路径</text>
+
+      <rect x="554" y="70" width="308" height="42" rx="6" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="566" y="86" font-size="9.6" fill="#be123c" font-weight="700">Tiny　≤ 496 B</text>
+      <text x="566" y="102" font-size="9" fill="#64748b">PoolSubpage，按 16B 步长切</text>
+
+      <rect x="554" y="118" width="308" height="42" rx="6" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="566" y="134" font-size="9.6" fill="#b45309" font-weight="700">Small　497 B ~ 4 KB</text>
+      <text x="566" y="150" font-size="9" fill="#64748b">PoolSubpage，页内细分</text>
+
+      <rect x="554" y="166" width="308" height="42" rx="6" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="566" y="182" font-size="9.6" fill="#0369a1" font-weight="700">Normal　4 KB ~ 16 MB</text>
+      <text x="566" y="198" font-size="9" fill="#64748b">直接占 1~2048 个整页</text>
+
+      <rect x="554" y="214" width="308" height="42" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+      <text x="566" y="230" font-size="9.6" fill="#475569" font-weight="700">Huge　大于 16 MB</text>
+      <text x="566" y="246" font-size="9" fill="#64748b">不池化，直接 allocate，用完即弃</text>
+
+      <text x="24" y="292" font-size="10.5" fill="#94a3b8">一次 1KB 分配：不池化要 malloc + 页表（1~10 μs）；池化只需指针偏移（约 50 ns）—— 百倍差距</text>
+    </svg>
+    <figcaption><b>图 11</b>　四档分级的全部意义：让小请求不浪费整页、让大请求不碎片化。面试里能说出「16MB / 8KB / 2048 / 496B / 4KB」这五个数字，基本就过关了</figcaption>
+  </figure>
+
+  <table>
+    <tr><th>指标</th><th>不池化</th><th>池化</th></tr>
+    <tr><td>一次 1KB 分配</td><td><code>new byte[1024]</code> 或 <code>malloc</code></td><td>从 Subpage 切一块，<strong>0 次系统调用</strong></td></tr>
+    <tr><td>每秒 10 万次分配</td><td>10 万次 GC 压力 / malloc 竞争</td><td>池内复用，接近 0</td></tr>
+    <tr><td>单次成本</td><td>1~10 μs</td><td>约 50 ns</td></tr>
+  </table>
+
+  <h3>③ 引用计数：忘了 release() 就是内存泄漏</h3>
+<pre><code>ByteBuf buf = ctx.alloc().buffer();
+try {
+    buf.writeBytes(data);
+    // 用 buf
+} finally {
+    buf.release();     // 引用计数 -1，到 0 时归还池
+}</code></pre>
+  <p><strong>为什么必须手动管</strong>：池化的内存不会被 GC 回收（它挂在池的树上），只能靠计数归还。计数不归零 = 这块内存永远回不到池里 = <strong>直接内存泄漏 → <code class="inl">OutOfDirectMemoryError</code></strong>。</p>
+  <table>
+    <tr><th>Handler 类型</th><th>谁负责 <code>release()</code></th></tr>
+    <tr><td><code>ChannelInboundHandlerAdapter</code></td><td><strong>你自己</strong>，必须在 <code>finally</code> 里 release</td></tr>
+    <tr><td><code>SimpleChannelInboundHandler&lt;T&gt;</code></td><td><strong>框架</strong>，<code>channelRead0</code> 返回后自动 release</td></tr>
+    <tr><td><code>MessageToMessageDecoder</code></td><td>框架 release 输入，你负责输出</td></tr>
+    <tr><td><code>ByteToMessageDecoder</code></td><td>框架管（它自己维护 cumulation）</td></tr>
+  </table>
+<pre><code>// 最推荐：继承 SimpleChannelInboundHandler，根本不用想 release
+public class MyHandler extends SimpleChannelInboundHandler&lt;ByteBuf&gt; {
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
+        // msg 在这里有效，方法返回后框架自动 release
+        // 注意：不能把 msg 存到字段里跨方法用！方法一返回它就废了
+    }
+}</code></pre>
+  <div class="warn"><b>泄漏检测（生产必开）</b>：<code class="inl">-Dio.netty.leakDetection.level=PARANOID</code> 每次分配都采样（最准最慢，预发用）；<code class="inl">SIMPLE</code> 是默认 1% 采样；<code class="inl">ADVANCED</code> 采样率更高并带访问记录。检测到会打 <code class="inl">LEAK: ByteBuf.release() was not called before it's garbage-collected</code>，<strong>并附带分配时的完整堆栈</strong>——这是排查 Netty 内存问题唯一有效的线索。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L8</span><em>边界</em></div>
+  <h2>粘包拆包：TCP 根本不认识「一条消息」</h2>
+  <p>这题几乎每场面试都问，但答对的人很少。<strong>先说结论：不存在「粘包」这个东西，只有「你的应用层没有定义边界」。</strong></p>
+
+  <figure>
+    <svg viewBox="0 0 900 268" role="img" aria-label="TCP 字节流的三种切分情况">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">你 write 了 3 次，对端 read 出来可能是 1 段、2 段或任意形状</text>
+
+      <text x="24" y="54" font-size="10.4" fill="#334155" font-weight="700">发送方：3 次 write</text>
+      <rect x="180" y="40" width="90" height="26" rx="4" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="225" y="58" font-size="10" fill="#0369a1" text-anchor="middle">HELLO</text>
+      <rect x="278" y="40" width="90" height="26" rx="4" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="323" y="58" font-size="10" fill="#0369a1" text-anchor="middle">WORLD</text>
+      <rect x="376" y="40" width="90" height="26" rx="4" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="421" y="58" font-size="10" fill="#0369a1" text-anchor="middle">HI</text>
+      <text x="480" y="58" font-size="9.6" fill="#94a3b8">→ 但 TCP 只保证「字节按序到达」</text>
+
+      <line x1="24" y1="80" x2="876" y2="80" stroke="#e2e8f0"/>
+
+      <text x="24" y="104" font-size="10.2" fill="#be123c" font-weight="700">① 粘在一起</text>
+      <rect x="180" y="90" width="190" height="26" rx="4" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="275" y="108" font-size="10" fill="#be123c" text-anchor="middle">HELLOWORLDHI</text>
+      <text x="386" y="108" font-size="9.6" fill="#64748b">一次 read 全拿到 → 你以为是「一条 12 字节的消息」</text>
+
+      <text x="24" y="144" font-size="10.2" fill="#b45309" font-weight="700">② 被切开</text>
+      <rect x="180" y="130" width="50" height="26" rx="4" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="205" y="148" font-size="10" fill="#b45309" text-anchor="middle">HEL</text>
+      <rect x="238" y="130" width="170" height="26" rx="4" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="323" y="148" font-size="10" fill="#b45309" text-anchor="middle">LOWORLDHI</text>
+      <text x="424" y="148" font-size="9.6" fill="#64748b">第一条被劈开，长度取决于接收缓冲区大小</text>
+
+      <text x="24" y="184" font-size="10.2" fill="#7c3aed" font-weight="700">③ 又粘又拆</text>
+      <rect x="180" y="170" width="80" height="26" rx="4" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="220" y="188" font-size="10" fill="#7c3aed" text-anchor="middle">HELLOW</text>
+      <rect x="268" y="170" width="120" height="26" rx="4" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="328" y="188" font-size="10" fill="#7c3aed" text-anchor="middle">ORLDHI</text>
+      <text x="404" y="188" font-size="9.6" fill="#64748b">Nagel 合并 + MSS 分片 + 缓冲区，三重作用</text>
+
+      <rect x="24" y="212" width="852" height="44" rx="8" fill="#fffbeb" stroke="#fde68a"/>
+      <text x="38" y="230" font-size="10" fill="#b45309">TCP_NODELAY 只能关掉 Nagle（成因 1），<tspan font-weight="700">解决不了粘包</tspan>：成因 3 是接收方 read 缓冲大小决定的，与发送方无关</text>
+      <text x="38" y="248" font-size="10" fill="#64748b">唯一解法：应用层自己定边界 —— 定长 / 分隔符 / 长度字段 / 自定义解码器</text>
+    </svg>
+    <figcaption><b>图 12</b>　三种切法都合法，因为 TCP 承诺的只有「字节按序到达」。所以「怎么解决粘包」的正确起手式是：<strong>先纠正前提，再说边界</strong></figcaption>
+  </figure>
+
+  <table>
+    <tr><th>边界定义方式</th><th>Netty 解码器</th><th>适用协议</th></tr>
+    <tr><td>定长</td><td><code>FixedLengthFrameDecoder</code></td><td>极简私有协议</td></tr>
+    <tr><td>分隔符</td><td><code>DelimiterBasedFrameDecoder</code> / <code>LineBasedFrameDecoder</code></td><td>Redis 协议、文本日志</td></tr>
+    <tr><td>长度字段</td><td><code>LengthFieldBasedFrameDecoder</code></td><td><strong>事实标准</strong>：Dubbo、gRPC、自定义 RPC</td></tr>
+    <tr><td>自定义</td><td>继承 <code>ByteToMessageDecoder</code></td><td>复杂协议（HTTP/2 等）</td></tr>
+  </table>
+
+  <h3>长度字段解码器的 5 个参数，必须能画出来</h3>
+
+    <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="LengthFieldBasedFrameDecoder 五个参数在帧结构上的位置">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">帧结构：magic(2) + length(4) + body(length) + crc(4)</text>
+
+      <rect x="180" y="90" width="50" height="44" fill="#f1f5f9" stroke="#cbd5e1"/>
+      <text x="205" y="117" font-size="9.6" fill="#475569" text-anchor="middle">magic</text>
+
+      <rect x="230" y="90" width="78" height="44" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="269" y="117" font-size="9.6" fill="#0369a1" text-anchor="middle">length</text>
+
+      <rect x="308" y="90" width="200" height="44" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="408" y="117" font-size="9.6" fill="#047857" text-anchor="middle">body（length 字节）</text>
+
+      <rect x="508" y="90" width="64" height="44" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="540" y="117" font-size="9.6" fill="#b45309" text-anchor="middle">crc</text>
+
+      <text x="205" y="150" font-size="8.6" fill="#94a3b8" text-anchor="middle">2 B</text>
+      <text x="269" y="150" font-size="8.6" fill="#94a3b8" text-anchor="middle">4 B</text>
+      <text x="540" y="150" font-size="8.6" fill="#94a3b8" text-anchor="middle">4 B</text>
+      <text x="408" y="150" font-size="8.6" fill="#94a3b8" text-anchor="middle">变长</text>
+
+      <line x1="230" y1="58" x2="230" y2="86" stroke="#0369a1" stroke-width="1.4"/>
+      <line x1="308" y1="58" x2="308" y2="86" stroke="#0369a1" stroke-width="1.4"/>
+      <line x1="230" y1="58" x2="308" y2="58" stroke="#0369a1" stroke-width="1.4"/>
+      <text x="230" y="46" font-size="9.2" fill="#0369a1">lengthFieldLength = 4</text>
+
+      <line x1="180" y1="76" x2="180" y2="86" stroke="#7c3aed" stroke-width="1.4"/>
+      <line x1="230" y1="76" x2="230" y2="86" stroke="#7c3aed" stroke-width="1.4"/>
+      <line x1="180" y1="76" x2="230" y2="76" stroke="#7c3aed" stroke-width="1.4"/>
+      <text x="24" y="80" font-size="9.2" fill="#7c3aed">lengthFieldOffset = 2</text>
+
+      <line x1="308" y1="170" x2="572" y2="170" stroke="#b45309" stroke-width="1.4"/>
+      <line x1="308" y1="164" x2="308" y2="176" stroke="#b45309" stroke-width="1.4"/>
+      <line x1="572" y1="164" x2="572" y2="176" stroke="#b45309" stroke-width="1.4"/>
+      <text x="440" y="190" font-size="9.2" fill="#b45309" text-anchor="middle">lengthAdjustment = 4（length 没算 crc，要补 4）</text>
+
+      <line x1="180" y1="212" x2="230" y2="212" stroke="#047857" stroke-width="1.4"/>
+      <line x1="180" y1="206" x2="180" y2="218" stroke="#047857" stroke-width="1.4"/>
+      <line x1="230" y1="206" x2="230" y2="218" stroke="#047857" stroke-width="1.4"/>
+      <text x="24" y="216" font-size="9.2" fill="#047857">initialBytesToStrip = 6</text>
+
+      <rect x="596" y="46" width="280" height="96" rx="8" fill="#fbfcfe" stroke="#dbe3ee"/>
+      <text x="608" y="64" font-size="9.4" fill="#334155" font-weight="700">maxFrameLength 是防 OOM 的闸门</text>
+      <text x="608" y="82" font-size="9" fill="#64748b">对端发 length = 0x7FFFFFFF，</text>
+      <text x="608" y="98" font-size="9" fill="#64748b">解码器就会去申请 2GB 缓冲 ——</text>
+      <text x="608" y="114" font-size="9" fill="#64748b">一个畸形包就能打挂你的服务</text>
+      <text x="608" y="132" font-size="9" fill="#be123c" font-weight="700">常见取值 1MB，按最大合法帧定</text>
+
+      <rect x="596" y="156" width="280" height="100" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="608" y="174" font-size="9.4" fill="#b45309" font-weight="700">lengthAdjustment 三种典型值</text>
+      <text x="608" y="192" font-size="9" fill="#64748b">0：length 只表示 body 长度</text>
+      <text x="608" y="208" font-size="9" fill="#64748b">+4：length 之后还有 4 字节尾部</text>
+      <text x="608" y="224" font-size="9" fill="#64748b">−4：length 包含了 length 字段自己</text>
+      <text x="608" y="246" font-size="9" fill="#94a3b8">它取决于协议作者的定义，不是技术问题</text>
+
+      <text x="24" y="256" font-size="9.8" fill="#94a3b8">半包怎么办：ByteToMessageDecoder 内部有 cumulation 累积缓冲区，不够一帧就不动 readerIndex</text>
+      <text x="24" y="278" font-size="9.8" fill="#be123c">自己写解码器时，数据不够就要直接 return，千万别先 readBytes —— readerIndex 一动，数据就丢了</text>
+    </svg>
+    <figcaption><b>图 13</b>　五个参数里 <code>lengthAdjustment</code> 最容易错，因为它取决于「协议作者认为 length 指什么」，是语义问题不是技术问题。能画出这张图、说出 ±4 的两种情况，非常加分</figcaption>
+  </figure>
+
+<pre><code>// 完整配置：magic(2) + len(4) + body(len) + crc(4)
+pipeline.addLast(new LengthFieldBasedFrameDecoder(
+        1024 * 1024,   // maxFrameLength，防畸形包的第一道闸门
+        2,             // lengthFieldOffset：跳过 magic
+        4,             // lengthFieldLength
+        4,             // lengthAdjustment：body 后面还有 4 字节 crc
+        6));           // initialBytesToStrip：剥掉 magic+len，业务只看到 body+crc</code></pre>
+
+  <div class="oneline"><b>半包（不足一帧）怎么处理</b>：<code class="inl">ByteToMessageDecoder</code> 内部有个 <code class="inl">cumulation</code> 累积缓冲区，读到的字节不够一帧时<strong>不消费</strong>，留在里面等下次。只要不调 <code class="inl">readBytes</code>，<code class="inl">readerIndex</code> 不动，数据就还在——这是 Netty 解码器的核心机制，也是自己写解码器最容易踩的坑。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L9</span><em>零拷贝</em></div>
+  <h2>零拷贝的两级：OS 层省 CPU，Netty 层省复制</h2>
+  <p>「零拷贝」这个词必须<strong>分层说</strong>，否则一定露馅：OS 层的零拷贝（sendfile / mmap）和 Netty 的零拷贝（组合 / 切片）<strong>完全不是一回事</strong>。回看图 1 的下半部分，逐行拆开：</p>
+
+  <h3>第一级：OS 层，省的是 CPU 拷贝</h3>
+<pre><code>【read + write】4 次拷贝，4 次切换
+  磁盘 →[DMA]→ 页缓存 →[CPU]→ 用户buf →[CPU]→ socket buf →[DMA]→ 网卡
+
+【mmap + write】3 次拷贝，4 次切换
+  磁盘 →[DMA]→ 页缓存 ←──(用户 buf 直接映射页缓存，无需拷贝)
+                     →[CPU]→ socket buf →[DMA]→ 网卡
+  代价：页缓存映射有 TLB 开销，大文件下缺页中断明显
+
+【sendfile】2 次拷贝，2 次切换
+  磁盘 →[DMA]→ 页缓存 ─────────→[DMA]→ 网卡
+  数据完全不出内核，CPU 拷贝 = 0
+  代价：用户态看不到数据，无法在传输中修改内容
+
+【sendfile + SG-DMA】2 次 DMA，0 次 CPU，且不需要拼成连续内存
+  磁盘 →[DMA]→ 页缓存(散页) →[SG-DMA gather]→ 网卡</code></pre>
+
+  <table>
+    <tr><th>方案</th><th>CPU 拷贝量（1GB）</th><th>上下文切换</th><th>用户态可见</th></tr>
+    <tr><td>read + write</td><td>2 GB</td><td>4</td><td>可见</td></tr>
+    <tr><td>mmap + write</td><td>1 GB</td><td>4</td><td>可见（映射）</td></tr>
+    <tr><td>sendfile</td><td><strong>0</strong></td><td>2</td><td><strong>不可见</strong></td></tr>
+    <tr><td>sendfile + SG-DMA</td><td><strong>0</strong></td><td>2</td><td>不可见</td></tr>
+  </table>
+
+  <p>Java 对应的是 <strong><code class="inl">FileChannel.transferTo()</code></strong>：</p>
+<pre><code>// 底层就是 sendfile，Kafka / RocketMQ / Netty 都用它
+try (FileChannel in = FileChannel.open(path)) {
+    long pos = 0;
+    long size = in.size();
+    while (pos &lt; size) {
+        long n = in.transferTo(pos, size - pos, socketChannel);  // 单次上限受内核限制
+        if (n &lt;= 0) break;
+        pos += n;                       // 必须循环，一次不一定传完
+    }
+}</code></pre>
+  <div class="trap"><b>为什么必须循环</b>：<code class="inl">transferTo</code> 单次上限受内核 <code class="inl">MAX_RW_COUNT</code>（约 2GB）和 socket 缓冲区限制，返回的是<strong>已传字节数</strong>。不循环 = <strong>静默丢数据</strong>，这是 Kafka 早期一个著名 bug 的根因。</div>
+
+  <h3>第二级：Netty 层，省的是「应用层的数据搬运」</h3>
+  <table>
+    <tr><th>手段</th><th>作用</th><th>复制次数</th></tr>
+    <tr><td><code>CompositeByteBuf</code></td><td>把 header 和 body 逻辑上拼成一个 buf</td><td><strong>0</strong>（传统做法要 copy 到新数组）</td></tr>
+    <tr><td><code>ByteBuf.slice()</code></td><td>切一段视图，共享底层内存</td><td><strong>0</strong></td></tr>
+    <tr><td><code>ByteBuf.duplicate()</code></td><td>复制指针，共享内容</td><td><strong>0</strong></td></tr>
+    <tr><td><code>Unpooled.wrappedBuffer(byte[])</code></td><td>包装数组，不复制</td><td><strong>0</strong></td></tr>
+    <tr><td><code>FileRegion</code></td><td>包装 <code>FileChannel</code>，走 <code>transferTo</code></td><td><strong>0</strong>（连用户态都不进）</td></tr>
+    <tr><td><code>ByteBuf.copy()</code></td><td>真复制</td><td>1（<strong>这个不是零拷贝</strong>）</td></tr>
+  </table>
+
+<pre><code>// CompositeByteBuf：协议头 + 文件内容，不拷贝
+CompositeByteBuf composite = Unpooled.compositeBuffer();
+composite.addComponents(true,
+    Unpooled.wrappedBuffer(header),     // 10 字节头
+    Unpooled.wrappedBuffer(body));      // 1MB body
+// 内存里还是两块，只是逻辑上连续 → 写入时分散写(sendmsg)
+
+// 反面教材：多了一次 1MB 拷贝
+ByteBuf copy = Unpooled.buffer(header.length + body.length);
+copy.writeBytes(header).writeBytes(body);     // 1MB 白拷</code></pre>
+
+  <div class="good"><b>算一笔</b>：10 万 QPS 的网关，每个响应 10KB。用 <code class="inl">CompositeByteBuf</code> 省掉的拷贝是 <code class="inl">10 万 × 10KB = 1 GB/s</code> 的内存带宽。这就是「Netty 网关比 Tomcat 网关吞吐高」的物理原因之一——不是玄学调优，是少搬了一吨砖。</div>
+
+  <div class="oneline"><b>面试反问的坑</b>「Netty 的零拷贝需要操作系统支持吗？」答：<strong>不需要</strong>。<code class="inl">CompositeByteBuf</code> 是纯 Java 层的引用共享，跟 OS 无关；只有 <code class="inl">FileRegion</code> 才依赖 <code class="inl">sendfile</code>（且在 Windows 上会退化为普通写）。能分清这两层的人，十个里不到两个。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L10</span><em>静默杀手</em></div>
+  <h2>背压：水位线、isWritable 与 OOM 的真实路径</h2>
+  <p>这是 Netty 最容易被忽略、又最容易炸的一节。<strong>问题</strong>：上游生产快、下游消费慢（客户端网络差），<code class="inl">writeAndFlush</code> 的数据会堆在 <code class="inl">ChannelOutboundBuffer</code> 里，而它<strong>默认没有硬上限</strong>。</p>
+
+<pre><code>// 灾难写法：没有任何背压
+public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    for (int i = 0; i &lt; 1_000_000; i++) {
+        ctx.write(bigData);                  // 全堆进 outboundBuffer
+    }
+    ctx.flush();
+}
+// 结果：堆内存 OOM，或直接内存 OOM（取决于 ByteBuf 类型）</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 380" role="img" aria-label="背压闭环与写水位线示意">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">背压不是「限流」，是一个必须闭合的环 —— 断在任何一环，压力就会变成内存</text>
+
+      <rect x="40" y="48" width="340" height="64" rx="9" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="56" y="72" font-size="10.6" fill="#0369a1" font-weight="700">① 上游生产快，一直在 write</text>
+      <text x="56" y="92" font-size="9.6" fill="#64748b">业务线程 writeAndFlush 不等结果，5μs 就返回</text>
+      <text x="56" y="106" font-size="9.6" fill="#94a3b8">「写成功」只代表入队成功，不代表对端收到</text>
+
+      <line x1="384" y1="80" x2="512" y2="80" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="512,80 505,77 505,83" fill="#94a3b8"/>
+
+      <rect x="520" y="48" width="340" height="64" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="536" y="72" font-size="10.6" fill="#b45309" font-weight="700">② outboundBuffer 堆积超过高水位</text>
+      <text x="536" y="92" font-size="9.6" fill="#64748b">默认低 32KB / 高 64KB，超了不会报错</text>
+      <text x="536" y="106" font-size="9.6" fill="#be123c">只改一个布尔值：isWritable 变 false</text>
+
+      <line x1="690" y1="116" x2="690" y2="192" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="690,192 686,185 694,185" fill="#94a3b8"/>
+      <text x="700" y="156" font-size="9.4" fill="#b45309">触发事件</text>
+
+      <rect x="520" y="200" width="340" height="64" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="536" y="224" font-size="10.6" fill="#be123c" font-weight="700">③ 收到 channelWritabilityChanged</text>
+      <text x="536" y="244" font-size="9.6" fill="#64748b">里面必须 setAutoRead(false)，停止读 socket</text>
+      <text x="536" y="258" font-size="9.6" fill="#94a3b8">不监听这个事件 = 静默丢消息</text>
+
+      <line x1="512" y1="232" x2="388" y2="232" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="388,232 395,229 395,235" fill="#94a3b8"/>
+
+      <rect x="40" y="200" width="340" height="64" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="56" y="224" font-size="10.6" fill="#047857" font-weight="700">④ 接收缓冲满 → TCP 窗口变 0</text>
+      <text x="56" y="244" font-size="9.6" fill="#64748b">对端 send 阻塞，压力沿协议栈传回上游</text>
+      <text x="56" y="258" font-size="9.6" fill="#047857">这是唯一「不丢数据又能减速」的机制</text>
+
+      <line x1="210" y1="196" x2="210" y2="120" stroke="#047857" stroke-width="1.6"/>
+      <polygon points="210,120 206,127 214,127" fill="#047857"/>
+
+      <text x="450" y="152" font-size="10" fill="#94a3b8" text-anchor="middle">闭环</text>
+      <text x="450" y="172" font-size="10" fill="#94a3b8" text-anchor="middle">才有效</text>
+
+      <text x="40" y="296" font-size="10.4" fill="#334155" font-weight="700">写水位线：WriteBufferWaterMark(32KB, 64KB)</text>
+      <rect x="40" y="308" width="620" height="20" rx="4" fill="#e0f2fe"/>
+      <rect x="40" y="308" width="300" height="20" rx="4" fill="#bae6fd"/>
+      <line x1="340" y1="302" x2="340" y2="332" stroke="#0369a1" stroke-width="1.4"/>
+      <line x1="500" y1="302" x2="500" y2="332" stroke="#be123c" stroke-width="1.4"/>
+      <text x="340" y="346" font-size="9.4" fill="#0369a1" text-anchor="middle">32KB 低水位</text>
+      <text x="500" y="346" font-size="9.4" fill="#be123c" text-anchor="middle">64KB 高水位</text>
+      <text x="150" y="323" font-size="9.6" fill="#0369a1" text-anchor="middle">可写</text>
+      <text x="420" y="323" font-size="9.6" fill="#be123c" text-anchor="middle">不可写</text>
+      <text x="676" y="323" font-size="9.4" fill="#94a3b8">→ 继续堆就是 OOM</text>
+
+      <text x="40" y="370" font-size="10" fill="#be123c">注意：AutoRead=false 之后必须手动 read() 才会读下一批 —— 它是「重新注册 OP_READ」，不是「读一次数据」</text>
+    </svg>
+    <figcaption><b>图 14</b>　这个环断了任何一环，压力就无处可去，只能变成堆里的字节。而 Netty 在这个环上<strong>一声不响</strong>——这就是「偶发丢消息」最难查的原因</figcaption>
+  </figure>
+
+<pre><code>// 正确用法：写之前判断，不可写就暂停读取
+public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    if (!ctx.channel().isWritable()) {
+        ReferenceCountUtil.release(msg);
+        ctx.channel().config().setAutoRead(false);    // 停止读 → TCP 窗口收缩 → 上游减速
+        return;
+    }
+    ctx.write(msg);
+}
+
+@Override
+public void channelWritabilityChanged(ChannelHandlerContext ctx) {
+    if (ctx.channel().isWritable()) {
+        ctx.channel().config().setAutoRead(true);      // 恢复读取
+    }
+    ctx.fireChannelWritabilityChanged();
+}</code></pre>
+
+  <table>
+    <tr><th>状态</th><th>触发条件</th><th>表现</th></tr>
+    <tr><td>可写</td><td>待发字节 <strong>小于</strong>低水位</td><td><code>channel.isWritable() == true</code></td></tr>
+    <tr><td>不可写</td><td>待发字节 <strong>超过</strong>高水位</td><td><code>isWritable() == false</code>，触发 <code>channelWritabilityChanged</code></td></tr>
+    <tr><td>恢复可写</td><td>回落到低水位以下</td><td>再次触发 <code>channelWritabilityChanged</code></td></tr>
+  </table>
+
+  <h3>OOM 的三种真实路径</h3>
+  <table>
+    <tr><th>路径</th><th>现象</th><th>取证</th></tr>
+    <tr><td>堆内 ByteBuf 堆积</td><td><code>OutOfMemoryError: Java heap space</code></td><td><code>jmap -histo:live</code> 看 <code>PooledUnsafeHeapByteBuf</code> 实例数</td></tr>
+    <tr><td>直接内存泄漏</td><td><code>OutOfDirectMemoryError</code></td><td><code>-XX:MaxDirectMemorySize</code> + <code>PARANOID</code> 泄漏检测</td></tr>
+    <tr><td>未 release 导致池耗尽</td><td>越跑越慢，最终 OOM</td><td>泄漏日志里的分配堆栈</td></tr>
+  </table>
+  <div class="trap"><b>关键区分</b>：<code class="inl">OutOfDirectMemoryError</code>（Netty 自己抛的）vs <code class="inl">OutOfMemoryError: Direct buffer memory</code>（JDK 抛的）。前者说明 Netty 的计数器认为超了上限，通常是<strong>没 release</strong>；后者是真正耗尽。<strong>能分清这两个，面试官会记住你。</strong></div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L11</span><em>实战</em></div>
+  <h2>生产六坑：能连上、能跑、然后炸了</h2>
+
+  <h3>坑 1：EventLoop 里做同步调用</h3>
+  <p><strong>症状</strong>：QPS 上不去，<code class="inl">arthas thread</code> 看到 <code class="inl">nioEventLoopGroup-*-*</code> 全部 RUNNABLE 卡在某个业务方法。<strong>取证</strong>：<code class="inl">arthas trace io.netty.channel.nio.NioEventLoop run</code>，看 <code class="inl">processSelectedKeys</code> 耗时。<strong>修复</strong>：handler 前加 <code class="inl">DefaultEventExecutorGroup</code>，或内部丢线程池。</p>
+
+  <h3>坑 2：忘了 release()，或者说错了谁该 release</h3>
+  <p><strong>症状</strong>：跑 3~7 天后 <code class="inl">OutOfDirectMemoryError</code>，重启就好，反复。<strong>取证</strong>：<code class="inl">PARANOID</code> 级别泄漏检测 + <code class="inl">-Dio.netty.leakDetection.targetRecords=32</code> 拿到分配栈。<strong>修复</strong>：改用 <code class="inl">SimpleChannelInboundHandler</code>；或在 <code class="inl">finally</code> 里 <code class="inl">ReferenceCountUtil.release(msg)</code>。</p>
+
+  <h3>坑 3：@Sharable 加在了有状态的 handler 上</h3>
+  <p><strong>症状</strong>：偶发数据错乱、计数器不准，压测才复现。<strong>取证</strong>：<code class="inl">grep -rn "@Sharable"</code>，逐个看有没有非 final 实例字段。<strong>修复</strong>：状态挪到 <code class="inl">Channel.attr(AttributeKey)</code> 里（每个连接独立）。</p>
+
+  <h3>坑 4：解码器位置错，ctx.write() 跳过编码器</h3>
+  <p><strong>症状</strong>：能连上，但对端收到乱码 / 长度头丢失。<strong>取证</strong>：打印 <code class="inl">pipeline.names()</code> 确认链顺序；在编码器里打断点看有没有进。<strong>修复</strong>：统一用 <code class="inl">channel.writeAndFlush()</code>，或把编码器加在 handler 之前。</p>
+
+  <h3>坑 5：writeAndFlush 调太多次</h3>
+<pre><code>// 一次 flush vs 十次 flush 的账
+for (Msg m : list) ctx.write(m);     // 10 次入队，0 次 syscall
+ctx.flush();                          // 1 次 syscall（writev 批量）
+// 对比 for(...) ctx.writeAndFlush(m) → 10 次 syscall，每次约 2μs，白烧 20μs</code></pre>
+  <p><strong>症状</strong>：syscall 数量异常高，QPS 上不去。<strong>取证</strong>：<code class="inl">strace -cp &lt;pid&gt;</code> 看 <code class="inl">writev</code> 次数，或 <code class="inl">perf top</code> 看 <code class="inl">sys_write</code>。<strong>修复</strong>：批量写用 <code class="inl">write()</code> 多次 + 最后 <code class="inl">flush()</code> 一次；或配 <code class="inl">FlushConsolidationHandler</code>。</p>
+
+  <h3>坑 6：关闭时不优雅</h3>
+  <p><strong>症状</strong>：发布重启时有少量请求 <code class="inl">Connection reset by peer</code>。</p>
+<pre><code>// 正确关闭：先停止接收新连接，给在途请求留时间
+boss.shutdownGracefully(0, 5, TimeUnit.SECONDS);      // quietPeriod=0, timeout=5s
+worker.shutdownGracefully(2, 15, TimeUnit.SECONDS);   // 静默 2s 等在途完成
+// 配合 k8s preStop sleep 5s，才能做到真正的零中断</code></pre>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L12</span><em>速查</em></div>
+  <h2>数字速查表：这些数记不住，答什么都是虚的</h2>
+  <table>
+    <tr><th>数字</th><th>含义</th></tr>
+    <tr><td>4 / 4</td><td>read+write 的 4 次拷贝 / 4 次上下文切换</td></tr>
+    <tr><td>2 / 2</td><td>sendfile 的 2 次 DMA 拷贝 / 2 次切换，CPU 拷贝 0</td></tr>
+    <tr><td>3~8 μs</td><td>一次上下文切换成本</td></tr>
+    <tr><td>1 MB</td><td>默认线程栈（<code>-Xss</code>），1 万线程 = 10 GB</td></tr>
+    <tr><td>1024</td><td><code>select</code> 的 <code>FD_SETSIZE</code> 硬上限</td></tr>
+    <tr><td>O(就绪数)</td><td>epoll 的复杂度，vs select/poll 的 O(总数)</td></tr>
+    <tr><td>1</td><td>Netty 默认 boss 线程数（够用）</td></tr>
+    <tr><td>CPU × 2</td><td>Netty 默认 worker 线程数</td></tr>
+    <tr><td>512</td><td>NioEventLoop 空轮询计数阈值，超了就重建 Selector</td></tr>
+    <tr><td>16 MB / 8 KB / 2048</td><td>PoolChunk / PoolPage / 每 Chunk 页数</td></tr>
+    <tr><td>496 B / 4 KB</td><td>Tiny 上限 / Small 上限</td></tr>
+    <tr><td>32 KB / 64 KB</td><td>默认写水位线（低 / 高）</td></tr>
+    <tr><td>1460 B</td><td>以太网 MSS，超过就 IP 分片</td></tr>
+    <tr><td>1 MB</td><td><code>maxFrameLength</code> 常见取值，防畸形包</td></tr>
+    <tr><td>~2 GB</td><td><code>transferTo</code> 单次内核上限，必须循环</td></tr>
+    <tr><td>1%</td><td><code>SIMPLE</code> 泄漏检测的采样率</td></tr>
+    <tr><td>0</td><td><code>CompositeByteBuf</code> / <code>slice</code> / <code>wrap</code> 的复制次数</td></tr>
+  </table>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L13</span><em>问答</em></div>
+  <h2>十四问答：面试官真正想听的那句</h2>
+
+  <div class="qa"><div class="qq">：BIO、NIO、AIO 的区别？</div>
+    <p><strong>一句话</strong>：BIO 是「一个连接一个线程等」，NIO 是「一个线程等 N 个连接」，AIO 是「内核读完叫你」。<strong>加分层</strong>：AIO（<code class="inl">AsynchronousSocketChannel</code>）在 Linux 上底层仍是 epoll 模拟（JDK 至今没有真正的 io_uring 支持），所以<strong>Java 的 AIO 在 Linux 上并没有性能优势</strong>，Netty 也因此没做 AIO 传输。这是区分「背过书」和「踩过坑」的关键一句。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：NIO 一定比 BIO 快吗？</div>
+    <p>不。<strong>连接数少、数据量大</strong>时 BIO 更快（没有 Selector 的注册/就绪检查开销）。NIO 的收益只在<strong>高并发连接、低活跃度</strong>场景。说「NIO 快」是不准确的，应该说「NIO 的<strong>线程成本</strong>更低」。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：epoll 为什么效率高？LT 和 ET 怎么选？</div>
+    <p>三句话：① 红黑树存关注集合，增删 O(log N)；② 就绪 fd 由内核回调挂到链表，<code class="inl">epoll_wait</code> 只读链表，<strong>O(就绪数)</strong>；③ 不需要每次把 fd 集合拷进内核。LT 更安全（漏读还能补），ET 更省 syscall（必须读到 EAGAIN）。<strong>默认 LT，追求极限用 ET + native transport。</strong></p>
+  </div>
+
+  <div class="qa"><div class="qq">：Netty 的线程模型说清楚。</div>
+    <p>主从 Reactor：<code class="inl">bossGroup</code>（1 线程）只 accept，<code class="inl">workerGroup</code>（CPU×2）负责 read/write/编解码/业务。<strong>一个 Channel 终生绑定一个 EventLoop，一个 EventLoop 一个线程串行处理多个 Channel</strong>——所以 handler 天然无锁，但<strong>绝不能阻塞</strong>。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：Netty 为什么不用加锁？</div>
+    <p>因为 <code class="inl">Channel</code> 的所有状态只被它自己的 <code class="inl">EventLoop</code> 线程访问。跨线程 <code class="inl">write</code> 时，Netty 把任务投递回该 EventLoop 的 <code class="inl">taskQueue</code>，<strong>用「线程封闭」替代了锁</strong>。这是 Netty 性能的地基。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：ctx.write() 和 channel.write() 有什么区别？</div>
+    <p><code class="inl">ctx.write()</code> 从<strong>当前 handler 往 head 方向</strong>传（跳过之前的 handler）；<code class="inl">channel.write()</code> 从 <strong>pipeline 尾部</strong>开始，走完整条链。需要经过前面的编码器时必须用后者——这是「数据错位」类事故的头号原因（见图 9）。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：粘包怎么解决？</div>
+    <p>先纠正：TCP 没有「包」，只有字节流，所以<strong>不存在粘包，只有应用层没定边界</strong>。解法四选一：定长、分隔符、长度字段（主流）、自定义解码器。生产标配是 <code class="inl">LengthFieldBasedFrameDecoder</code>，五个参数必须能画图说清，尤其 <code class="inl">maxFrameLength</code> 是防 OOM 的闸门。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：零拷贝到底省了什么？</div>
+    <p>分两层：<strong>OS 层</strong>（<code class="inl">sendfile</code>）省掉 2 次 CPU 拷贝（1GB 数据省 2GB 内存带宽），数据不出内核，代价是用户态拿不到数据；<strong>Netty 层</strong>（<code class="inl">CompositeByteBuf</code> / <code class="inl">slice</code> / <code class="inl">wrap</code>）省掉 JVM 堆内的字节复制，是纯 Java 行为，<strong>不依赖操作系统</strong>。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：ByteBuf 比 ByteBuffer 好在哪？</div>
+    <p>① 双指针免 <code class="inl">flip()</code>；② 可自动扩容（<code class="inl">ByteBuffer</code> 定长）；③ 引用计数 + 池化，避免 GC 与 malloc；④ <code class="inl">CompositeByteBuf</code> 零拷贝合并；⑤ 每个实例可独立设字节序。代价是<strong>必须手动 release()</strong>，忘了就泄漏。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：Netty 内存泄漏怎么排查？</div>
+    <p>① 开 <code class="inl">-Dio.netty.leakDetection.level=PARANOID</code> + <code class="inl">targetRecords=32</code>，等 <code class="inl">LEAK:</code> 日志（带分配堆栈）；② <code class="inl">jmap -histo:live</code> 看 <code class="inl">Pooled*ByteBuf</code> 实例数是否只增不减；③ 检查所有 <code class="inl">ChannelInboundHandlerAdapter</code> 是否有 release，优先改 <code class="inl">SimpleChannelInboundHandler</code>；④ <code class="inl">-XX:MaxDirectMemorySize</code> 与 <code class="inl">PlatformDependent.maxDirectMemory()</code> 对齐核对。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：@Sharable 什么时候能用？</div>
+    <p>只有<strong>完全无状态</strong>（无实例字段，或字段全 final 且不可变）时能用。带计数、带缓存、带 <code class="inl">ByteBuf</code> 字段的一律不能用。连接级状态放 <code class="inl">Channel.attr(AttributeKey)</code>。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：writeAndFlush 为什么要少调？</div>
+    <p>每次 flush 至少一次 <code class="inl">writev</code> syscall（约 2μs）+ 可能触发 <code class="inl">OP_WRITE</code> 注册。批量场景应 <code class="inl">write()</code> 多次 + <code class="inl">flush()</code> 一次，或用 <code class="inl">FlushConsolidationHandler</code> 自动合并。10 次 flush = 白烧 20μs，在 800 连接的 EventLoop 上就是 16ms。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：怎么防止 Netty 被慢客户端拖死？</div>
+    <p>三道闸门：① <code class="inl">WriteBufferWaterMark</code> + <code class="inl">isWritable()</code>；② <code class="inl">AutoRead=false</code>，让 TCP 窗口反向施压；③ <code class="inl">IdleStateHandler</code>（读空闲 / 写空闲 / 全空闲）踢掉僵死连接。</p>
+  </div>
+
+  <div class="qa"><div class="qq">：EventLoop 和 JDK 线程池有什么本质区别？</div>
+    <p>线程池是「任务来了找线程」，EventLoop 是「<strong>线程绑死一组 Channel，事件来了自己处理</strong>」。前者需要任务队列做缓冲与调度，后者靠<strong>线程封闭</strong>消除竞争。所以 EventLoop 不能随便扩缩容（会破坏绑定关系），而线程池可以。</p>
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L14</span><em>模拟面试</em></div>
+  <h2>三道模拟面试题</h2>
+
+  <div class="q">
+    <h4><span>题 1</span>设计一个支持 50 万长连接的推送网关</h4>
+    <div class="lab">考察点</div>
+    <p>连接数规模下的资源账、心跳周期推导、广播效率。</p>
+    <div class="lab">回答框架</div>
+    <p><strong>① 连接容量账</strong>：单连接内存 = <code class="inl">Channel</code>（~1KB）+ <code class="inl">Pipeline</code>（3~5 个 handler，~1KB）+ 读写缓冲（池化后按需，平均 2KB）≈ <strong>4KB</strong>。50 万 × 4KB = <strong>2GB</strong>，一台 8C16G 能承载，但<strong>必须开池化 + 精简 handler 链</strong>。</p>
+    <p><strong>② 线程账</strong>：<code class="inl">workerGroup = CPU × 2 = 16</code>，平均每个 EventLoop 承载 <strong>3.1 万连接</strong>。这意味着单次事件处理超过 <strong>32μs</strong> 就会让一轮循环超过 1 秒——handler 里绝不能有任何阻塞。</p>
+    <p><strong>③ 心跳</strong>：<code class="inl">IdleStateHandler(readerIdle=90s)</code>。50 万 / 90s ≈ 5500 次/秒，完全可承受。<strong>不要用 30 秒</strong>——50 万 × (1/30s) = 1.7 万 QPS 纯心跳，白烧资源。</p>
+    <p><strong>④ 广播</strong>：全量推送 50 万次 write。优化：用 <code class="inl">ChannelGroup.writeAndFlush</code> 批量投递；消息体是同一个 <code class="inl">ByteBuf</code> 时用 <code class="inl">retainedDuplicate()</code> 共享内容（<strong>只增引用计数不拷贝</strong>）；分片广播每 1000 个一批，避免单个 EventLoop 队列爆掉。</p>
+    <p><strong>⑤ 句柄</strong>：50 万连接 = 50 万 fd，必须调 <code class="inl">ulimit -n</code>、<code class="inl">somaxconn</code>、<code class="inl">tcp_max_syn_backlog</code>。</p>
+    <div class="lab g">四档对照</div>
+    <p><strong>不及格</strong>：只说「用 Netty，主从 Reactor」，讲不出连接数怎么算。<br><strong>及格</strong>：能算出内存和线程账，知道要调 ulimit。<br><strong>良好</strong>：加上心跳周期推导、广播用 <code class="inl">retainedDuplicate</code>。<br><strong>优秀</strong>：主动提「50 万连接的 GC 压力」——池化后 <code class="inl">ByteBuf</code> 不进堆，但要关注 <code class="inl">Channel</code> 对象本身在老年代的存活；并给出「连接分片到多台网关 + 注册中心维护路由」的水平扩展方案。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题 2</span>线上 Netty 服务 CPU 100%，怎么定位</h4>
+    <div class="lab">考察点</div>
+    <p>从现象到根因的完整链路，而不是背工具名。</p>
+    <div class="lab">回答框架</div>
+    <p><strong>① 先分诊</strong>：<code class="inl">top -Hp</code> 看哪个线程吃 CPU。是 <code class="inl">nioEventLoopGroup-*</code>、GC 线程、还是业务线程？三种情况的结论完全不同。</p>
+    <p><strong>② 若是 EventLoop 线程</strong>：<code class="inl">arthas thread -n 3</code> 看栈。若卡在 <code class="inl">processSelectedKeys</code>，说明事件太多或单次处理太重；再 <code class="inl">trace NioEventLoop run '#cost &gt; 50'</code> 找耗时方法。常见根因：同步 DB 调用、日志同步落盘、全局锁、正则回溯。</p>
+    <p><strong>③ 若是空转（RUNNABLE 但不干活）</strong>：经典的 epoll 空轮询 bug（JDK NIO 的 selector 在特定内核下会返回 0 但不阻塞），Netty 用连续计数解决——<strong>空轮询 512 次就重建 Selector</strong>。</p>
+    <p><strong>④ 若是 GC 线程</strong>：<code class="inl">jstat -gcutil</code> 看 Young GC 频率，大概率是 <code class="inl">ByteBuf</code> 没池化或对象分配过快。</p>
+    <p><strong>⑤ 修复要落到数字上</strong>：别说「优化代码」，要说「把 handler 里的 MySQL 查询移到 <code class="inl">DefaultEventExecutorGroup(16)</code>，<code class="inl">processSelectedKeys</code> 的 P99 从 47ms 降到 0.8ms」。</p>
+    <div class="lab g">四档对照</div>
+    <p><strong>不及格</strong>：只会说 <code class="inl">jstack</code>，不知道 EventLoop 线程名。<br><strong>及格</strong>：能定位到 EventLoop 被阻塞。<br><strong>良好</strong>：能区分「阻塞」与「空轮询」，知道 512 次重建 Selector。<br><strong>优秀</strong>：主动指出「CPU 100% 但 QPS 掉零」是空轮询、「CPU 100% 且 QPS 也高」是真在干活——<strong>先看 QPS 再看栈</strong>。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题 3</span>客户端 30% 的连接偶发收不到消息，怎么查</h4>
+    <div class="lab">考察点</div>
+    <p>Netty 的「静默失败」路径，这是最难查的一类线上问题。</p>
+    <div class="lab">回答框架</div>
+    <p><strong>① 先问「偶发」的分布</strong>：固定某几个客户端？还是随机？低峰多还是高峰多？——这是把「偶发」变成「条件」的第一步。</p>
+    <p><strong>② 列出 Netty 的四条静默失败路径</strong>：</p>
+    <table>
+      <tr><th>路径</th><th>表现</th><th>排查点</th></tr>
+      <tr><td><code>ctx.write()</code> 跳过编码器</td><td>对端收到乱码，连接还在</td><td>打印 <code>pipeline.names()</code> 顺序</td></tr>
+      <tr><td>EventLoop 被阻塞</td><td>消息延迟数秒后到达</td><td><code>trace NioEventLoop.run</code></td></tr>
+      <tr><td>outboundBuffer 溢出丢消息</td><td><strong>完全没报错</strong>，消息消失</td><td>看水位线与 <code>isWritable</code></td></tr>
+      <tr><td>ByteBuf 提前 release</td><td>发出去的是脏数据 / 全 0</td><td>开 <code>PARANOID</code> 泄漏检测</td></tr>
+    </table>
+    <p><strong>③ 重点怀疑第三条</strong>：客户端网络差时，服务端 write 会堆到 outboundBuffer。Netty <strong>不会因为堆满而报错</strong>，只会在 <code class="inl">channelWritabilityChanged</code> 里通知——<strong>没监听就是静默丢消息</strong>。这正好解释「偶发 30%（网络差的那批客户端）」。</p>
+    <p><strong>④ 验证手段</strong>：监控 <code class="inl">channel.bytesBeforeUnwritable()</code>、<code class="inl">bytesBeforeWritable()</code> 与 <code class="inl">channelWritabilityChanged</code> 触发次数。<strong>这个计数在涨，就是背压没做。</strong></p>
+    <p><strong>⑤ 修复</strong>：<code class="inl">isWritable()==false</code> 时 <code class="inl">setAutoRead(false)</code>，给上游返回限流信号；同时业务侧做消息确认（ACK）与重发，不能假设写了就一定到。</p>
+    <div class="lab g">四档对照</div>
+    <p><strong>不及格</strong>：说「加日志看看」。<br><strong>及格</strong>：能想到编码器顺序问题。<br><strong>良好</strong>：提到 outboundBuffer 与水位线。<br><strong>优秀</strong>：指出「Netty 的写是异步的，<code class="inl">writeAndFlush</code> 返回成功不代表对端收到」，从而引出 ACK 机制与业务层可靠性——把 Netty 问题上升到<strong>消息可靠性语义</strong>，这是架构师的答法。</p>
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">小结</span><em>带走三句</em></div>
+  <h2>本期小结：三句话带走</h2>
+  <ol>
+    <li><strong>IO 优化的账只有两栏</strong>：内存拷贝几次、上下文切换几次。所有方案（mmap / sendfile / 直接内存 / 池化）都在动这两栏——说不出这两栏，就只是在背名词。</li>
+    <li><strong>Netty 快的根本原因是「线程封闭」</strong>，不是「用了 NIO」。一个 Channel 只被一个 EventLoop 线程碰，所以整条链路无锁——代价是<strong>这批线程一个都不能阻塞</strong>。</li>
+    <li><strong>Netty 的事故几乎都是「静默」的</strong>：忘了 release、<code class="inl">ctx.write</code> 跳过编码器、<code class="inl">outboundBuffer</code> 堆满丢消息，全都不报错。所以工程上要靠泄漏检测、水位线监控、<code class="inl">pipeline.names()</code> 自检把「静默」变成「可见」。</li>
+  </ol>
+  <div class="oneline"><b>下期预告（第 20 期）</b>Java 线程池深水区与异步编排 —— <code class="inl">ThreadPoolExecutor</code> 的 <code class="inl">ctl</code> 32 位拆解、<code class="inl">execute</code> 的三次 <code class="inl">ctl</code> CAS 与 <code class="inl">addWorker</code> 失败回滚、<code class="inl">allowCoreThreadTimeOut</code> 的 <code class="inl">1e9</code> 纳秒技巧、<code class="inl">CompletableFuture</code> 的依赖栈与 <code class="inl">thenApply</code> 的 4 种线程归属、<code class="inl">ForkJoinPool</code> 工作窃取与 commonPool 的并行度陷阱、虚拟线程下线程池是否需要重写的真实答案。<strong>这期会把九成人都答错的「线程池参数怎么设」换成一张可算的表。</strong></div>
+</section>
+
+<footer>
+  Java 面试深水区 · 第 19 期 · NIO 与 Netty<br>
+  14 张手绘 SVG · 26 段可跑代码 · 17 个速查数字 · 14 问答 · 3 道模拟面试
+</footer>
+
+</div>
+<script>
+(function () {
+  var KW = /\b(public|private|protected|static|final|void|class|interface|extends|implements|new|return|if|else|for|while|try|catch|finally|throw|throws|import|package|this|super|int|long|byte|boolean|char|short|double|float|null|true|false|break|continue|switch|case|default|abstract|synchronized|volatile|transient|instanceof|enum|SELECT|FROM|WHERE|UPDATE|SET|INSERT|INTO|VALUES|AND|OR|ORDER|BY|LIMIT|GROUP|LEFT|JOIN|ON)\b/g;
+
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  var blocks = document.querySelectorAll('pre > code');
+  for (var i = 0; i < blocks.length; i++) {
+    var raw = blocks[i].textContent;
+    var out = esc(raw);
+    out = out.replace(/(\/\/[^\n]*|--[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(\d[\d_.]*[lLfFdD]?)\b|([A-Za-z_$][\w$]*)|/g,
+      function (m, cmt, str, num, id) {
+        if (cmt) return '<span class="c">' + cmt + '</span>';
+        if (str) return '<span class="s">' + str + '</span>';
+        if (num) return '<span class="n">' + num + '</span>';
+        if (id && /^(public|private|protected|static|final|void|class|interface|extends|implements|new|return|if|else|for|while|try|catch|finally|throw|throws|import|package|this|super|int|long|byte|boolean|char|short|double|float|null|true|false|break|continue|switch|case|default|abstract|synchronized|volatile|transient|instanceof|enum)$/.test(id)) {
+          return '<span class="k">' + id + '</span>';
+        }
+        return m;
+      });
+    blocks[i].innerHTML = out;
+  }
+})();
+</script>
+</body>
+</html>

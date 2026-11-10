@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 17 · 缓存架构与一致性</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:28px; line-height:1.34; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:790px}
+  .sub b{color:#be123c}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.7px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21; line-height:1.6}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  .check{list-style:none; padding:0; margin:14px 0}
+  .check li{padding:11px 14px; background:var(--soft); border-radius:9px; margin:8px 0; font-size:14px; border-left:3px solid #bcdcf2}
+  .check li b{color:#075985}
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Java 面试深水区 · 第 17 期</div>
+  <h1>缓存一致性<span class="arrow">→</span>从分层账本到 binlog 解耦</h1>
+  <p class="sub">被问「怎么保证缓存和数据库一致」，八成人背出「先更新数据库，再删缓存」，追一句「删缓存失败了呢」就开始含糊，再追「延迟双删那个 500ms 是怎么定的」基本就沉默了。<b>因为在这个方案里，99.9% 的单步成功率意味着每天 200 条脏数据</b>，而那个 500ms 只是个传说。本期把四种时序画成时间线、把双写失败率做成乘法、把多级缓存的「内存放大」和「广播不可达」算成具体数字。</p>
+  <div class="meta">
+    <div><strong>13</strong>层递进</div>
+    <div><strong>14</strong>张原理图</div>
+    <div><strong>17</strong>段代码</div>
+    <div><strong>14</strong>条高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span class="on">L0 分层账本</span>
+  <span>L1 多级三坑</span>
+  <span>L2 四种时序</span>
+  <span>L3 失败率乘法</span>
+  <span>L4 一致性分级</span>
+  <span>L5 热 key</span>
+  <span>L6 热 key 探测</span>
+  <span>L7 穿透</span>
+  <span>L8 击穿与雪崩</span>
+  <span>L9 容量与淘汰</span>
+  <span>L10–L12 速查·问答·模拟</span>
+</div>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>概念纠偏</em></div>
+  <h2>先把分层算清：缓存省的不是延迟，是连接数和热点</h2>
+  <p>几乎所有缓存文章的开头都是「数据库慢，所以加缓存」。这个说法在你把整张表放进 buffer pool 之后就不成立了。先看六个位置的实测量级：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 372" role="img" aria-label="六层存储的延迟与容量对比">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">同一份数据放在六个位置：延迟跨 7 个数量级，容量与成本反向走</text>
+
+      <line x1="140" y1="40" x2="140" y2="308" stroke="#e3e7ef"/>
+      <line x1="425" y1="40" x2="425" y2="308" stroke="#eef1f7"/>
+      <line x1="710" y1="40" x2="710" y2="308" stroke="#eef1f7"/>
+      <line x1="805" y1="40" x2="805" y2="308" stroke="#eef1f7"/>
+
+      <text x="132" y="64" font-size="11" fill="#334155" font-weight="700" text-anchor="end">CPU L1 缓存</text>
+      <text x="132" y="78" font-size="9.5" fill="#94a3b8" text-anchor="end">64 KB / 不可编程</text>
+      <rect x="140" y="54" width="6" height="28" rx="2" fill="#dbeafe" stroke="#93b8e0"/>
+      <text x="156" y="73" font-size="11" fill="#075985" font-weight="700">1 ns</text>
+
+      <text x="132" y="118" font-size="11" fill="#334155" font-weight="700" text-anchor="end">JVM 本地缓存（堆）</text>
+      <text x="132" y="132" font-size="9.5" fill="#94a3b8" text-anchor="end">Caffeine 10 万条 ≈ 100 MB</text>
+      <rect x="140" y="108" width="218" height="28" rx="4" fill="#e8f4ec" stroke="#86cfa4"/>
+      <text x="370" y="127" font-size="11" fill="#047857" font-weight="700">200 ns</text>
+
+      <text x="132" y="172" font-size="11" fill="#334155" font-weight="700" text-anchor="end">MySQL 内存命中</text>
+      <text x="132" y="186" font-size="9.5" fill="#94a3b8" text-anchor="end">buffer pool 有这条记录</text>
+      <rect x="140" y="162" width="520" height="28" rx="4" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="672" y="181" font-size="11" fill="#6d28d9" font-weight="700">0.3 ms</text>
+
+      <text x="132" y="226" font-size="11" fill="#334155" font-weight="700" text-anchor="end">Redis 同机房</text>
+      <text x="132" y="240" font-size="9.5" fill="#94a3b8" text-anchor="end">10GB · 单分片 8 万 QPS</text>
+      <rect x="140" y="216" width="549" height="28" rx="4" fill="#fef6e8" stroke="#e9c98c"/>
+      <text x="701" y="235" font-size="11" fill="#b45309" font-weight="700">0.6 ms</text>
+
+      <text x="132" y="280" font-size="11" fill="#334155" font-weight="700" text-anchor="end">Redis 跨可用区</text>
+      <text x="132" y="294" font-size="9.5" fill="#94a3b8" text-anchor="end">多一跳骨干网</text>
+      <rect x="140" y="270" width="577" height="28" rx="4" fill="#fef6e8" stroke="#e9c98c"/>
+      <text x="729" y="289" font-size="11" fill="#b45309" font-weight="700">1.2 ms</text>
+
+      <text x="132" y="334" font-size="11" fill="#334155" font-weight="700" text-anchor="end">MySQL 磁盘随机读</text>
+      <rect x="140" y="324" width="644" height="28" rx="4" fill="#fff1f3" stroke="#f0a8b6"/>
+      <text x="796" y="343" font-size="11" fill="#be123c" font-weight="700">6 ms</text>
+
+      <text x="140" y="366" font-size="10" fill="#94a3b8">横轴 = 对数刻度（1 ns → 10 ms）。注意第 3 行：MySQL 内存命中比 Redis 跨 AZ 还快，所以「加缓存一定更快」是错的。</text>
+    </svg>
+    <figcaption><b>图 1</b>　本地缓存与 Redis 差 5000 倍，Redis 与 MySQL 内存命中只差 2 倍。真正贵的是磁盘那 6ms。</figcaption>
+  </figure>
+
+  <p>看第 3 行和第 5 行：<strong>MySQL 走 buffer pool 是 0.3ms，而 Redis 跨可用区是 1.2ms</strong>。如果你的数据量能全放进 buffer pool，加一层跨 AZ 的 Redis 反而让 RT 变长 4 倍。所以缓存真正的价值不是「快」，是三件别的事：</p>
+
+  <table>
+    <tr><th style="width:22%">缓存真正解决的问题</th><th style="width:34%">不管它会发生什么</th><th>数字</th></tr>
+    <tr><td><strong>连接数</strong></td><td>MySQL 单实例 2000 连接封顶，一个连接占 8MB 内存</td><td>1000 QPS × 10ms = 需 10 个活跃连接，但突发 5 万 QPS 就要 500 个</td></tr>
+    <tr><td><strong>热点争用</strong></td><td>同一行的读也要过 buffer pool 的 mutex + 事务可见性判断</td><td>单行 10 万 QPS 时 InnoDB 行锁/闩竞争把 CPU 打满</td></tr>
+    <tr><td><strong>让 DB 只写</strong></td><td>读写混跑时，大查询把 buffer pool 冲掉，写性能跟着掉</td><td>一次全表扫 10GB 能冲掉 60% 热页，写入 P99 翻 3 倍</td></tr>
+  </table>
+
+  <h3>命中率不是越高越好：长尾税</h3>
+  <p>假设 1000 万商品，访问服从 Zipf α=1（头部集中、长尾极长）。缓存 top k 个 key 的命中率约等于 <code class="inl">H(k)/H(N)</code>，其中 H 是调和数，<code class="inl">H(n) ≈ ln n + 0.577</code>：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 306" role="img" aria-label="缓存份额、命中率与 DB 承压">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">QPS 10 万：缓存份额 → 命中率 → 打到 DB 的 QPS（线性刻度，看断崖）</text>
+
+      <text x="28" y="52" font-size="10.5" fill="#64748b" font-weight="700">缓存份额</text>
+      <text x="112" y="52" font-size="10.5" fill="#64748b" font-weight="700">命中率</text>
+      <text x="196" y="52" font-size="10.5" fill="#64748b" font-weight="700">内存</text>
+      <text x="290" y="52" font-size="10.5" fill="#64748b" font-weight="700">DB 承压</text>
+
+      <text x="28" y="86" font-size="11" fill="#334155">top 1%</text>
+      <text x="28" y="100" font-size="9.5" fill="#94a3b8">10 万条</text>
+      <text x="112" y="92" font-size="11" fill="#0369a1" font-weight="700">72.4%</text>
+      <text x="196" y="92" font-size="11" fill="#475569">100 MB</text>
+      <rect x="290" y="72" width="480" height="26" rx="3" fill="#fde2e6" stroke="#f0a8b6"/>
+      <text x="778" y="90" font-size="10.5" fill="#be123c" font-weight="700">27,600</text>
+
+      <text x="28" y="137" font-size="11" fill="#334155">top 10%</text>
+      <text x="28" y="151" font-size="9.5" fill="#94a3b8">100 万条</text>
+      <text x="112" y="143" font-size="11" fill="#0369a1" font-weight="700">86.2%</text>
+      <text x="196" y="143" font-size="11" fill="#475569">1 GB</text>
+      <rect x="290" y="123" width="240" height="26" rx="3" fill="#fde2e6" stroke="#f0a8b6"/>
+      <text x="538" y="141" font-size="10.5" fill="#be123c" font-weight="700">13,800</text>
+
+      <text x="28" y="188" font-size="11" fill="#334155">top 50%</text>
+      <text x="28" y="202" font-size="9.5" fill="#94a3b8">500 万条</text>
+      <text x="112" y="194" font-size="11" fill="#0369a1" font-weight="700">95.8%</text>
+      <text x="196" y="194" font-size="11" fill="#475569">5 GB</text>
+      <rect x="290" y="174" width="73" height="26" rx="3" fill="#fef6e8" stroke="#e9c98c"/>
+      <text x="371" y="192" font-size="10.5" fill="#b45309" font-weight="700">4,200</text>
+
+      <text x="28" y="239" font-size="11" fill="#334155">top 100%</text>
+      <text x="28" y="253" font-size="9.5" fill="#94a3b8">1000 万条</text>
+      <text x="112" y="245" font-size="11" fill="#0369a1" font-weight="700">100%</text>
+      <text x="196" y="245" font-size="11" fill="#475569">10 GB</text>
+      <rect x="290" y="225" width="2" height="26" rx="1" fill="#cceddc" stroke="#86cfa4"/>
+      <text x="300" y="243" font-size="10.5" fill="#047857" font-weight="700">0</text>
+
+      <rect x="24" y="266" width="852" height="30" rx="7" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="38" y="286" font-size="10.5" fill="#b45309">最后 50% 的 key（5 GB 内存）只换来 4,200 → 0 的收益；而这 4,200 QPS 一张单表闭着眼也能扛。长尾 key 不该进缓存。</text>
+    </svg>
+    <figcaption><b>图 2</b>　命中率从 72% 到 96% 只多花 5GB，从 96% 到 100% 还要再花 5GB，而 DB 压力只从 4,200 降到 0。</figcaption>
+  </figure>
+
+  <p>这张表是本期最重要的一张，因为它是「要不要给某个对象加缓存」的唯一判据：</p>
+  <ul>
+    <li><strong>头部 1%（10 万条）值得缓存</strong>，100MB 内存把 DB 压力从 10 万砍到 2.76 万，ROI 最高。</li>
+    <li><strong>长尾（第 50%~100%）不值得</strong>。4200 QPS 打在一张 1000 万行的表上，单表完全扛得住；为它多花 5GB 内存和一份缓存一致性风险，是负收益。</li>
+    <li>所以「全量缓存」这个方案只在一种情况下成立：<strong>数据量小到能全放内存，且读远多于写</strong>（配置表、字典表、城市列表）。它不叫缓存，叫<strong>内存副本</strong>，一致性要求完全不同。</li>
+  </ul>
+
+  <div class="oneline">
+    <b>一句话结论</b>
+    缓存的本质是「用可控的不一致，换 DB 的连接数与热点承载能力」。所以一致性方案的选择标准不是「能不能做到强一致」，而是「业务能容忍多长的窗口」。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>多级缓存</em></div>
+  <h2>本地缓存的三笔账：内存放大、广播不可达、TTL 窗口</h2>
+  <p>「本地缓存 + Redis」是多级缓存的标准答案，面试时说出来很稳。但它在分布式部署下有三个必须自己算的账，否则就是个定时炸弹。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="多级缓存的三个问题">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">同一份 100 MB 的有效数据，在 20 个实例上是 20 份</text>
+
+      <rect x="24" y="34" width="852" height="76" rx="9" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="40" y="56" font-size="11" fill="#334155" font-weight="700">① 内存放大：有效数据 100 MB，物理占用 2 GB</text>
+      <rect x="40" y="66" width="36" height="30" rx="4" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="58" y="86" font-size="9" fill="#075985" text-anchor="middle">ins1</text>
+      <rect x="84" y="66" width="36" height="30" rx="4" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="102" y="86" font-size="9" fill="#075985" text-anchor="middle">ins2</text>
+      <rect x="128" y="66" width="36" height="30" rx="4" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="146" y="86" font-size="9" fill="#075985" text-anchor="middle">ins3</text>
+      <text x="172" y="86" font-size="10" fill="#94a3b8">…</text>
+      <rect x="188" y="66" width="36" height="30" rx="4" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="206" y="86" font-size="9" fill="#075985" text-anchor="middle">ins20</text>
+      <text x="238" y="80" font-size="10.5" fill="#be123c" font-weight="700">20 × 100 MB = 2 GB</text>
+      <text x="238" y="96" font-size="10" fill="#64748b">每份都独立 GC、独立预热、独立过期</text>
+      <text x="470" y="80" font-size="10" fill="#64748b">放大倍数 = 实例数。20 实例就是 20 倍，</text>
+      <text x="470" y="96" font-size="10" fill="#64748b">这 2 GB 全是老年代常驻对象，直接抬高 GC 基线。</text>
+
+      <rect x="24" y="120" width="852" height="96" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="40" y="142" font-size="11" fill="#be123c" font-weight="700">② 广播不可达：一次更新要触达 20 个进程，而广播通道天生会丢消息</text>
+      <rect x="40" y="154" width="120" height="24" rx="4" fill="#fff" stroke="#f0a8b6"/>
+      <text x="100" y="170" font-size="10" fill="#be123c" text-anchor="middle">写请求 → DB</text>
+      <line x1="160" y1="166" x2="196" y2="166" stroke="#f0a8b6" stroke-width="1.4"/>
+      <polygon points="196,161 206,166 196,171" fill="#f0a8b6"/>
+      <rect x="206" y="154" width="110" height="24" rx="4" fill="#fff" stroke="#f0a8b6"/>
+      <text x="261" y="170" font-size="10" fill="#be123c" text-anchor="middle">MQ 广播 / pub-sub</text>
+      <line x1="316" y1="166" x2="352" y2="166" stroke="#f0a8b6" stroke-width="1.4"/>
+      <polygon points="352,161 362,166 352,171" fill="#f0a8b6"/>
+      <text x="368" y="163" font-size="10" fill="#64748b">Kafka 广播：每实例独立 groupId → 消息复制 20 份</text>
+      <text x="368" y="179" font-size="10" fill="#64748b">新实例上线收不到历史消息；pub/sub 断连即丢、无 ACK</text>
+      <text x="368" y="195" font-size="10" fill="#be123c">结论：本地缓存失效在这套体系下是「尽力而为」，不是「保证」</text>
+      <text x="40" y="210" font-size="10" fill="#64748b">所以要靠 TTL 兜底 —— 但 TTL 一短，本地缓存的命中率就归零，这就形成了第三个问题的死结。</text>
+
+      <rect x="24" y="226" width="852" height="88" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="40" y="248" font-size="11" fill="#b45309" font-weight="700">③ TTL 窗口：TTL 是唯一可靠的兜底，但它同时决定脏读时长</text>
+      <text x="40" y="270" font-size="10" fill="#475569">TTL = 5 s　→ 最坏脏读 5 s，本地命中率还行，但 5 秒内同一 key 的所有读都是旧值</text>
+      <text x="40" y="288" font-size="10" fill="#475569">TTL = 60 s → 脏读最多 1 分钟，但发版/重启后要 60 s 才能「自然恢复」</text>
+      <text x="40" y="306" font-size="10" fill="#be123c" font-weight="700">面试要答出的核心：本地缓存的一致性 = 广播到位率 × TTL，两者都得说，只说 TTL 是及格，只说广播是不及格。</text>
+    </svg>
+    <figcaption><b>图 3</b>　内存放大 20 倍是可以算的，广播丢失是不可控的，TTL 是唯一可靠的兜底 —— 所以方案必须三者叠加。</figcaption>
+  </figure>
+
+  <h3>版本号：让「删除」变成「换版本」</h3>
+  <p>「删本地缓存」这个动作在分布式下不可靠，因为它要求消息<strong>恰好到达每一个实例</strong>。工程上的解法是把它降级：不要求「删掉」，只要求「知道它变了」。</p>
+  <p>做法：每个缓存对象带一个版本号，版本号存在 Redis（<code class="inl">item:123:ver</code>），写入时 <code class="inl">INCR</code>。本地缓存的 entry 里带上读取时的版本。广播通道只推「key 123 版本变成 8 了」这条消息，每个实例在本地记一张 <code class="inl">key → 最新版本</code> 的小表。请求进来比对版本，不一致就当 miss。</p>
+
+  <pre><code>// 本地缓存 entry 带版本；版本号来自 Redis，广播只负责"通知变化"
+public class VersionedEntry&lt;V&gt; {
+    final V value;
+    final long version;
+    final long loadAtMillis;
+    VersionedEntry(V value, long version) {
+        this.value = value;
+        this.version = version;
+        this.loadAtMillis = System.currentTimeMillis();
+    }
+}
+
+// 本地维护的版本表：广播消息到达就更新，消息丢了也不影响正确性（还有 TTL）
+private final ConcurrentHashMap&lt;String, Long&gt; verTable = new ConcurrentHashMap&lt;&gt;();
+
+public Item get(long id) {
+    String key = "item:" + id;
+    VersionedEntry&lt;Item&gt; e = local.getIfPresent(key);
+    Long latest = verTable.get(key);           // 广播推来的版本
+    boolean stale = e != null &amp;&amp; latest != null &amp;&amp; latest &gt; e.version;
+    boolean expired = e != null &amp;&amp; System.currentTimeMillis() - e.loadAtMillis &gt; 30_000;
+    if (e != null &amp;&amp; !stale &amp;&amp; !expired) {
+        return e.value;
+    }
+    // 回源：Redis 里读 value 和 version 必须原子（用 Lua 或 hash 一起取）
+    ItemDbRow row = redis.getWithVersion(key);  // 内部 HMGET value version
+    local.put(key, new VersionedEntry&lt;&gt;(row.item, row.version));
+    return row.item;
+}</code></pre>
+
+  <p>这个方案的价值在于：<strong>消息丢失不再是「永久脏」，而是「最多 TTL 秒的脏」</strong>。可用性的下限从「取决于 MQ 投递成功率」变成了「取决于 TTL 配置」，这是一个可以被工程控制的边界。</p>
+
+  <h3>失效顺序：先删本地还是先删 Redis</h3>
+  <p>这是面试里区分度很高的一问。答案取决于你用「删除」还是「版本号」：</p>
+  <table>
+    <tr><th style="width:26%">方案</th><th style="width:37%">顺序错乱的后果</th><th>结论</th></tr>
+    <tr><td>先删本地 → 再删 Redis</td><td>间隙里别的实例从旧 Redis 回填本地，本地又脏了</td><td>必须反过来，或加版本号</td></tr>
+    <tr><td>先删 Redis → 再删本地</td><td>本实例在间隙里仍返回旧值，但它马上会被删；别的实例只可能从新 Redis 回填</td><td>推荐，窗口 = 一次网络往返</td></tr>
+    <tr><td>版本号方案</td><td>顺序无关：版本大小天然决定谁新</td><td>最稳，代价是多一次版本读</td></tr>
+  </table>
+  <p>注意一个常见错误：<strong>「先更新 Redis 再更新 DB」在任何情况下都是错的</strong>。因为 Redis 没有事务回滚，DB 更新失败时 Redis 已经是新值，缓存成了唯一的真相源，而它随时可能被淘汰 —— 这是数据丢失，不只是不一致。</p>
+
+  <div class="good">
+    <b>面试可以直接说的一句话</b>
+    「本地缓存在分布式下不可能做到实时失效，这是架构决定的。所以我的方案是三层：版本号做正确性、广播做低延迟、TTL 做兜底。三层都在，我们就不需要讨论『消息丢了怎么办』这种问题。」
+  </div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>核心时序</em></div>
+  <h2>Cache Aside 的四种时序：只有一种能上生产</h2>
+  <p>这一节是本期的心脏。四种写法在面试里都被说过，但它们的差别不在「顺序」，在于<strong>不一致的窗口有多长、以及窗口能不能自己闭合</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 440" role="img" aria-label="Cache Aside 四种时序对比">
+      <text x="24" y="22" font-size="12.5" fill="#334155" font-weight="700">四种读写时序：横轴是时间，两条泳道分别是读线程与写线程</text>
+      <text x="800" y="22" font-size="10" fill="#94a3b8">时间 →</text>
+
+      <text x="24" y="52" font-size="10.5" fill="#be123c" font-weight="700">① 先删缓存，再更新 DB —— 最坏，窗口最宽</text>
+      <text x="68" y="78" font-size="9.5" fill="#64748b" text-anchor="end">读</text>
+      <line x1="76" y1="74" x2="856" y2="74" stroke="#eef1f7"/>
+      <rect x="80" y="65" width="50" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="105" y="78" font-size="9" fill="#475569" text-anchor="middle">miss</text>
+      <rect x="140" y="65" width="104" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="192" y="78" font-size="9" fill="#475569" text-anchor="middle">读 DB = 旧值</text>
+      <rect x="430" y="65" width="110" height="18" rx="3" fill="#fde2e6" stroke="#f0a8b6"/>
+      <text x="485" y="78" font-size="9" fill="#be123c" text-anchor="middle">写缓存 = 旧值</text>
+      <text x="68" y="110" font-size="9.5" fill="#64748b" text-anchor="end">写</text>
+      <line x1="76" y1="106" x2="856" y2="106" stroke="#eef1f7"/>
+      <rect x="276" y="97" width="66" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="309" y="110" font-size="9" fill="#475569" text-anchor="middle">删缓存</text>
+      <rect x="352" y="97" width="104" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="404" y="110" font-size="9" fill="#475569" text-anchor="middle">更新 DB = 新值</text>
+      <text x="552" y="78" font-size="9.5" fill="#be123c">旧值被写回缓存，活到 TTL 到期</text>
+      <text x="552" y="110" font-size="9.5" fill="#94a3b8">删与写之间被读线程整个穿透</text>
+
+      <text x="24" y="152" font-size="10.5" fill="#b45309" font-weight="700">② 先更新 DB，再删缓存 —— 主流答案，但仍有 3~5 ms 窗口</text>
+      <text x="68" y="178" font-size="9.5" fill="#64748b" text-anchor="end">读</text>
+      <line x1="76" y1="174" x2="856" y2="174" stroke="#eef1f7"/>
+      <rect x="80" y="165" width="50" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="105" y="178" font-size="9" fill="#475569" text-anchor="middle">miss</text>
+      <rect x="140" y="165" width="100" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="190" y="178" font-size="9" fill="#475569" text-anchor="middle">读 DB = 旧值</text>
+      <rect x="290" y="165" width="104" height="18" rx="3" fill="#fde2e6" stroke="#f0a8b6"/>
+      <text x="342" y="178" font-size="9" fill="#be123c" text-anchor="middle">写缓存 = 旧值</text>
+      <text x="68" y="210" font-size="9.5" fill="#64748b" text-anchor="end">写</text>
+      <line x1="76" y1="206" x2="856" y2="206" stroke="#eef1f7"/>
+      <rect x="80" y="197" width="104" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="132" y="210" font-size="9" fill="#475569" text-anchor="middle">更新 DB = 新值</text>
+      <rect x="194" y="197" width="66" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="227" y="210" font-size="9" fill="#475569" text-anchor="middle">删缓存</text>
+      <text x="408" y="178" font-size="9.5" fill="#b45309">要出错，读线程必须完整「穿越」写线程的全过程</text>
+      <text x="408" y="210" font-size="9.5" fill="#94a3b8">残余风险只剩：删失败 / 主从延迟 / 同 key 并发回填</text>
+
+      <text x="24" y="252" font-size="10.5" fill="#0369a1" font-weight="700">③ 延迟双删：把「再删一次」推后，赌主从已经同步</text>
+      <text x="68" y="278" font-size="9.5" fill="#64748b" text-anchor="end">读</text>
+      <line x1="76" y1="274" x2="856" y2="274" stroke="#eef1f7"/>
+      <rect x="80" y="265" width="50" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="105" y="278" font-size="9" fill="#475569" text-anchor="middle">miss</text>
+      <rect x="140" y="265" width="96" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="188" y="278" font-size="9" fill="#475569" text-anchor="middle">读从库 = 旧</text>
+      <rect x="250" y="265" width="104" height="18" rx="3" fill="#fde2e6" stroke="#f0a8b6"/>
+      <text x="302" y="278" font-size="9" fill="#be123c" text-anchor="middle">回填旧值</text>
+      <text x="68" y="310" font-size="9.5" fill="#64748b" text-anchor="end">写</text>
+      <line x1="76" y1="306" x2="856" y2="306" stroke="#eef1f7"/>
+      <rect x="80" y="297" width="96" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="128" y="310" font-size="9" fill="#475569" text-anchor="middle">更新 DB（主）</text>
+      <rect x="180" y="297" width="60" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="210" y="310" font-size="9" fill="#475569" text-anchor="middle">删缓存</text>
+      <rect x="248" y="297" width="330" height="18" rx="3" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="413" y="310" font-size="9" fill="#075985" text-anchor="middle">sleep 500 ms（等主从同步）</text>
+      <rect x="586" y="297" width="62" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="617" y="310" font-size="9" fill="#475569" text-anchor="middle">再删一次</text>
+      <text x="656" y="310" font-size="9.5" fill="#be123c">← 这 500ms 内持续脏读</text>
+      <text x="368" y="278" font-size="9.5" fill="#0369a1">只覆盖「主从延迟」这一种成因，</text>
+      <text x="368" y="292" font-size="9.5" fill="#0369a1">且 sleep 必须大于延迟，否则白删</text>
+
+      <text x="24" y="352" font-size="10.5" fill="#7c3aed" font-weight="700">④ 更新缓存而不是删除 —— 并发写会互相覆盖，永久不一致</text>
+      <text x="68" y="378" font-size="9.5" fill="#64748b" text-anchor="end">写A</text>
+      <line x1="76" y1="374" x2="856" y2="374" stroke="#eef1f7"/>
+      <rect x="80" y="365" width="96" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="128" y="378" font-size="9" fill="#475569" text-anchor="middle">写 DB = 1</text>
+      <rect x="400" y="365" width="96" height="18" rx="3" fill="#fde2e6" stroke="#f0a8b6"/>
+      <text x="448" y="378" font-size="9" fill="#be123c" text-anchor="middle">写缓存 = 1</text>
+      <text x="68" y="410" font-size="9.5" fill="#64748b" text-anchor="end">写B</text>
+      <line x1="76" y1="406" x2="856" y2="406" stroke="#eef1f7"/>
+      <rect x="180" y="397" width="96" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="228" y="410" font-size="9" fill="#475569" text-anchor="middle">写 DB = 2</text>
+      <rect x="290" y="397" width="96" height="18" rx="3" fill="#f8fafc" stroke="#cbd5e1"/>
+      <text x="338" y="410" font-size="9" fill="#475569" text-anchor="middle">写缓存 = 2</text>
+      <text x="512" y="378" font-size="9.5" fill="#be123c" font-weight="700">最终 DB = 2，缓存 = 1，永久错到下次写</text>
+      <text x="512" y="410" font-size="9.5" fill="#94a3b8">除非加分布式锁或用版本号做 CAS 比较</text>
+    </svg>
+    <figcaption><b>图 4</b>　①错在窗口太宽，②只剩窄窗口，③是在②上打补丁，④是并发覆盖 —— 只有 ② 的窗口可以靠 binlog 补掉。</figcaption>
+  </figure>
+
+  <h3>为什么 ① 是最坏的：窗口宽度差 1000 倍</h3>
+  <p>① 的窗口从「删缓存」开始，到「DB 更新完成」结束 —— 这段时间等于一次 DB 写事务的耗时（含行锁等待、redo 刷盘），<strong>5ms 是乐观估计，遇到锁等待可以到 100ms</strong>。而且窗口内的读请求不是「可能读旧值」，是<strong>一定读旧值并回填</strong>，因为缓存已经被自己删了。</p>
+  <p>② 的窗口要求读线程「读 DB」的起点早于写线程「更新 DB」，同时「写缓存」的终点晚于写线程「删缓存」。翻译一下：<strong>读线程的整个 DB 读 + 缓存写 必须跨越写线程的整个 DB 更新 + 删缓存</strong>。读侧 3ms、写侧 5ms，两个事件在时间轴上重叠且方向相反的概率极低。</p>
+
+  <div class="warn">
+    <b>但「概率低」不等于「可以不管」。</b>QPS 1000 时，任意瞬间有 <code>1000 × 5ms = 5</code> 个写请求在飞行中，日更新 10 万次意味着窗口被穿越的机会是<strong>按亿次计的</strong>。这就是为什么大厂最后都走 L3 的 binlog 方案 —— 不是②写错了，是②的残余风险无法用业务代码兜住。
+  </div>
+
+  <h3>② 的正确实现：删除失败必须落重试表</h3>
+  <p>面试里说「先更新 DB 再删缓存」只是及格线。真正的问题在下一句：<strong>删缓存失败了怎么办</strong>。Redis 超时、主从切换、网络抖动都能让这次删除丢掉，而这个 key 会在缓存里活到 TTL 到期。</p>
+
+  <pre><code>@Transactional
+public void updateItem(Item item) {
+    // 1. 先更新 DB（这一步必须有事务，否则后面全是空谈）
+    itemMapper.updateById(item);
+
+    // 2. 事务提交后再删缓存 —— 注意：不能写在事务里！
+    //    写在事务里会在提交前就把缓存删掉，等于退化成时序 ①
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+            @Override public void afterCommit() {
+                evictWithRetry(item.getId());
+            }
+        });
+}
+
+private void evictWithRetry(long id) {
+    String key = "item:" + id;
+    try {
+        redis.delete(key);
+    } catch (Exception e) {
+        // 关键：失败不能只打日志。落本地消息表，由定时任务重试
+        retryMapper.insert(new RetryTask(key, 0, System.currentTimeMillis()));
+        log.warn("evict failed, queued for retry, key={}", key, e);
+    }
+}</code></pre>
+
+  <div class="trap">
+    <b>这一行代码就是 80% 面试者的分水岭：</b>把 <code>redis.delete()</code> 写在 <code>@Transactional</code> 方法体里。此时删缓存发生在事务提交之前，事务万一回滚，缓存已经删了（这个还好，只是多一次 miss）；但只要事务提交慢（比如等行锁 50ms），这 50ms 内所有读请求都会 miss 并回填<strong>未被提交的旧值</strong>，回填的瞬间缓存就被写脏 —— 这和时序 ① 的错误一模一样。必须用 <code>afterCommit</code>。
+  </div>
+
+  <h3>③ 延迟双删：那个 500ms 到底该怎么定</h3>
+  <p>延迟双删的唯一目标是覆盖<strong>主从延迟</strong>：写走主库、读走从库，删完缓存后 100ms 内来的读请求会从从库读到旧值并回填。所以第二次删除要发生在「所有可能在主从延迟窗口内读到旧值的请求都已经回填完」之后。</p>
+  <p>推导一下：设主从延迟 <code>D</code>，一次读请求从发起回填到结束耗时 <code>R</code>（读从库 + 写 Redis）。第二次删除必须晚于 <code>D + R</code>。</p>
+  <ul>
+    <li><code>D</code> 的实测值：同机房 binlog 同步 P99 约 20~50ms，跨机房 100~300ms，大事务或从库压力大时可以到 1~3 秒。</li>
+    <li><code>R</code> 的实测值：读从库 1ms + 写 Redis 1ms，约 2~5ms。</li>
+    <li>所以理论上 <code>D + R</code> 在 100ms 量级就够了，<strong>「500ms」这个数字没有推导依据，它是「拍脑袋 + 加个安全系数」的产物</strong>。真正该做的是监控主从延迟的 P99，取 <code>P99 + 200ms</code>。</li>
+  </ul>
+
+  <p>而且「线程 sleep 500ms」这个实现有三个硬伤，面试时能主动说出来就是加分项：</p>
+  <table>
+    <tr><th style="width:24%">硬伤</th><th style="width:36%">后果</th><th>正确做法</th></tr>
+    <tr><td>sleep 在请求线程里</td><td>写接口 RT +500ms，QPS 100 时线程池 50 个线程全被 sleep 占满</td><td>绝不能在请求线程 sleep</td></tr>
+    <tr><td>交给异步线程池</td><td>线程池满 / 进程重启 / 发布滚动 → 第二次删直接丢</td><td>用延时消息（MQ 延时级别）或 Redis ZSet 延时队列</td></tr>
+    <tr><td>第二次删仍可能失败</td><td>失败了没有任何兜底，白等 500ms</td><td>第二次删同样要落重试表，带次数上限</td></tr>
+  </table>
+
+  <pre><code>// 用延时消息替代 sleep：RocketMQ 延时级别 / RabbitMQ 死信队列 / Redis ZSet
+public void updateWithDelayEvict(Item item) {
+    itemMapper.updateById(item);
+    redis.delete("item:" + item.getId());
+
+    // 发一条 1s 后投递的消息，消费端只做一件事：再删一次
+    // 关键：消息要带版本号，消费时比对 DB 当前版本，版本已变则跳过
+    delayProducer.send(new DelayEvictMsg(item.getId(), item.getVersion()), 1_000);
+}
+
+// 消费端：幂等 + 版本校验，重复投递无害
+public void onDelayEvict(DelayEvictMsg msg) {
+    Long dbVersion = itemMapper.selectVersion(msg.id);
+    if (dbVersion != null &amp;&amp; dbVersion &gt; msg.version) {
+        return;   // 期间又被改过，说明更新的那次已经自己删过了
+    }
+    redis.delete("item:" + msg.id);
+}</code></pre>
+
+  <h3>④ 为什么「更新缓存」几乎总是错的</h3>
+  <p>三个理由，面试按顺序说：</p>
+  <ol>
+    <li><strong>并发覆盖</strong>：两个写请求按 图 4④ 的顺序交错，缓存永久是旧值。要修就得给每个 key 加锁或做 CAS，成本远高于「删掉让下次读回源」。</li>
+    <li><strong>写多读少时是纯浪费</strong>：100 次写只有 1 次读，你算了 100 次缓存值，其中 99 次没人看。删除是懒加载，只在被读时才付出回源成本。</li>
+    <li><strong>缓存 value 常是聚合结果</strong>：商品详情 = 商品 + 库存 + 价格 + 促销，任何一个子项变化都要重算整个聚合。删除只需要一个 <code>DEL</code>，更新需要跑一遍聚合逻辑，还得保证聚合逻辑和读路径完全一致。</li>
+  </ol>
+  <div class="good">
+    <b>唯一的例外</b>
+    「更新缓存」在<strong>能保证顺序</strong>的场景下是对的，典型就是 binlog 订阅：binlog 按主键分区、严格有序，消费端按顺序更新缓存，天然不会覆盖错乱。所以不是「更新」错了，是「业务代码里并发更新」错了。
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>可靠性</em></div>
+  <h2>双写的失败率是乘法：99.9% 的两次成功只有 99.8%</h2>
+  <p>这是整期最容易被忽略、也最能镇住面试官的一段。所有「先写 DB 再删缓存」的讨论，默认了一个前提：这两步都会成功。但工程里没有 100%。</p>
+
+  <p>给一组真实量级的数字：写 DB 的成功率 99.95%（含超时重试，失败多来自行锁等待超时和主从切换），删缓存的成功率 99.9%（Redis 超时、连接池耗尽、主从切换期间只读）。两个操作是独立的，联合成功率：</p>
+
+  <p style="text-align:center;font-size:15px;font-family:ui-monospace,Consolas,monospace;color:#be123c;font-weight:700">0.9995 × 0.999 = 0.9985</p>
+
+  <figure>
+    <svg viewBox="0 0 900 344" role="img" aria-label="双写链路与 binlog 订阅链路对比">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">同样一次「DB 变了，缓存要失效」，两条链路的失败点数量差 3 个</text>
+
+      <rect x="24" y="32" width="852" height="118" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="40" y="54" font-size="11" fill="#be123c" font-weight="700">A. 业务代码双写：两个失败点都在业务线程里，且无法重放</text>
+
+      <rect x="40" y="66" width="112" height="34" rx="5" fill="#fff" stroke="#f0a8b6"/>
+      <text x="96" y="87" font-size="9.5" fill="#be123c" text-anchor="middle">updateItem()</text>
+      <line x1="152" y1="83" x2="186" y2="83" stroke="#f0a8b6" stroke-width="1.3"/>
+      <polygon points="186,78 196,83 186,88" fill="#f0a8b6"/>
+      <rect x="196" y="66" width="112" height="34" rx="5" fill="#fff" stroke="#f0a8b6"/>
+      <text x="252" y="82" font-size="9.5" fill="#be123c" text-anchor="middle">写 DB</text>
+      <text x="252" y="94" font-size="9" fill="#be123c" text-anchor="middle">失败率 0.05%</text>
+      <line x1="308" y1="83" x2="342" y2="83" stroke="#f0a8b6" stroke-width="1.3"/>
+      <polygon points="342,78 352,83 342,88" fill="#f0a8b6"/>
+      <rect x="352" y="66" width="112" height="34" rx="5" fill="#fff" stroke="#f0a8b6"/>
+      <text x="408" y="82" font-size="9.5" fill="#be123c" text-anchor="middle">删缓存</text>
+      <text x="408" y="94" font-size="9" fill="#be123c" text-anchor="middle">失败率 0.1%</text>
+      <line x1="464" y1="83" x2="498" y2="83" stroke="#f0a8b6" stroke-width="1.3"/>
+      <polygon points="498,78 508,83 498,88" fill="#f0a8b6"/>
+      <rect x="508" y="66" width="112" height="34" rx="5" fill="#fde2e6" stroke="#f0a8b6"/>
+      <text x="564" y="87" font-size="9.5" fill="#be123c" text-anchor="middle">脏缓存存活</text>
+      <text x="640" y="80" font-size="10" fill="#be123c" font-weight="700">联合成功率 99.85%</text>
+      <text x="640" y="96" font-size="10" fill="#64748b">日 10 万次更新 → 150 条不一致</text>
+
+      <text x="40" y="126" font-size="10" fill="#64748b">脏读次数：150 个 key × 平均存活 900 s（TTL 30 min 的一半）× 热 key 1000 QPS ≈ 1.35 亿次</text>
+      <text x="40" y="142" font-size="10" fill="#be123c">这个量级已经不是「偶发不一致」，是「用户一定能感觉到」。</text>
+
+      <rect x="24" y="160" width="852" height="130" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="40" y="182" font-size="11" fill="#047857" font-weight="700">B. binlog 订阅：DB 提交成功 = binlog 一定在，之后每一步都可重试、可重放</text>
+
+      <rect x="40" y="194" width="96" height="34" rx="5" fill="#fff" stroke="#86cfa4"/>
+      <text x="88" y="215" font-size="9.5" fill="#047857" text-anchor="middle">MySQL 提交</text>
+      <line x1="136" y1="211" x2="166" y2="211" stroke="#86cfa4" stroke-width="1.3"/>
+      <polygon points="166,206 176,211 166,216" fill="#86cfa4"/>
+      <rect x="176" y="194" width="86" height="34" rx="5" fill="#fff" stroke="#86cfa4"/>
+      <text x="219" y="215" font-size="9.5" fill="#047857" text-anchor="middle">binlog</text>
+      <line x1="262" y1="211" x2="292" y2="211" stroke="#86cfa4" stroke-width="1.3"/>
+      <polygon points="292,206 302,211 292,216" fill="#86cfa4"/>
+      <rect x="302" y="194" width="86" height="34" rx="5" fill="#fff" stroke="#86cfa4"/>
+      <text x="345" y="215" font-size="9.5" fill="#047857" text-anchor="middle">canal</text>
+      <line x1="388" y1="211" x2="418" y2="211" stroke="#86cfa4" stroke-width="1.3"/>
+      <polygon points="418,206 428,211 418,216" fill="#86cfa4"/>
+      <rect x="428" y="194" width="86" height="34" rx="5" fill="#fff" stroke="#86cfa4"/>
+      <text x="471" y="209" font-size="9.5" fill="#047857" text-anchor="middle">MQ 持久化</text>
+      <text x="471" y="221" font-size="8.5" fill="#047857" text-anchor="middle">按主键分区保序</text>
+      <line x1="514" y1="211" x2="544" y2="211" stroke="#86cfa4" stroke-width="1.3"/>
+      <polygon points="544,206 554,211 544,216" fill="#86cfa4"/>
+      <rect x="554" y="194" width="96" height="34" rx="5" fill="#fff" stroke="#86cfa4"/>
+      <text x="602" y="215" font-size="9.5" fill="#047857" text-anchor="middle">消费者删缓存</text>
+      <path d="M602 232 L602 246 L471 246 L471 232" fill="none" stroke="#86cfa4" stroke-width="1.2" stroke-dasharray="3 3"/>
+      <polygon points="471,232 467,240 475,240" fill="#86cfa4"/>
+      <text x="656" y="211" font-size="9.5" fill="#047857" font-weight="700">失败 → 重试 16 次</text>
+      <text x="656" y="227" font-size="9.5" fill="#047857">再失败 → 死信人工</text>
+
+      <text x="40" y="252" font-size="10" fill="#475569">① DB 是唯一真相源，缓存只是它的投影，投影算错可以随时重算</text>
+      <text x="40" y="268" font-size="10" fill="#475569">② 不侵入业务代码：批量更新、运维直改库、老系统写入都能覆盖（双写做不到）</text>
+      <text x="40" y="284" font-size="10" fill="#475569">③ 位点可回溯：补数据、回滚、重建缓存都能靠 binlog 重放，双写没有任何重放手段</text>
+
+      <rect x="24" y="302" width="852" height="30" rx="7" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="38" y="321" font-size="10.5" fill="#334155">代价：多一套 canal + MQ 的运维（约 3 个进程），一致性窗口从「TTL 级」缩到「消费延迟级」50~200 ms。</text>
+    </svg>
+    <figcaption><b>图 5</b>　双写的失败点藏在业务线程里，丢了就丢了；binlog 链路的失败点在 MQ 里，天生可重试、可重放。</figcaption>
+  </figure>
+
+  <h3>把账算到底：1.35 亿次脏读</h3>
+  <p>上面那个数字值得单独拆开，因为它是「为什么必须上 binlog」的唯一论据：</p>
+  <ol>
+    <li>日更新 10 万次 × 0.15% = <strong>150 条脏缓存</strong>。</li>
+    <li>每条脏缓存的存活时间 = 到 TTL 到期。TTL 设 30 分钟，平均存活 15 分钟 = <strong>900 秒</strong>。</li>
+    <li>如果这条数据是热 key（比如爆款商品详情，1000 QPS），这 900 秒内产生 <strong>90 万次脏读</strong>。</li>
+    <li>150 条 × 90 万 = <strong>1.35 亿次</strong>。哪怕只有 10% 是热 key，也是 1350 万次。</li>
+  </ol>
+  <p>而 binlog 链路的窗口是消费延迟。<strong>同一个账：150 条 × 0.2 秒 × 1000 QPS = 3 万次</strong>，而且这 150 条里有 99% 会在 200ms 内被消费掉，真正漏到 TTL 的是「MQ 重试 16 次仍失败」的那几条，量级是每天个位数。</p>
+
+  <table>
+    <tr><th style="width:22%">维度</th><th style="width:26%">业务双写</th><th style="width:26%">binlog 订阅</th><th>差距</th></tr>
+    <tr><td>不一致窗口</td><td>到 TTL 到期（30 min）</td><td>消费延迟（50~200 ms）</td><td>1000 倍</td></tr>
+    <tr><td>每日脏数据</td><td>150 条</td><td>&lt; 5 条（重试耗尽）</td><td>30 倍</td></tr>
+    <tr><td>可重放</td><td>不能</td><td>能（按位点）</td><td>本质差异</td></tr>
+    <tr><td>覆盖批量改库</td><td>不能（漏写代码就漏）</td><td>能</td><td>本质差异</td></tr>
+    <tr><td>运维成本</td><td>0</td><td>canal + MQ 一套</td><td>多 3 个进程</td></tr>
+  </table>
+
+  <pre><code>// binlog 消费端：三件事必须做对 —— 幂等、保序、可重试
+@KafkaListener(topics = "binlog-item", concurrency = "4")
+public void onBinlog(BinlogEvent event) {
+    // 1. 只关心 UPDATE / DELETE / INSERT，其余跳过（减少 80% 无用消息）
+    if (!event.isDataChange()) return;
+
+    // 2. 按主键 hash 分区后天然保序；这里再按「事件时间」丢弃乱序的旧事件
+    String key = "item:" + event.getId();
+    Long lastTs = redis.get("cache:evict:ts:" + event.getId());   // 上次处理的事件时间
+    if (lastTs != null &amp;&amp; event.getTs() &lt;= lastTs) return;
+
+    // 3. 删除是天然幂等的 —— 这是「删缓存」优于「更新缓存」的关键
+    redis.delete(key);
+    redis.setex("cache:evict:ts:" + event.getId(), 60, event.getTs());
+    // 抛异常即触发 MQ 重试；超过 16 次进死信，由对账任务补偿
+}</code></pre>
+
+  <div class="oneline">
+    <b>面试的标准答法</b>
+    「小规模用 Cache Aside + 事务提交后删缓存 + 失败落重试表，能覆盖 99% 的场景。但只要出现『主从延迟 + 高并发写』，业务双写就兜不住了，这时候必须上 binlog 订阅，把缓存的失效从业务线程搬到数据变更事件上。判断标准很简单：<strong>你的删除动作如果失败了，有没有人能替你重做</strong>。双写没有，binlog 有。」
+  </div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>业务视角</em></div>
+  <h2>一致性是可以分级的：先问业务能忍多长，再谈方案</h2>
+  <p>面试里被问「怎么保证缓存和 DB 一致」，如果你直接答方案，就已经输了 —— 因为<strong>「一致性」不是技术指标，是产品指标</strong>。同一个问题，商品详情能忍 5 秒，支付结果页 300ms 都嫌长，库存扣减一秒都不能错。先分级，方案自然浮现。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 268" role="img" aria-label="一致性四级阶梯">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">四级一致性：越靠左窗口越短、成本越高，没有「都要」这个选项</text>
+
+      <rect x="30" y="150" width="196" height="100" rx="8" fill="#fff1f3" stroke="#f0a8b6"/>
+      <text x="42" y="170" font-size="10.5" fill="#be123c" font-weight="700">1 强一致</text>
+      <text x="42" y="187" font-size="9.5" fill="#475569">窗口：0</text>
+      <text x="42" y="203" font-size="9.5" fill="#475569">成本：缓存退化成连接池</text>
+      <text x="42" y="219" font-size="9.5" fill="#475569">实现：不做读缓存</text>
+      <text x="42" y="235" font-size="9" fill="#be123c">余额 / 库存真相 / 权限</text>
+
+      <rect x="242" y="110" width="196" height="140" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="254" y="130" font-size="10.5" fill="#b45309" font-weight="700">2 读自己写</text>
+      <text x="254" y="147" font-size="9.5" fill="#475569">窗口：300~500 ms</text>
+      <text x="254" y="163" font-size="9.5" fill="#475569">成本：写后短窗读主库</text>
+      <text x="254" y="179" font-size="9.5" fill="#475569">主库压力 +5%~10%</text>
+      <text x="254" y="195" font-size="9.5" fill="#475569">实现：脏用户标记 / 版本号</text>
+      <text x="254" y="211" font-size="9" fill="#b45309">支付结果 / 订单列表 / 我的</text>
+      <text x="254" y="227" font-size="9" fill="#94a3b8">用户改完立刻刷新必须看到</text>
+      <text x="254" y="243" font-size="9" fill="#94a3b8">别人的视角慢一点无所谓</text>
+
+      <rect x="454" y="70" width="196" height="180" rx="8" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="466" y="90" font-size="10.5" fill="#075985" font-weight="700">3 单调读 / 会话</text>
+      <text x="466" y="107" font-size="9.5" fill="#475569">窗口：秒级</text>
+      <text x="466" y="123" font-size="9.5" fill="#475569">成本：路由固定</text>
+      <text x="466" y="139" font-size="9.5" fill="#475569">同一用户固定同节点/同从库</text>
+      <text x="466" y="155" font-size="9.5" fill="#475569">实现：一致性哈希 + 粘滞</text>
+      <text x="466" y="171" font-size="9" fill="#075985">列表翻页 / 消息流</text>
+      <text x="466" y="187" font-size="9" fill="#94a3b8">不能出现「刚看到第 2 页</text>
+      <text x="466" y="203" font-size="9" fill="#94a3b8">再刷新又回到第 1 页」</text>
+
+      <rect x="666" y="30" width="196" height="220" rx="8" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="678" y="50" font-size="10.5" fill="#047857" font-weight="700">4 最终一致</text>
+      <text x="678" y="67" font-size="9.5" fill="#475569">窗口：50 ms ~ 30 min</text>
+      <text x="678" y="83" font-size="9.5" fill="#475569">成本：最低，靠异步</text>
+      <text x="678" y="99" font-size="9.5" fill="#475569">实现：binlog 订阅</text>
+      <text x="678" y="115" font-size="9.5" fill="#475569">或 TTL 兜底</text>
+      <text x="678" y="131" font-size="9" fill="#047857">商品详情 / 评论数</text>
+      <text x="678" y="147" font-size="9" fill="#047857">点赞 / 榜单 / 推荐</text>
+      <text x="678" y="163" font-size="9" fill="#94a3b8">90% 的业务都在这层，</text>
+      <text x="678" y="179" font-size="9" fill="#94a3b8">但面试者常常不敢承认。</text>
+
+      <text x="30" y="264" font-size="9.5" fill="#94a3b8">横轴不是时间，是「方案代价」：越往右越便宜、越通用，也越容易一上来就被面试官接受。</text>
+    </svg>
+    <figcaption><b>图 6</b>　分级的意义在于：你可以在面试里主动说「这块业务我选了第 4 级，因为…」，而不是假装能做到强一致。</figcaption>
+  </figure>
+
+  <h3>「读自己写」的三个实现，成本差 10 倍</h3>
+  <p>这是最实用的一个等级，因为 80% 的「缓存不一致投诉」其实是这一类：用户改完资料，刷新页面还是旧的。三种实现：</p>
+
+  <table>
+    <tr><th style="width:20%">实现</th><th style="width:34%">做法</th><th style="width:20%">代价</th><th>问题</th></tr>
+    <tr><td>写后读主库</td><td>写成功后在本地记 <code>dirty:userId</code> 500ms，期间该用户读请求走主库</td><td>主库多 5% 读</td><td>多实例要广播标记，或接受「只有本实例生效」</td></tr>
+    <tr><td>版本号校验</td><td>写返回 <code>version</code>，读请求带上，服务端比对缓存 version 是否够新</td><td>每次读多一个字段</td><td>客户端要能传版本号，改造面大</td></tr>
+    <tr><td>会话粘滞</td><td>同一用户固定路由到同一节点、同一从库</td><td>0（网关已有）</td><td>只解决「单调读」，不解决「读到自己刚写的」</td></tr>
+  </table>
+
+  <pre><code>// 方案一：本地脏标记 + 短窗读主库（最常用）
+private final Cache&lt;Long, Boolean&gt; dirtyUsers = Caffeine.newBuilder()
+        .expireAfterWrite(Duration.ofMillis(500))   // 窗口 500ms，别设大
+        .maximumSize(100_000)                        // 上限防打爆内存
+        .build();
+
+public void updateProfile(long userId, Profile p) {
+    profileMapper.updateById(p);                     // 写主库
+    dirtyUsers.put(userId, Boolean.TRUE);            // 标记：这个用户 500ms 内读主库
+}
+
+public Profile getProfile(long userId) {
+    if (Boolean.TRUE.equals(dirtyUsers.getIfPresent(userId))) {
+        return profileMapper.selectByIdFromMaster(userId);   // 强制主库
+    }
+    return cacheAside(userId);                        // 正常走缓存
+}</code></pre>
+
+  <p>这个方案的取舍非常清楚：<strong>用 500ms 内的主库读，换「用户看不到自己刚改的数据」这个投诉的消失</strong>。而 500ms 这个数字不是拍的 —— 它要覆盖「写事务提交 → 主从同步 → 缓存删除」这条链路的 P99。<strong>主从延迟 P99 是 300ms，窗口就设 500ms；延迟是 1 秒，就设 1.2 秒。</strong>这才是「延迟双删那个数字怎么定」的正确答案：从监控里取，不要从文章里抄。</p>
+
+  <h3>库存为什么是唯一适合「缓存即真相」的场景</h3>
+  <p>因为库存扣减需要的是<strong>原子性</strong>，而 Redis 单线程 + Lua 天然给你这个。做法：库存全部放 Redis，扣减用 Lua 原子执行「判断 + 减」，DB 只做异步落库和对账。</p>
+
+  <pre><code>-- 扣库存 Lua：整个脚本在 Redis 内原子执行，没有并发缝隙
+-- KEYS[1] = stock:item:123   ARGV[1] = 扣减数量   ARGV[2] = 请求 ID
+local stock = tonumber(redis.call('GET', KEYS[1]))
+if stock == nil then return -1 end            -- 缓存不存在，回源加载
+if stock &lt; tonumber(ARGV[1]) then return 0 end -- 库存不足
+redis.call('DECRBY', KEYS[1], ARGV[1])
+return stock - tonumber(ARGV[1])               -- 返回扣减后余量</code></pre>
+
+  <div class="trap">
+    <b>这个方案的账单必须一起说出来，否则就是背方案：</b>
+    <ul style="margin:8px 0 0 0">
+      <li><strong>Redis 挂了就不能卖货</strong>。可用性和一致性在这里是硬二选一，选了一致性就要接受「Redis 主从切换 15 秒内下单全失败」。</li>
+      <li><strong>必须有对账</strong>。Redis 是真相源，但真相源也会错（Lua 写成功但落库失败、主从切换丢最后一个 AOF 缓冲）。T+0 对账（每分钟比对 Redis 库存与 DB 已扣数）是必需品，不是可选。</li>
+      <li><strong>适合的场景很窄</strong>：秒杀、票务、限量券 —— 这些场景的共性是「库存是唯一瓶颈，且允许超卖 0」。普通商品的库存（允许短暂超卖后人工调平）用不着这么重。</li>
+    </ul>
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L5</span><em>热点问题</em></div>
+  <h2>热 key：一个 key 打满一片，集群剩下的 15 片看戏</h2>
+  <p>Redis Cluster 的扩容逻辑是「数据分片」，不是「请求分片」。这个区别在热 key 面前会导致一个反直觉的结果：<strong>你加了 16 个分片，总容量标称 160 万 QPS，但一个 10 万 QPS 的热 key 就能让整个集群只剩 10 万 QPS 的可用容量。</strong></p>
+
+  <figure>
+    <svg viewBox="0 0 900 344" role="img" aria-label="热 key 的三种形态">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">热 key 的三种形态：同一个症状（超时），三种完全不同的根因</text>
+
+      <text x="24" y="52" font-size="10.5" fill="#be123c" font-weight="700">① 单 key 突增：16 片里 1 片打满，有效容量 160 万 → 10 万</text>
+      <line x1="176" y1="108" x2="568" y2="108" stroke="#e3e7ef"/>
+      <rect x="180" y="48" width="18" height="60" rx="2" fill="#fde2e6" stroke="#f0a8b6"/>
+      <rect x="204" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="228" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="252" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="276" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="300" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="324" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="348" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="372" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="396" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="420" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="444" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="468" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="492" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="516" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="540" y="102" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <text x="184" y="40" font-size="9" fill="#be123c">10 万 QPS</text>
+      <text x="580" y="76" font-size="9.5" fill="#475569">单分片上限 ≈ 8~10 万 QPS（简单 GET）</text>
+      <text x="580" y="92" font-size="9.5" fill="#be123c" font-weight="700">→ 整个集群卡在这一片上</text>
+      <text x="580" y="108" font-size="9.5" fill="#94a3b8">扩容无效：加片不会拆开一个 key</text>
+
+      <text x="24" y="140" font-size="10.5" fill="#b45309" font-weight="700">② 分片倾斜：key 设计导致流量全挤在少数 slot</text>
+      <line x1="176" y1="200" x2="568" y2="200" stroke="#e3e7ef"/>
+      <rect x="180" y="152" width="18" height="48" rx="2" fill="#fef6e8" stroke="#e9c98c"/>
+      <rect x="204" y="158" width="18" height="42" rx="2" fill="#fef6e8" stroke="#e9c98c"/>
+      <rect x="228" y="164" width="18" height="36" rx="2" fill="#fef6e8" stroke="#e9c98c"/>
+      <rect x="252" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="276" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="300" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="324" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="348" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="372" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="396" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="420" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="444" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="468" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="492" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="516" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <rect x="540" y="194" width="18" height="6" rx="1" fill="#e8f4ec" stroke="#86cfa4"/>
+      <text x="580" y="164" font-size="9.5" fill="#475569">典型：hash tag 用错，{10001} 全落同一 slot</text>
+      <text x="580" y="180" font-size="9.5" fill="#475569">或某大商家占全站 40% 流量</text>
+      <text x="580" y="196" font-size="9.5" fill="#b45309" font-weight="700">→ 3 片 CPU 95%，13 片 20%</text>
+      <text x="580" y="212" font-size="9.5" fill="#94a3b8">监控特征：CPU 标准差大，不是全线高</text>
+
+      <text x="24" y="232" font-size="10.5" fill="#7c3aed" font-weight="700">③ 大 key：带宽先死，不是 CPU 先死</text>
+      <text x="180" y="262" font-size="9.5" fill="#475569">1 万 QPS × 10 MB value</text>
+      <rect x="360" y="250" width="440" height="16" rx="3" fill="#fde2e6" stroke="#f0a8b6"/>
+      <text x="570" y="262" font-size="9" fill="#be123c" text-anchor="middle">100 GB/s 需求</text>
+      <text x="180" y="292" font-size="9.5" fill="#475569">万兆网卡实际上限 12.5 GB/s</text>
+      <rect x="360" y="280" width="55" height="16" rx="3" fill="#e8f4ec" stroke="#86cfa4"/>
+      <text x="423" y="292" font-size="9" fill="#047857">12.5 GB/s</text>
+      <text x="40" y="316" font-size="9.5" fill="#be123c">缺口 8 倍。GET 10MB 阻塞 1~3 ms，10 万 QPS 直接打死主线程。</text>
+    </svg>
+    <figcaption><b>图 7</b>　都是「Redis 超时」，但 ①要打散、②要改 key、③要拆 value，方案完全不通用。</figcaption>
+  </figure>
+
+  <h3>解法一：本地缓存吃掉热 key（最有效）</h3>
+  <p>热 key 的绝对数量极少 —— 全站真正热的不过几百到几万个。这正好是本地缓存的舒适区：<strong>100MB 本地缓存能装下 10 万个 1KB 的热点数据，而这 10 万个 key 通常承载 70% 以上的流量</strong>。打掉之后，Redis 的 QPS 会掉一个数量级。</p>
+
+  <pre><code>// 热 key 本地缓存的三个必配参数：容量、TTL、命中率监控
+private final Cache&lt;String, CachedItem&gt; hotCache = Caffeine.newBuilder()
+        .maximumWeight(200L * 1024 * 1024)          // 200 MB 权重上限，按 value 字节数计
+        .weigher((String k, CachedItem v) -&gt; v.bytes())
+        .expireAfterWrite(Duration.ofSeconds(3))    // 热 key 也不能太长，3s 是可接受窗口
+        .recordStats()                               // 必开，否则无法知道它是否有效
+        .build();
+
+// 关键：不是所有 key 都进本地缓存。只有被「探测」为热 key 的才进，
+// 否则 200MB 会被长尾数据冲刷，热 key 反而被淘汰（这就是 LFU 比 LRU 强的地方）
+public Item get(String key) {
+    if (!hotKeySet.contains(key)) {          // 由探测模块推送，见 L6
+        return cacheAside(key);              // 非热 key：只走 Redis
+    }
+    CachedItem c = hotCache.getIfPresent(key);
+    if (c != null) return c.item();
+    Item item = cacheAside(key);
+    hotCache.put(key, new CachedItem(item));
+    return item;
+}</code></pre>
+
+  <h3>解法二：key 打散，把 1 个 10 万变成 10 个 1 万</h3>
+  <p>思路是把一个逻辑 key 复制成 N 份物理副本，读时随机挑一份，让流量分散到 N 个 slot。N=10 时每片只有 1 万 QPS，占用单片的 12.5%。</p>
+
+  <pre><code>// 写时写 10 份（写放大 10 倍，但热 key 的写极少，这是划算的）
+public void putHot(String key, String value, int ttlSec) {
+    for (int i = 0; i &lt; 10; i++) {
+        // 副本 TTL 加 0~3s 随机，避免 10 份同时过期引发重建尖峰
+        redis.setex(key + "#" + i, ttlSec + ThreadLocalRandom.current().nextInt(3), value);
+    }
+}
+
+// 读时随机挑一份，天然分摊
+public String getHot(String key) {
+    return redis.get(key + "#" + ThreadLocalRandom.current().nextInt(10));
+}</code></pre>
+
+  <div class="warn">
+    <b>打散的三个代价，面试要主动交代：</b>
+    ① <strong>写放大 N 倍</strong>，写 QPS 高时反而更糟（所以只对「读远多于写」的 key 用）；
+    ② <strong>删除/更新要保证 N 份都改到</strong>，漏一份就是脏数据，所以要用 pipeline 而不是循环单发；
+    ③ <strong>它只解决「同一个 key 的 QPS」</strong>，如果热的是「同一类 key」（比如某大商家的 10 万个商品同时热），打散解决不了，得上本地缓存 + 多副本读。
+  </div>
+
+  <h3>解法三：从节点读 + 单 key 限流</h3>
+  <p>Redis Cluster 支持 <code class="inl">READONLY</code> + 从节点读，一个主带 2 从就是 3 倍读能力。但要注意：从节点读可能读到旧值（复制延迟），所以只适合「最终一致」级别的数据。</p>
+
+  <pre><code>// 从节点读：Lettuce 的 ReadFrom 策略，一行配置把读能力提到 3 倍
+LettuceClientConfiguration cfg = LettuceClientConfiguration.builder()
+        .readFrom(ReadFrom.REPLICA_PREFERRED)   // 优先读从节点，主节点兜底
+        .commandTimeout(Duration.ofMillis(300)) // 从节点慢就快速失败，别拖住请求
+        .build();
+
+// 代价必须一起说：从节点可能落后主节点几十毫秒。
+// 所以「库存」「余额」这类不能用；「商品详情」「榜单」可以用。
+// 而且从节点故障时 ReadFrom 会自动回退到主节点 —— 这是它比自建路由好的地方。</code></pre>
+  <p>最后的兜底是<strong>单 key 级限流</strong>：这个 key 超过 5 万 QPS 就直接返回降级内容（默认文案 / 上次的快照 / 排队页），而不是让它把整个分片打死。<strong>「一个 key 打挂整个集群」是可用性事故，「这个 key 降级」只是体验损失</strong> —— 这个判断比技术方案更重要。</p>
+
+  <pre><code>// 单 key 令牌桶：在本地做，不增加 Redis 压力
+private final Cache&lt;String, RateLimiter&gt; keyLimiters = Caffeine.newBuilder()
+        .expireAfterAccess(Duration.ofMinutes(10)).build();
+
+public Result getWithGuard(String key) {
+    RateLimiter limiter = keyLimiters.get(key, k -&gt; RateLimiter.create(50_000)); // 5 万 QPS/秒
+    if (!limiter.tryAcquire()) {
+        return Result.degraded(lastGoodSnapshot(key));   // 降级，不是报错
+    }
+    return Result.ok(cacheAside(key));
+}</code></pre>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L6</span><em>探测实现</em></div>
+  <h2>热 key 探测：为什么固定窗口一定会漏判</h2>
+  <p>热 key 是<strong>动态</strong>的。你能预判大促的商品，但预判不了明天哪个明星塌房、哪条新闻爆。所以热点必须实时探测，而探测的第一道坎是计数本身的精度。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 316" role="img" aria-label="固定窗口、滑动窗口与 Count-Min Sketch">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">同一个 key，两种统计口径，一次漏判：真实 10 万 QPS 被算成 5 万</text>
+
+      <text x="24" y="46" font-size="10.5" fill="#be123c" font-weight="700">A. 固定窗口（每秒重置）：突刺正好跨在边界上</text>
+      <line x1="40" y1="96" x2="700" y2="96" stroke="#cbd5e1"/>
+      <text x="40" y="112" font-size="9" fill="#94a3b8">0 s</text>
+      <text x="360" y="112" font-size="9" fill="#94a3b8">1 s</text>
+      <text x="690" y="112" font-size="9" fill="#94a3b8">2 s</text>
+      <rect x="40" y="60" width="320" height="36" rx="4" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="360" y="60" width="330" height="36" rx="4" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="200" y="83" font-size="9.5" fill="#475569" text-anchor="middle">窗口 1 计数 = 5 万</text>
+      <text x="525" y="83" font-size="9.5" fill="#475569" text-anchor="middle">窗口 2 计数 = 5 万</text>
+      <rect x="326" y="52" width="16" height="52" rx="2" fill="#fde2e6" stroke="#f0a8b6"/>
+      <rect x="352" y="52" width="16" height="52" rx="2" fill="#fde2e6" stroke="#f0a8b6"/>
+      <text x="347" y="44" font-size="9" fill="#be123c" text-anchor="middle">突刺 10 万</text>
+      <text x="710" y="76" font-size="9.5" fill="#be123c" font-weight="700">阈值 8 万 → 两个窗口</text>
+      <text x="710" y="92" font-size="9.5" fill="#be123c" font-weight="700">都判定「不热」</text>
+      <text x="710" y="108" font-size="9.5" fill="#94a3b8">漏判，且没有任何补偿</text>
+
+      <text x="24" y="150" font-size="10.5" fill="#0369a1" font-weight="700">B. 滑动窗口（2 格环形）：用上一格的残留比例加权</text>
+      <line x1="40" y1="200" x2="700" y2="200" stroke="#cbd5e1"/>
+      <rect x="40" y="164" width="330" height="36" rx="4" fill="#eff6fc" stroke="#9fcbe8"/>
+      <rect x="370" y="164" width="330" height="36" rx="4" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="205" y="187" font-size="9.5" fill="#075985" text-anchor="middle">上一格 5 万 × 权重 0.5</text>
+      <text x="535" y="187" font-size="9.5" fill="#475569" text-anchor="middle">当前格 5 万 × 权重 1.0</text>
+      <text x="710" y="180" font-size="9.5" fill="#0369a1" font-weight="700">估算 7.5 万，</text>
+      <text x="710" y="196" font-size="9.5" fill="#0369a1" font-weight="700">接近阈值 → 报警</text>
+      <text x="710" y="212" font-size="9.5" fill="#94a3b8">精度 ±50%，内存只多 1 倍</text>
+
+      <text x="24" y="248" font-size="10.5" fill="#7c3aed" font-weight="700">C. Count-Min Sketch（4 行 × 2000 列）：32 KB 统计任意多 key</text>
+      <rect x="40" y="262" width="300" height="44" rx="5" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="56" y="280" font-size="9" fill="#6d28d9">4 个哈希函数 × 2000 个 4 字节计数器</text>
+      <text x="56" y="296" font-size="9" fill="#6d28d9">= 4 × 2000 × 4 B = 32 KB</text>
+      <text x="356" y="280" font-size="9.5" fill="#475569">误差 ε = e / 宽度 ≈ 0.14%，失败概率 δ = e⁻⁴ ≈ 1.8%</text>
+      <text x="356" y="296" font-size="9.5" fill="#7c3aed" font-weight="700">只高估不低估 → 用作「判热」是安全方向（宁可误报）</text>
+    </svg>
+    <figcaption><b>图 8</b>　固定窗口的漏判不是 bug，是定义决定的；滑动窗口用 1 倍内存换掉它；CMS 用 32KB 换掉整个哈希表。</figcaption>
+  </figure>
+
+  <h3>从「探测」到「生效」：三段式架构</h3>
+  <p>京东的 hotkey 方案是这件事的工业标准，值得说清楚：</p>
+  <ol>
+    <li><strong>Client 端统计</strong>：每个应用实例在本地用 CMS 统计 key 频次，每 5 秒把 top 10 上报到 worker。为什么在客户端算 —— 因为在客户端算不增加 Redis 一次往返，且能看到「业务视角的 key」。</li>
+    <li><strong>Worker 聚合</strong>：把所有实例的 top 10 按 key 求和，超过阈值（如 5 秒 5000 次 = 1000 QPS）判定为热 key。<strong>阈值必须按「聚合后」算</strong>，单实例阈值会漏（20 个实例各 500 QPS，单看都不热）。</li>
+    <li><strong>规则推送</strong>：把热 key 列表推到 etcd / 配置中心，客户端 watch 变更后把 key 加入本地缓存白名单。<strong>端到端延迟 5~15 秒</strong>，这就是热 key 从出现到被本地缓存接住的窗口。</li>
+  </ol>
+
+  <pre><code>// 客户端侧：CMS + 定时上报，注意这三点都很容易写错
+public class HotKeyReporter {
+    // 1. 宽度 2000、深度 4，用 4 个不同的种子做哈希
+    private final CountMinSketch sketch = new CountMinSketch(2000, 4, 0);
+    private final ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor();
+
+    public void record(String key) {
+        sketch.add(key.getBytes(StandardCharsets.UTF_8), 1);
+    }
+
+    public HotKeyReporter() {
+        // 2. 每 5 秒上报 top 10，然后必须 reset，否则计的是「历史累计」而不是「当前速率」
+        ses.scheduleAtFixedRate(() -&gt; {
+            List&lt;KeyCount&gt; top = sketch.topK(10);
+            reporterClient.report(top);
+            sketch.reset();                    // 忘记 reset 是最常见的 bug
+        }, 5, 5, TimeUnit.SECONDS);
+    }
+}</code></pre>
+
+  <div class="trap">
+    <b>三个真实踩过的坑：</b>
+    <ul style="margin:8px 0 0 0">
+      <li><strong>忘记 reset</strong>：统计的是「启动以来累计次数」，所有老 key 永远排在最前，新热点永远进不了 top 10。</li>
+      <li><strong>单实例阈值</strong>：20 个实例每个 500 QPS，单实例看都不到阈值，聚合后是 1 万 QPS 的真热点，直接漏判。</li>
+      <li><strong>热 key 名单只增不减</strong>：热点过去后 key 还在白名单里，本地缓存被一堆「历史热点」占满，真正的新热点挤不进来。名单必须带 TTL（比如 5 分钟不热就移除）。</li>
+    </ul>
+  </div>
+
+  <p>Redis 侧也有工具，但都有明确边界，面试时说清楚边界比背诵命令更加分：</p>
+  <table>
+    <tr><th style="width:20%">工具</th><th style="width:26%">能看到什么</th><th>边界</th></tr>
+    <tr><td><code>redis-cli --hotkeys</code></td><td>按 LFU 计数排序的 key</td><td>必须 <code>maxmemory-policy</code> 是 LFU；采样统计，冷启动后不准</td></tr>
+    <tr><td><code>MONITOR</code></td><td>全部命令实时流</td><td>是调试工具不是监控工具：10 万 QPS 输出 10 万行/秒，CPU 打满，只能短时用</td></tr>
+    <tr><td><code>LATENCY MONITOR</code></td><td>超过阈值的命令耗时</td><td>只能告诉你「慢了」，不能告诉你「哪个 key」</td></tr>
+    <tr><td>Proxy 层统计</td><td>最准，能看到全量</td><td>多一跳（+0.2ms），且要自己维护 Proxy</td></tr>
+  </table>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b4">L7</span><em>故障治理</em></div>
+  <h2>穿透：布隆过滤器的三个数字，比它的原理更值得背</h2>
+  <p>第 06 期讲过穿透、击穿、雪崩的<strong>定义</strong>，这期只算账 —— 因为这三种故障在面试里最容易「说得出名字、给不出参数」，而参数才是区分度所在。</p>
+  <p>穿透是「查一个一定不存在的数据」，缓存永远 miss，每次都打到 DB。攻击者用随机 ID 刷 10 万 QPS，DB 就没了。布隆过滤器是标准解，但它的大小必须算：</p>
+
+  <p style="text-align:center;font-family:ui-monospace,Consolas,monospace;font-size:14px;color:#0369a1;font-weight:700;line-height:2">
+    m = −n · ln p / (ln 2)²　　k = (m / n) · ln 2
+  </p>
+
+  <table>
+    <tr><th>元素数 n</th><th>误判率 p</th><th>位数组 m</th><th>内存</th><th>哈希个数 k</th><th>10 万次攻击漏进 DB</th></tr>
+    <tr><td>1000 万</td><td>1%</td><td>9585 万 bit</td><td><strong>11.4 MB</strong></td><td>7</td><td>1000 次</td></tr>
+    <tr><td>1000 万</td><td>0.1%</td><td>1.44 亿 bit</td><td><strong>17.9 MB</strong></td><td>10</td><td>100 次</td></tr>
+    <tr><td>1000 万</td><td>0.01%</td><td>1.92 亿 bit</td><td><strong>22.9 MB</strong></td><td>13</td><td>10 次</td></tr>
+    <tr><td>1 亿</td><td>1%</td><td>9.59 亿 bit</td><td><strong>114 MB</strong></td><td>7</td><td>1000 次</td></tr>
+  </table>
+
+  <p>第一个结论：<strong>误判率降 10 倍，内存只涨 57%</strong>（11.4 → 17.9 → 22.9）。这是布隆最反直觉的性质，也是它的性价比来源 —— 所以工程上根本不该用 1%，直接用 0.1%，多花 6MB。</p>
+  <p>第二个结论，也是面试的分水岭：<strong>误判率 1% 意味着 10 万次攻击仍有 1000 次漏进 DB</strong>。所以布隆<strong>不能单独用</strong>。它必须和「空值缓存 + 单 IP 限流」组成三件套，各自负责一段：布隆挡掉 99% 的随机 ID，空值缓存挡掉「重复的同一个假 ID」，限流挡掉「绕过前两者的高频来源」。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 302" role="img" aria-label="布隆过滤器位数组与误判">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">32 位示意：存在的一定判「存在」，不存在的有小概率被误判为「存在」</text>
+
+      <rect x="24" y="34" width="272" height="86" rx="8" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="38" y="54" font-size="9.5" fill="#6d28d9" font-weight="700">n = 1000 万，p = 1%</text>
+      <text x="38" y="72" font-size="9.5" fill="#475569">m = 9585 万 bit = 11.4 MB</text>
+      <text x="38" y="90" font-size="9.5" fill="#475569">k = 7 个哈希函数</text>
+      <text x="38" y="108" font-size="9.5" fill="#be123c">漏进 DB：10 万 × 1% = 1000 次</text>
+
+      <text x="324" y="46" font-size="9.5" fill="#0369a1">item:1001（真实存在）→ h1=3, h2=17, h3=26，三位全为 1 → 放行</text>
+      <line x1="380" y1="54" x2="380" y2="118" stroke="#9fcbe8" stroke-dasharray="3 3"/>
+      <line x1="604" y1="54" x2="604" y2="118" stroke="#9fcbe8" stroke-dasharray="3 3"/>
+      <line x1="748" y1="54" x2="748" y2="118" stroke="#9fcbe8" stroke-dasharray="3 3"/>
+      <text x="380" y="116" font-size="8.5" fill="#0369a1" text-anchor="middle">3</text>
+      <text x="604" y="116" font-size="8.5" fill="#0369a1" text-anchor="middle">17</text>
+      <text x="748" y="116" font-size="8.5" fill="#0369a1" text-anchor="middle">26</text>
+
+      <rect x="324" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="340" y="120" width="16" height="28" rx="2" fill="#9fcbe8" stroke="#7fb4d6"/>
+      <rect x="356" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="372" y="120" width="16" height="28" rx="2" fill="#0369a1" stroke="#0369a1"/>
+      <rect x="388" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="404" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="420" y="120" width="16" height="28" rx="2" fill="#9fcbe8" stroke="#7fb4d6"/>
+      <rect x="436" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="452" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="468" y="120" width="16" height="28" rx="2" fill="#0369a1" stroke="#0369a1"/>
+      <rect x="484" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="500" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="516" y="120" width="16" height="28" rx="2" fill="#9fcbe8" stroke="#7fb4d6"/>
+      <rect x="532" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="548" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="564" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="580" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="596" y="120" width="16" height="28" rx="2" fill="#0369a1" stroke="#0369a1"/>
+      <rect x="612" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="628" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="644" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="660" y="120" width="16" height="28" rx="2" fill="#9fcbe8" stroke="#7fb4d6"/>
+      <rect x="676" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="692" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="708" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="724" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="740" y="120" width="16" height="28" rx="2" fill="#0369a1" stroke="#0369a1"/>
+      <rect x="756" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="772" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="788" y="120" width="16" height="28" rx="2" fill="#9fcbe8" stroke="#7fb4d6"/>
+      <rect x="804" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+      <rect x="820" y="120" width="16" height="28" rx="2" fill="#f8fafc" stroke="#e3e7ef"/>
+
+      <line x1="476" y1="148" x2="476" y2="176" stroke="#f0a8b6" stroke-dasharray="3 3"/>
+      <line x1="604" y1="148" x2="604" y2="176" stroke="#f0a8b6" stroke-dasharray="3 3"/>
+      <line x1="748" y1="148" x2="748" y2="176" stroke="#f0a8b6" stroke-dasharray="3 3"/>
+      <text x="324" y="192" font-size="9.5" fill="#be123c">item:99999（不存在）→ h1=9, h2=17, h3=26 恰好都被别的 key 置 1 → 误判放行</text>
+      <text x="324" y="210" font-size="9.5" fill="#047857">item:88888（不存在）→ h1=5 为 0 → 直接拒绝，这一位就是「绝对不存在」的证明</text>
+
+      <text x="324" y="236" font-size="9.5" fill="#475569">颜色说明：深蓝 = 某个 key 置的位；浅蓝 = 其它 key 顺带置的位（误判的来源）；白 = 0</text>
+
+      <rect x="24" y="248" width="852" height="44" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="38" y="266" font-size="10" fill="#be123c" font-weight="700">布隆不能删元素：删掉一个 key 就把它置的 3 位清零，会连带把共用这 3 位的其它 key 判成「不存在」→ 假阴性（比误判更严重）</text>
+      <text x="38" y="284" font-size="10" fill="#475569">替代：Counting Bloom（4 bit 计数，内存 ×4~8）、布谷鸟过滤器（支持删除但插入可能失败），或干脆按天分桶重建</text>
+    </svg>
+    <figcaption><b>图 9</b>　布隆只回答「一定不存在」或「可能存在」。它宁可误报，绝不漏报 —— 这个方向性决定了它只能做前置过滤。</figcaption>
+  </figure>
+
+  <pre><code>// 三段式防穿透：布隆 → 空值缓存 → 限流，缺一段就漏
+public Item getItem(long id) {
+    // ① 布隆：一定不存在的直接返回，成本 7 次位运算 ≈ 100ns，零网络
+    if (!bloom.mightContain(id)) {
+        return null;
+    }
+    // ② 空值缓存：同一个假 ID 被重复刷时，连 Redis 之后都不再回源
+    String key = "item:" + id;
+    String cached = redis.get(key);
+    if (cached != null) {
+        return NULL_MARK.equals(cached) ? null : deserialize(cached);
+    }
+    // ③ 回源 + 缓存空值（TTL 要短，60s；太长会被「先删后建」的业务误伤）
+    Item item = itemMapper.selectById(id);
+    if (item == null) {
+        redis.setex(key, 60, NULL_MARK);
+        return null;
+    }
+    redis.setex(key, 1800, serialize(item));
+    return item;
+}</code></pre>
+
+  <div class="warn">
+    <b>空值缓存的隐藏代价：</b>攻击者用「永不重复的随机 ID」时，每个 ID 都会在 Redis 里留下一个 60 秒的 NULL 标记。10 万 QPS × 60s = <strong>600 万个垃圾 key</strong>，直接把内存打满，触发淘汰把真数据挤出去 —— 这比穿透本身更致命。所以<strong>布隆在前、限流在后</strong>，空值缓存只负责「重复假 ID」这一种情况。
+  </div>
+
+  <h3>布隆的三个坑，比它的原理更容易被追问</h3>
+  <ol>
+    <li><strong>重启要重建</strong>：1000 万 key 从 DB 扫一遍建布隆需要 10 分钟左右，<strong>这 10 分钟等于没有布隆，全部穿透</strong>。所以位数组要持久化（写 Redis 的 bitmap，或落本地文件），启动时直接 <code class="inl">BITOP</code> / mmap 加载。</li>
+    <li><strong>数据变了要同步</strong>：新增商品必须加进布隆，否则新商品被判「一定不存在」，<strong>这是业务级的 bug，不是性能问题</strong>。删除则不能做，只能用「逻辑删除 + 保留在布隆里」。</li>
+    <li><strong>不支持范围/模糊查询</strong>：布隆只能做「精确 key 的存在性判断」。要防「按条件查列表」的穿透，得靠参数校验 + 空结果缓存。</li>
+  </ol>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L8</span><em>故障治理</em></div>
+  <h2>击穿与雪崩：一个是并发问题，一个是时间问题</h2>
+  <p>击穿是「单个热 key 过期，1000 个并发同时回源」；雪崩是「大量 key 同时过期，DB 被同一秒的重建请求打穿」。前者是<strong>并发控制问题</strong>，后者是<strong>时间分布问题</strong>，方案不能互换。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 320" role="img" aria-label="击穿的两种解法对比">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">1000 个并发请求撞上同一个过期 key：两种方案都只查 1 次 DB，差别在「要不要等」</text>
+
+      <rect x="24" y="32" width="414" height="264" rx="9" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="40" y="54" font-size="10.5" fill="#075985" font-weight="700">A. 互斥锁重建（等，但一定拿到新值）</text>
+      <rect x="44" y="66" width="374" height="34" rx="5" fill="#fff" stroke="#9fcbe8"/>
+      <text x="231" y="88" font-size="10" fill="#075985" text-anchor="middle">1000 个并发读到 miss</text>
+      <line x1="231" y1="100" x2="231" y2="114" stroke="#9fcbe8" stroke-width="1.3"/>
+      <polygon points="226,114 231,124 236,114" fill="#9fcbe8"/>
+      <rect x="44" y="124" width="374" height="34" rx="5" fill="#fff" stroke="#9fcbe8"/>
+      <text x="231" y="140" font-size="10" fill="#075985" text-anchor="middle">SETNX cache:lock:item:123</text>
+      <text x="231" y="153" font-size="9" fill="#0369a1" text-anchor="middle">1 个成功 → 查 DB → 写缓存 → 释放</text>
+      <line x1="231" y1="158" x2="231" y2="172" stroke="#9fcbe8" stroke-width="1.3"/>
+      <polygon points="226,172 231,182 236,172" fill="#9fcbe8"/>
+      <rect x="44" y="182" width="374" height="34" rx="5" fill="#fff" stroke="#9fcbe8"/>
+      <text x="231" y="198" font-size="10" fill="#475569" text-anchor="middle">999 个自旋等待：50 ms × 4 次</text>
+      <text x="231" y="211" font-size="9" fill="#94a3b8" text-anchor="middle">拿到锁的线程重建完，其余直接读缓存</text>
+      <line x1="231" y1="216" x2="231" y2="230" stroke="#9fcbe8" stroke-width="1.3"/>
+      <polygon points="226,230 231,240 236,230" fill="#9fcbe8"/>
+      <text x="44" y="258" font-size="9.5" fill="#075985" font-weight="700">DB 查询 1 次，RT = 200 ms（重建耗时）</text>
+      <text x="44" y="274" font-size="9.5" fill="#475569">风险：锁超时 < 重建耗时 → 重复重建</text>
+      <text x="44" y="290" font-size="9.5" fill="#475569">必须给锁设 TTL + 唯一 value 防误删</text>
+
+      <rect x="458" y="32" width="418" height="264" rx="9" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="474" y="54" font-size="10.5" fill="#047857" font-weight="700">B. 逻辑过期（不等，但读到旧值）</text>
+      <rect x="478" y="66" width="378" height="34" rx="5" fill="#fff" stroke="#86cfa4"/>
+      <text x="667" y="82" font-size="10" fill="#047857" text-anchor="middle">value 里带 expireAt，物理上永不过期</text>
+      <text x="667" y="95" font-size="9" fill="#475569" text-anchor="middle">{data: ..., expireAt: 1699500000000}</text>
+      <line x1="667" y1="100" x2="667" y2="114" stroke="#86cfa4" stroke-width="1.3"/>
+      <polygon points="662,114 667,124 672,114" fill="#86cfa4"/>
+      <rect x="478" y="124" width="378" height="34" rx="5" fill="#fff" stroke="#86cfa4"/>
+      <text x="667" y="140" font-size="10" fill="#047857" text-anchor="middle">1000 个并发都判出「已逻辑过期」</text>
+      <text x="667" y="153" font-size="9" fill="#475569" text-anchor="middle">全部立刻返回旧值 —— 0 阻塞</text>
+      <line x1="667" y1="158" x2="667" y2="172" stroke="#86cfa4" stroke-width="1.3"/>
+      <polygon points="662,172 667,182 672,172" fill="#86cfa4"/>
+      <rect x="478" y="182" width="378" height="34" rx="5" fill="#fff" stroke="#86cfa4"/>
+      <text x="667" y="198" font-size="10" fill="#047857" text-anchor="middle">只有 1 个线程抢到本地锁去异步刷新</text>
+      <text x="667" y="211" font-size="9" fill="#475569" text-anchor="middle">其余线程连锁都不抢，直接返回</text>
+      <line x1="667" y1="216" x2="667" y2="230" stroke="#86cfa4" stroke-width="1.3"/>
+      <polygon points="662,230 667,240 672,230" fill="#86cfa4"/>
+      <text x="478" y="258" font-size="9.5" fill="#047857" font-weight="700">DB 查询 1 次，RT = 0（不阻塞）</text>
+      <text x="478" y="274" font-size="9.5" fill="#475569">代价：刷新期间返回的是过期数据</text>
+      <text x="478" y="290" font-size="9.5" fill="#475569">适合商品详情、榜单；不适合价格、库存</text>
+    </svg>
+    <figcaption><b>图 10</b>　互斥锁用「等待」换「新鲜」，逻辑过期用「旧值」换「不阻塞」。选哪个取决于业务能不能忍旧值。</figcaption>
+  </figure>
+
+  <pre><code>// A. 互斥锁重建：三个细节决定它是不是真的安全
+public Item getWithMutex(long id) {
+    String key = "item:" + id;
+    Item cached = redis.get(key);
+    if (cached != null) return cached;
+
+    String lockKey = "lock:" + key;
+    String token = UUID.randomUUID().toString();
+    // ① TTL 必须大于重建耗时，否则锁提前释放 → 第二个线程也去重建
+    boolean locked = redis.setnx(lockKey, token, 3, TimeUnit.SECONDS);
+    if (locked) {
+        try {
+            // ② 双重检查：拿到锁后必须再读一次缓存，因为可能别人刚建好
+            cached = redis.get(key);
+            if (cached != null) return cached;
+            Item item = itemMapper.selectById(id);
+            redis.setex(key, 1800, serialize(item));
+            return item;
+        } finally {
+            // ③ 只能删自己的锁：用 Lua 比对 token，否则会删掉别人续期后的锁
+            redis.eval(LUA_UNLOCK, List.of(lockKey), List.of(token));
+        }
+    }
+    // 没抢到锁：短暂自旋，别死等
+    for (int i = 0; i &lt; 4; i++) {
+        sleep(50);
+        cached = redis.get(key);
+        if (cached != null) return cached;
+    }
+    return itemMapper.selectById(id);   // 兜底，宁可多查一次也不能报错
+}</code></pre>
+
+  <h3>雪崩：随机 TTL 有效，但你得先算 R 该设多大</h3>
+  <p>先纠正一个流传很广的错误说法：「TTL 加随机值就能防雪崩」。它对，也不对 —— 取决于随机范围 R 和 key 数量的比值。</p>
+  <p>设同一时刻有 N 个 key 被写入（发版预热、批量导入、缓存重建都会造成这种「同时写入」），基础 TTL = T，随机偏移 U(0, R)。那么它们的过期时刻会均匀落在 <code class="inl">[T, T+R]</code>，重建速率是：</p>
+
+  <p style="text-align:center;font-family:ui-monospace,Consolas,monospace;font-size:14px;color:#0369a1;font-weight:700;line-height:2">
+    重建 QPS ≈ N / R　　→　　所以　R ≥ N / (DB 可承受的重建 QPS)
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 900 316" role="img" aria-label="随机 TTL 的三种分布">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">10 万个 key 在 t=1800 s 被同时写入，三种 TTL 策略下的重建压力分布</text>
+
+      <text x="24" y="52" font-size="10" fill="#be123c" font-weight="700">A. 不加随机：全部在 1800 s 过期</text>
+      <line x1="150" y1="96" x2="700" y2="96" stroke="#cbd5e1"/>
+      <rect x="146" y="36" width="9" height="60" fill="#fde2e6" stroke="#f0a8b6"/>
+      <text x="160" y="50" font-size="9.5" fill="#be123c" font-weight="700">10 万/s ← 瞬时</text>
+      <text x="160" y="66" font-size="9" fill="#64748b">每次重建 5 ms → 需 500 个并发线程</text>
+      <text x="160" y="80" font-size="9" fill="#be123c">DB 连接池 200 → 排队、超时、雪崩</text>
+      <text x="146" y="112" font-size="8.5" fill="#94a3b8" text-anchor="middle">1800 s</text>
+      <text x="660" y="112" font-size="8.5" fill="#94a3b8">2100 s</text>
+
+      <text x="24" y="146" font-size="10" fill="#047857" font-weight="700">B. 随机 R = 300 s（按公式算出来的）</text>
+      <line x1="150" y1="190" x2="700" y2="190" stroke="#cbd5e1"/>
+      <rect x="146" y="176" width="495" height="14" rx="2" fill="#e8f4ec" stroke="#86cfa4"/>
+      <text x="650" y="180" font-size="9.5" fill="#047857" font-weight="700">333/s</text>
+      <text x="160" y="166" font-size="9" fill="#047857">摊平成 300 s 的平台：10 万 / 300 ≈ 333/s</text>
+      <text x="160" y="206" font-size="9" fill="#64748b">每次 5 ms → 只需 1.7 个并发，DB 毫无压力</text>
+      <text x="146" y="206" font-size="8.5" fill="#94a3b8" text-anchor="middle">1800</text>
+      <text x="655" y="206" font-size="8.5" fill="#94a3b8">2100 s</text>
+
+      <text x="24" y="240" font-size="10" fill="#b45309" font-weight="700">C. 随机 R = 10 s（「随便加个随机」的典型）</text>
+      <line x1="150" y1="284" x2="700" y2="284" stroke="#cbd5e1"/>
+      <rect x="146" y="250" width="18" height="34" fill="#fef6e8" stroke="#e9c98c"/>
+      <text x="176" y="262" font-size="9.5" fill="#b45309" font-weight="700">1 万/s ← 仍然雪崩</text>
+      <text x="176" y="278" font-size="9" fill="#64748b">50 个并发线程抢 200 连接，P99 已经开始飙</text>
+      <text x="146" y="300" font-size="8.5" fill="#94a3b8" text-anchor="middle">1800</text>
+      <text x="655" y="300" font-size="8.5" fill="#94a3b8">2100 s</text>
+
+      <text x="714" y="60" font-size="9.5" fill="#475569">R 的取值逻辑：</text>
+      <text x="714" y="78" font-size="9.5" fill="#475569">N = 10 万 key</text>
+      <text x="714" y="94" font-size="9.5" fill="#475569">DB 能承受 500 QPS 重建</text>
+      <text x="714" y="110" font-size="9.5" fill="#0369a1" font-weight="700">R ≥ 10万/500 = 200 s</text>
+    </svg>
+    <figcaption><b>图 11</b>　随机 TTL 的作用是「把尖峰摊成平台」。摊多宽不是随便定的，它等于 N 除以 DB 的容忍速率。</figcaption>
+  </figure>
+
+  <p>这个公式还顺手解释了「为什么随机 TTL 经常无效」的三个真实原因：</p>
+  <table>
+    <tr><th style="width:24%">失效原因</th><th style="width:38%">机制</th><th>判断</th></tr>
+    <tr><td>R 远小于 N / 容忍 QPS</td><td>随机了 10 秒，10 万 key 仍挤在 10 秒内</td><td>最常见的错误：只加了随机，没算过</td></tr>
+    <tr><td>R 相对 T 太大</td><td>T=60s 却随机 ±300s，一半 key 的实际存活期翻了好几倍</td><td>防雪崩了，但一致性窗口不可控</td></tr>
+    <tr><td>不是「同时过期」而是「同时 miss」</td><td>发版重启后本地缓存和 Redis 都被清空，全是 miss，跟 TTL 无关</td><td>随机 TTL 完全无效，必须靠预热</td></tr>
+  </table>
+
+  <div class="trap">
+    <b>还有一层常被忽略：Redis 自己的过期删除成本。</b>
+    同一秒有 10 万个 key 过期，Redis 的「定期删除」会连续扫描并释放，单次删除约 0.5~1μs，10 万次就是 <strong>50~100ms 的主线程阻塞</strong>。这时候所有请求的 P99 都翻 10 倍，而 DB 还没开始被打。所以「同时过期」的伤害是双份的：先卡死 Redis，再打穿 DB。
+  </div>
+
+  <h3>真正的雪崩兜底是三层，不是一层</h3>
+  <p>补一个上面第三种情况（同时 miss）的唯一解：预热。它的关键不是「提前加载」，而是<strong>把加载速率控制在 DB 能承受的范围内</strong>，并且必须在流量接入之前完成 —— 所以预热要挂在 K8s 的 <code class="inl">readinessProbe</code> 上，而不是靠启动后异步跑。</p>
+
+  <pre><code># 预热：分批 + 限速 + 加随机 TTL，三件事缺一不可
+def warmup(hot_keys, batch=500, qps_limit=500):
+    for i in range(0, len(hot_keys), batch):
+        pipe = redis.pipeline()                       # pipeline 一次往返写 500 个
+        for k in hot_keys[i:i + batch]:
+            # 关键：预热时就把 TTL 打散，否则 30 分钟后又是同一秒集体过期
+            ttl = 1800 + random.randint(0, 300)
+            pipe.setex(k, ttl, serialize(load_from_db(k)))
+        pipe.execute()                                # 500 次 DB 查询 + 500 次 Redis 写
+        time.sleep(batch / qps_limit)                 # 限速到 500 QPS，DB 无感
+
+# 调用时机：服务就绪前（readinessProbe 未通过时不接流量）
+# 顺序：先热 key（top 1%），再长尾 —— 热 key 先到位，命中率立刻见效</code></pre>
+
+  <p>为什么预热能解决随机 TTL 解决不了的问题：随机 TTL 处理的是「<strong>过期时刻</strong>的分布」，预热处理的是「<strong>加载时刻</strong>的分布」。发版重启后缓存全空，全部请求同时 miss，这时候无论 TTL 怎么随机都没用 —— 数据压根还没进缓存。这两件事必须分开治。</p>
+
+  <p>预热之后才是三层兜底：</p>
+  <ul>
+    <li><strong>本地缓存挡第一层</strong>：热 key 在本地，Redis 全挂时本地还能撑住 70% 的读（这就是 L1 那笔账的另一个收益）。</li>
+    <li><strong>限流挡第二层</strong>：漏过去的请求限到 DB 能承受的 QPS（比如 800），其余快速失败 —— <strong>让 20% 的用户看到降级页，好过 100% 的用户看到 502</strong>。</li>
+    <li><strong>降级挡第三层</strong>：返回兜底数据（上次快照、默认推荐、静态文案）。缓存故障时最忌讳「透传错误」，用户看到「系统繁忙」比看到「三小时前的价格」体验差得多。</li>
+  </ul>
+
+  <pre><code>// 三层兜底：本地 → Redis → 限流后的 DB，任何一层挂了都能降级
+public Item getWithFallback(long id) {
+    // L1 本地（Redis 全挂时唯一还能工作的层）
+    Item local = localCache.getIfPresent("item:" + id);
+    if (local != null) return local;
+
+    // L2 Redis（超时要短，200ms；超时就当它挂了，不要重试）
+    try {
+        Item cached = redis.getWithTimeout("item:" + id, Duration.ofMillis(200));
+        if (cached != null) { localCache.put("item:" + id, cached); return cached; }
+    } catch (Exception ignore) {
+        // 别在这里重试，重试会把 RT 从 200ms 放大到 600ms
+    }
+
+    // L3 DB 前必须限流：DB 连接池 200，超过就直接降级
+    if (!dbQueryLimiter.tryAcquire()) {
+        return fallbackSnapshot(id);     // 上次快照 / 默认值，绝不抛异常
+    }
+    return itemMapper.selectById(id);
+}</code></pre>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b4">L9</span><em>容量治理</em></div>
+  <h2>治理视角：五道闸门、一笔内存账、一张淘汰表</h2>
+  <p>前面八节都在讲「怎么让缓存对」，这一节讲「怎么让缓存不倒」。先看一个 100 万 QPS 的读链路，在五道闸门上是怎么逐层衰减的 —— 这个漏斗比任何架构图都更能说明「为什么每一层都要有」。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 272" role="img" aria-label="读请求的五道闸门">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">100 万 QPS 的五道闸门：每一层都承担一个「不可替代」的职责</text>
+
+      <text x="40" y="52" font-size="10" fill="#475569" font-weight="700">入口</text>
+      <rect x="200" y="38" width="560" height="20" rx="3" fill="#eef1f7" stroke="#cbd5e1"/>
+      <text x="770" y="53" font-size="10" fill="#334155" font-weight="700">100 万 QPS</text>
+      <text x="200" y="70" font-size="9" fill="#94a3b8">网关层：鉴权、WAF、灰度</text>
+
+      <text x="40" y="104" font-size="10" fill="#475569" font-weight="700">本地缓存</text>
+      <rect x="200" y="90" width="307" height="20" rx="3" fill="#e8f4ec" stroke="#86cfa4"/>
+      <text x="517" y="105" font-size="10" fill="#047857" font-weight="700">30 万　命中 70%，RT 0.2 μs</text>
+      <text x="200" y="122" font-size="9" fill="#94a3b8">挡掉热 key：Redis 全挂时唯一还能工作的层</text>
+
+      <text x="40" y="156" font-size="10" fill="#475569" font-weight="700">Redis</text>
+      <rect x="200" y="142" width="90" height="20" rx="3" fill="#fef6e8" stroke="#e9c98c"/>
+      <text x="300" y="157" font-size="10" fill="#b45309" font-weight="700">1.5 万　命中 95%，RT 0.6 ms</text>
+      <text x="200" y="174" font-size="9" fill="#94a3b8">挡掉长尾：靠大内存 + 高并发，不讲情面地 miss</text>
+
+      <text x="40" y="208" font-size="10" fill="#475569" font-weight="700">限流</text>
+      <rect x="200" y="194" width="45" height="20" rx="3" fill="#fff1f3" stroke="#f0a8b6"/>
+      <text x="255" y="209" font-size="10" fill="#be123c" font-weight="700">5,000　另外 1 万直接降级</text>
+      <text x="200" y="226" font-size="9" fill="#94a3b8">这一层存在的意义：宁可 1 万人看降级页，不要 100 万人看 502</text>
+
+      <text x="40" y="260" font-size="10" fill="#475569" font-weight="700">DB</text>
+      <rect x="200" y="246" width="45" height="14" rx="3" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="255" y="258" font-size="10" fill="#6d28d9" font-weight="700">5,000 QPS　单表读写混合的实际上限</text>
+    </svg>
+    <figcaption><b>图 12</b>　这个漏斗里最容易被砍掉的是「限流」，但它是唯一能在 Redis 挂掉时保护 DB 的层。</figcaption>
+  </figure>
+
+  <h3>内存账：200B 的 value 实际占 328B</h3>
+  <p>「1000 万条 200B 的数据要多少内存」，直觉算 2GB，实际要 3.3GB。<strong>47% 是 Redis 自己的结构开销</strong>，这部分不会因为你压缩 value 而消失。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="Redis 单 key 内存开销拆解">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">单个 key 的 328 字节里，只有 232 字节是你的数据</text>
+
+      <text x="24" y="52" font-size="9.5" fill="#64748b">key 32B</text>
+      <rect x="120" y="38" width="52" height="22" rx="3" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="150" y="10" font-size="9" fill="#075985" text-anchor="middle">40</text>
+      <text x="24" y="88" font-size="9.5" fill="#64748b">value 200B</text>
+      <rect x="172" y="74" width="290" height="22" rx="3" fill="#e8f4ec" stroke="#86cfa4"/>
+      <text x="330" y="46" font-size="9" fill="#047857" text-anchor="middle">224（SDS 头 3B + jemalloc 阶梯对齐）</text>
+      <text x="24" y="124" font-size="9.5" fill="#64748b">redisObject</text>
+      <rect x="462" y="110" width="22" height="22" rx="3" fill="#f5f3ff" stroke="#c4b5fd"/>
+      <text x="473" y="82" font-size="9" fill="#6d28d9" text-anchor="middle">16</text>
+      <text x="24" y="160" font-size="9.5" fill="#64748b">dictEntry</text>
+      <rect x="484" y="146" width="32" height="22" rx="3" fill="#fef6e8" stroke="#e9c98c"/>
+      <text x="500" y="118" font-size="9" fill="#b45309" text-anchor="middle">24</text>
+      <text x="24" y="196" font-size="9.5" fill="#64748b">expires entry</text>
+      <rect x="516" y="182" width="32" height="22" rx="3" fill="#fff1f3" stroke="#f0a8b6"/>
+      <text x="532" y="154" font-size="9" fill="#be123c" text-anchor="middle">24</text>
+      <text x="560" y="196" font-size="9" fill="#94a3b8">（只有设了 TTL 才有）</text>
+
+      <rect x="24" y="212" width="852" height="76" rx="8" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="40" y="232" font-size="10" fill="#334155" font-weight="700">1000 万条 → 3.28 GB（数据本身 2.32 GB，放大 41%）</text>
+      <text x="40" y="250" font-size="10" fill="#475569">+ 哈希表桶（rehash 期间两张表）：1000 万 × 8 B × 2 = 160 MB　→ 3.44 GB</text>
+      <text x="40" y="268" font-size="10" fill="#be123c" font-weight="700">+ 从库 1 份 + AOF rewrite 期间 COW 峰值 1.5 倍 → 单实例规划要按 5.2 GB，主从共 10.4 GB</text>
+
+      <text x="600" y="232" font-size="9.5" fill="#64748b">所以「10 GB 放 1000 万条」</text>
+      <text x="600" y="248" font-size="9.5" fill="#64748b">刚好卡在边缘，没有任何余量</text>
+      <text x="600" y="264" font-size="9.5" fill="#be123c">一旦碎片率上到 1.5 就要 OOM</text>
+    </svg>
+    <figcaption><b>图 13</b>　面试被问「怎么估 Redis 内存」，答「key 长度 + value 长度」是错的，正确答案是「× 1.4~1.5，再加从库和 COW」。</figcaption>
+  </figure>
+
+  <p>顺带纠正两个常见误算：</p>
+  <ul>
+    <li><strong>jemalloc 的阶梯分配</strong>：SDS 不按实际长度分配，而是对齐到 8/16/32/48/64/80/96/112/128… 的档位。200B 的字符串会分到 224B，<strong>这是 24B 的纯浪费</strong>。所以 value 长度设计成「刚好在档位边界下方一点」最省，比如 190B 而不是 200B。</li>
+    <li><strong>过期字典是独立的一张表</strong>：每个带 TTL 的 key 在 <code class="inl">expires</code> 字典里还有一条 dictEntry，多 24B。所以「全量设 TTL」比「不设 TTL」多 7% 内存 —— 这是很多人没算过的。</li>
+  </ul>
+
+  <h3>淘汰策略：LRU 会被一次全表扫描打成废人</h3>
+  <p>八种策略里，真正要用的是 <code class="inl">allkeys-lfu</code>，理由是 LRU 有一个致命缺陷：<strong>它只看「最近有没有被访问」，不看「被访问了多少次」</strong>。</p>
+  <p>场景：运营跑了一次「导出全部商品」的任务，逐个 <code class="inl">GET</code> 了 200 万个 key。这 200 万个 key 全部被插入 LRU 链表头部，把原本的 100 万热数据挤到尾部淘汰。<strong>一次导出任务，缓存命中率从 96% 掉到 30%，DB 直接被打穿。</strong></p>
+
+  <figure>
+    <svg viewBox="0 0 900 292" role="img" aria-label="淘汰策略与 LFU 抗扫描">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">八种淘汰策略其实就是「范围 × 算法」的笛卡尔积，外加一个 noeviction</text>
+
+      <text x="120" y="46" font-size="9.5" fill="#64748b" text-anchor="middle">LRU（最近访问）</text>
+      <text x="310" y="46" font-size="9.5" fill="#64748b" text-anchor="middle">LFU（访问频次）</text>
+      <text x="500" y="46" font-size="9.5" fill="#64748b" text-anchor="middle">random</text>
+      <text x="690" y="46" font-size="9.5" fill="#64748b" text-anchor="middle">ttl（快过期的先删）</text>
+
+      <text x="60" y="78" font-size="9.5" fill="#475569" text-anchor="end">allkeys</text>
+      <rect x="28" y="58" width="180" height="40" rx="5" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="118" y="76" font-size="9.5" fill="#475569" text-anchor="middle">allkeys-lru</text>
+      <text x="118" y="90" font-size="8.5" fill="#94a3b8" text-anchor="middle">被扫描污染</text>
+      <rect x="218" y="58" width="180" height="40" rx="5" fill="#f2fbf6" stroke="#86cfa4"/>
+      <text x="308" y="76" font-size="9.5" fill="#047857" text-anchor="middle">allkeys-lfu ★</text>
+      <text x="308" y="90" font-size="8.5" fill="#047857" text-anchor="middle">纯缓存首选</text>
+      <rect x="408" y="58" width="180" height="40" rx="5" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="498" y="76" font-size="9.5" fill="#475569" text-anchor="middle">allkeys-random</text>
+      <text x="498" y="90" font-size="8.5" fill="#94a3b8" text-anchor="middle">命中率最差</text>
+      <rect x="598" y="58" width="180" height="40" rx="5" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="688" y="80" font-size="9.5" fill="#94a3b8" text-anchor="middle">不存在</text>
+
+      <text x="60" y="138" font-size="9.5" fill="#475569" text-anchor="end">volatile</text>
+      <rect x="28" y="118" width="180" height="40" rx="5" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="118" y="136" font-size="9.5" fill="#475569" text-anchor="middle">volatile-lru</text>
+      <text x="118" y="150" font-size="8.5" fill="#94a3b8" text-anchor="middle">混存场景可用</text>
+      <rect x="218" y="118" width="180" height="40" rx="5" fill="#fef6e8" stroke="#e9c98c"/>
+      <text x="308" y="136" font-size="9.5" fill="#b45309" text-anchor="middle">volatile-lfu</text>
+      <text x="308" y="150" font-size="8.5" fill="#b45309" text-anchor="middle">缓存 + 持久数据混存</text>
+      <rect x="408" y="118" width="180" height="40" rx="5" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="498" y="136" font-size="9.5" fill="#475569" text-anchor="middle">volatile-random</text>
+      <text x="498" y="150" font-size="8.5" fill="#94a3b8" text-anchor="middle">几乎不用</text>
+      <rect x="598" y="118" width="180" height="40" rx="5" fill="#f8fafc" stroke="#e3e7ef"/>
+      <text x="688" y="136" font-size="9.5" fill="#475569" text-anchor="middle">volatile-ttl</text>
+      <text x="688" y="150" font-size="8.5" fill="#94a3b8" text-anchor="middle">快过期的先淘汰</text>
+
+      <rect x="28" y="170" width="750" height="42" rx="5" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="188" font-size="9.5" fill="#be123c" font-weight="700">noeviction：内存满时写入直接报错 OOM command not allowed</text>
+      <text x="42" y="204" font-size="9.5" fill="#475569">只适合「数据绝对不能丢」的存储型用法（Redis 当 DB 用）。做缓存时选它 = 定时炸弹。</text>
+
+      <rect x="28" y="222" width="852" height="62" rx="7" fill="#eff6fc" stroke="#9fcbe8"/>
+      <text x="42" y="240" font-size="10" fill="#075985" font-weight="700">为什么 LFU 抗扫描：扫描任务的每个 key 只被访问 1 次，计数停在 1，永远竞争不过热 key 的计数 200+</text>
+      <text x="42" y="256" font-size="9.5" fill="#475569">LFU 计数器是 8 bit 的对数概率计数（0~255），配套两个参数：lfu-log-factor（增长斜率，默认 10）、lfu-decay-time（衰减周期，默认 1 分钟）</text>
+      <text x="42" y="272" font-size="9.5" fill="#be123c">坑：LFU 冷启动时新 key 计数为 5，很可能一进来就被淘汰 → 靠 lfu-log-factor 调小让计数增长更快，或接受短期抖动</text>
+    </svg>
+    <figcaption><b>图 14</b>　八种策略里只有 4 种值得记：allkeys-lfu（纯缓存）、volatile-lfu（混存）、volatile-ttl（临时数据）、noeviction（存储型）。</figcaption>
+  </figure>
+
+  <pre><code># 生产配置：纯缓存实例
+maxmemory 10gb
+maxmemory-policy allkeys-lfu
+lfu-log-factor 10          # 计数增长斜率，越小增长越快（越像 LRU）
+lfu-decay-time 1           # 每分钟衰减一半，避免「历史热点」永久占位
+
+# 混存实例（既有缓存又有队列/锁）
+maxmemory-policy volatile-lfu     # 只淘汰带 TTL 的，队列和锁不会被淘汰
+# 注意：这样做的代价是「带 TTL 的 key 被淘汰光了，内存还是满的」→ 必须监控 used_memory 曲线</code></pre>
+
+  <h3>大 key：先测出来，再异步删</h3>
+  <p>大 key 的定义不是一个字节数，而是<strong>「单次操作的耗时超过可接受阈值」</strong>。经验值：String &gt; 10KB，集合元素数 &gt; 5000，或者单 key 的 <code class="inl">MEMORY USAGE</code> &gt; 1MB。</p>
+
+  <table>
+    <tr><th style="width:22%">危害</th><th style="width:34%">量化</th><th>处理</th></tr>
+    <tr><td>阻塞主线程</td><td><code>DEL</code> 一个 100 万元素的 Hash ≈ 300 ms~1 s，这期间所有请求排队</td><td>用 <code>UNLINK</code>（4.0+，后台线程释放）替代 <code>DEL</code></td></tr>
+    <tr><td>网络带宽</td><td>1 万 QPS × 10MB = 100 GB/s，万兆网卡上限 12.5 GB/s</td><td>拆分：大 String 拆成 Hash 的多个 field，只取需要的部分</td></tr>
+    <tr><td>集群倾斜</td><td>一个 5GB 的 key 落在某一片，该片内存是其它片的 3 倍</td><td>拆 key 或改结构，让单 key 控制在 100KB 内</td></tr>
+    <tr><td>迁移/扩容卡死</td><td>Cluster 迁移 slot 时按 key 搬，一个 5GB 的 key 会让迁移卡住几分钟</td><td>同上，单 key 体积是集群可运维性的前提</td></tr>
+  </table>
+
+  <pre><code># 检测三件套（都有代价，别在生产高峰跑）
+redis-cli --bigkeys                    # 采样统计，会短暂阻塞；只看每种类型的 top1
+redis-cli --memkeys                    # 4.0+，按内存排序
+MEMORY USAGE bigkey SAMPLES 5          # 单 key 估算，SAMPLES 越小越快越不准
+
+# 删除：千万不要 DEL 大集合
+UNLINK bigkey                          # 异步释放，主线程只摘链
+# 更稳的做法：分批删
+for ((i=0; i&lt;1000; i++)); do
+  redis-cli HSCAN bigkey 0 COUNT 100 | head -1 | xargs -I{} redis-cli HDEL bigkey {}
+done</code></pre>
+
+  <div class="good">
+    <b>治理的三个常设指标</b>（面试问到「你怎么保证缓存稳定」时按这个答）：
+    ① <strong>命中率</strong> &gt; 90%，掉 5 个点就告警（命中率是滞后指标，掉了说明已经有问题）；
+    ② <strong>内存碎片率</strong> &gt; 1.5 且 used_memory &gt; 1GB 就处理（<code>activedefrag yes</code> 或择机重启）；
+    ③ <strong>单分片 CPU 标准差</strong>，超过 20 个点说明有倾斜，而不是等某片跑到 100% 才发现。
+  </div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b0">L10</span><em>速查</em></div>
+  <h2>数字速查：能报出这些，就不用背定义了</h2>
+  <table>
+    <tr><th style="width:34%">结论</th><th style="width:20%">数字</th><th>出处 / 推导</th></tr>
+    <tr><td>双写两步联合成功率</td><td><strong>99.85%</strong></td><td>0.9995 × 0.999，日 10 万次更新 = 150 条脏缓存</td></tr>
+    <tr><td>热 key 脏读放大</td><td><strong>1.35 亿次</strong></td><td>150 条 × 900 s × 1000 QPS</td></tr>
+    <tr><td>业务双写 vs binlog 的不一致窗口</td><td><strong>1000 倍</strong></td><td>TTL 30 min vs 消费延迟 200 ms</td></tr>
+    <tr><td>本地缓存内存放大</td><td><strong>= 实例数</strong></td><td>20 实例 × 100 MB = 2 GB，有效数据只有 100 MB</td></tr>
+    <tr><td>Cache Aside ② 的残余窗口</td><td><strong>3~5 ms</strong></td><td>读侧「读 DB + 写缓存」需完整穿越写侧</td></tr>
+    <tr><td>延迟双删的 sleep 该设多少</td><td><strong>主从延迟 P99 + 200 ms</strong></td><td>不是固定的 500 ms，从监控取</td></tr>
+    <tr><td>布隆 1000 万 key @ 1% 误判</td><td><strong>11.4 MB / 7 个哈希</strong></td><td>m = −n·ln p / (ln 2)²，k = (m/n)·ln 2</td></tr>
+    <tr><td>布隆误判率降 10 倍的代价</td><td><strong>内存 +57%</strong></td><td>11.4 → 17.9 → 22.9 MB</td></tr>
+    <tr><td>CMS 统计任意 key 的内存</td><td><strong>32 KB</strong></td><td>4 行 × 2000 列 × 4 B，误差 0.14%</td></tr>
+    <tr><td>随机 TTL 的范围 R</td><td><strong>≥ N / DB 容忍 QPS</strong></td><td>10 万 key / 500 QPS = 200 s</td></tr>
+    <tr><td>Redis 单 key 内存放大</td><td><strong>1.41 倍</strong></td><td>328 B / 232 B，含 dictEntry、redisObject、jemalloc 对齐</td></tr>
+    <tr><td>1000 万条 200B 的实际占用</td><td><strong>3.44 GB</strong></td><td>+ 从库 + COW 峰值 → 规划 10.4 GB</td></tr>
+    <tr><td>单分片读上限</td><td><strong>8~10 万 QPS</strong></td><td>简单 GET，pipeline 不适用时</td></tr>
+    <tr><td>一次 200 万 key 的导出任务</td><td><strong>命中率 96% → 30%</strong></td><td>LRU 被扫描污染；LFU 免疫</td></tr>
+    <tr><td>DEL 100 万元素 Hash</td><td><strong>阻塞 300 ms~1 s</strong></td><td>改用 UNLINK 或 HSCAN + HDEL 分批</td></tr>
+  </table>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L11</span><em>高频问答</em></div>
+  <h2>14 条问答：从「背过的」到「想过的」</h2>
+
+  <div class="qa"><div class="qq">：为什么是「删缓存」而不是「更新缓存」？</div>
+  <p>三个理由。① <strong>并发写会互相覆盖</strong>：两个写请求交错执行，后写的更旧值可能覆盖先写的新值，缓存永久错到下次写；删除最坏只是 miss 一次。② <strong>懒加载省算力</strong>：写 100 次只读 1 次时，更新缓存算了 99 次没人看。③ <strong>缓存值常是聚合结果</strong>：商品详情 = 商品 + 库存 + 价格 + 促销，更新要重算整个聚合，删除只要一个 DEL。唯一例外是 binlog 顺序消费场景 —— 那里能保证顺序，更新就安全了。</p></div>
+
+  <div class="qa"><div class="qq">：先删缓存再更新 DB，到底错在哪？</div>
+  <p>错在窗口宽度。从「删缓存」到「DB 更新完成」这整段时间（一次写事务，5ms 起，遇行锁等待可到 100ms），任何读请求都会 miss、读旧 DB、回填旧值 —— 而且这个旧值会活到 TTL 到期。<strong>它不是「可能错」，是「窗口内一定错」</strong>。相比之下，「先更新 DB 再删缓存」要求读线程的「读 DB + 写缓存」完整穿越写线程的「更新 DB + 删缓存」，是低概率事件。</p></div>
+
+  <div class="qa"><div class="qq">：延迟双删那个 500ms 是怎么定的？</div>
+  <p>大部分人答不出，因为<strong>那个数字本来就是拍的</strong>。它的唯一目标是覆盖主从延迟：第二次删除必须晚于「主从延迟 D + 一次读回填耗时 R」。同机房 D 的 P99 约 20~50ms，跨机房 100~300ms，R 约 2~5ms，所以理论上 100ms 就够。正确做法是取监控里主从延迟的 P99 加 200ms 余量，而不是抄 500。</p></div>
+
+  <div class="qa"><div class="qq">：删缓存失败了怎么办？</div>
+  <p>这是「及格」和「良好」的分界线。三条必须做：① 删除放在 <code>afterCommit</code> 里，不能写在事务方法体内（提交前删 = 退化成最坏时序）；② 失败落本地消息表，由定时任务重试，不能只打日志；③ 重试要带版本校验，避免「重试把更新的新值又删了」这种反向错误。再往上就是 binlog 订阅，把删除搬到 MQ 消费端，天生可重试 16 次 + 死信兜底。</p></div>
+
+  <div class="qa"><div class="qq">：为什么说 binlog 订阅是唯一可靠的方案？</div>
+  <p>三个本质差异。① <strong>单一真相源</strong>：DB 提交成功，binlog 必然存在（redo 保证），缓存只是投影，投影错了随时可重算。② <strong>不侵入业务</strong>：批量更新、运维直改库、老系统写入都能覆盖，双写做不到 —— 只要有一条写路径忘了删缓存，就留脏数据。③ <strong>可重放</strong>：位点可回溯，补数据、重建缓存都能重放，双写丢了就是丢了。代价是多一套 canal + MQ 的运维。</p></div>
+
+  <div class="qa"><div class="qq">：主从延迟导致的脏读怎么根治？</div>
+  <p>三层：① <strong>写后短窗读主库</strong>：本地记 <code>dirty:userId</code> 500ms（值从监控的主从延迟 P99 来），期间该用户读走主库，解决「读自己写」；② <strong>binlog 订阅删缓存</strong>：消费延迟通常 50~200ms，比主从延迟还短，等于缓存失效跑在从库同步之前；③ <strong>关键读强制主库</strong>：支付结果、订单详情这类，直接 <code>/*master*/</code> 走主库，别在这里省钱。</p></div>
+
+  <div class="qa"><div class="qq">：多实例的本地缓存怎么保证一致？</div>
+  <p>先说结论：<strong>做不到强一致，只能做到有界窗口</strong>。方案是三层叠加：① 版本号保证正确性（版本由 Redis 的 INCR 产生，本地 entry 带版本，广播只推「版本变了」而不是「删掉」）；② 广播降低延迟（MQ 广播或 Redis pub/sub，但 pub/sub 断连即丢、无 ACK）；③ TTL 兜底（5~30s）。三层都在，就不需要讨论「消息丢了怎么办」。</p></div>
+
+  <div class="qa"><div class="qq">：能不能用分布式事务保证缓存和 DB 强一致？</div>
+  <p>技术上可以，工程上不该。① 缓存没有事务回滚能力，Redis 的 MULTI 只是命令批处理，失败不回滚；② 2PC 的协调者一旦挂掉，资源锁不释放，可用性从 99.99% 掉到 99%；③ 更根本的是<strong>没必要</strong>：缓存是「可丢失的加速层」，为它付出分布式事务的代价，等于给自行车装安全带。真正需要强一致的地方，做法是「不缓存」（读直接打 DB）或「缓存即真相 + 对账」（库存 Lua 扣减）。</p></div>
+
+  <div class="qa"><div class="qq">：热 key 怎么发现？发现之后怎么办？</div>
+  <p>发现靠「客户端 CMS 统计 → worker 聚合 → 配置中心推送」三段式，端到端 5~15 秒。三个坑：忘记 reset 导致统计的是历史累计、单实例阈值漏判（20 个实例各 500 QPS 不报警，聚合 1 万 QPS 才是热点）、热 key 名单只增不减。处置四层：<strong>本地缓存</strong>（最有效，热 key 通常只有几万个）、<strong>key 打散</strong>（10 副本，写放大 10 倍）、<strong>从节点读</strong>、<strong>单 key 限流降级</strong>。</p></div>
+
+  <div class="qa"><div class="qq">：布隆过滤器能不能删除元素？误判率高怎么办？</div>
+  <p>不能删。删一个元素要把它置的 k 位清零，会连带把共用这些位的其它 key 判成「不存在」—— <strong>假阴性（漏判）比误判严重得多</strong>，因为它会把真实存在的数据挡在外面。替代方案：Counting Bloom（4 bit 计数，内存 ×4~8）、布谷鸟过滤器（支持删除但插入可能失败）、按天分桶重建。误判率高就加内存：<strong>误判率降 10 倍只多 57% 内存</strong>，所以工程上直接用 0.1% 而不是 1%。</p></div>
+
+  <div class="qa"><div class="qq">：缓存雪崩，随机 TTL 为什么有时无效？</div>
+  <p>因为随机范围没算。重建速率 ≈ N/R，10 万 key 随机 10 秒仍然是 1 万/s，照样打死 DB。R 必须 ≥ N / DB 容忍的重建 QPS（10 万 / 500 = 200s）。另外两种失效：R 相对 T 太大（T=60s 随机 ±300s，一致性窗口失控）、以及根本不是「同时过期」而是「同时 miss」（发版重启后本地和 Redis 都空，随机 TTL 完全无效，只能靠预热）。</p></div>
+
+  <div class="qa"><div class="qq">：击穿用互斥锁还是逻辑过期？</div>
+  <p>看业务能不能忍旧值。<strong>互斥锁</strong>：1000 并发只有 1 个查 DB，其余自旋等待，RT = 重建耗时（200ms 级），拿到的一定是新值 —— 适合价格、库存。<strong>逻辑过期</strong>：value 带 expireAt、物理永不过期，读到过期立刻返回旧值 + 异步刷新，RT 不增加 —— 适合商品详情、榜单、推荐。互斥锁的三个细节：锁 TTL 要大于重建耗时、拿到锁后要双重检查、释放锁要用 Lua 比对 token。</p></div>
+
+  <div class="qa"><div class="qq">：线上发现缓存和 DB 数据对不上，怎么排查？</div>
+  <p>四步，不要跳。① <strong>确认是不是缓存问题</strong>：直接查 DB 看值对不对，DB 对缓存错才往下查。② <strong>看这条数据的 TTL 和最后修改时间</strong>：如果修改时间早于缓存写入时间，说明缓存比 DB 新（不该发生）；如果晚于，说明删除丢了。③ <strong>查删除链路</strong>：双写的话看应用日志有没有 evict failed、有没有事务提交前就删的代码；binlog 的话看 canal 位点有没有滞后、MQ 有没有堆积。④ <strong>确认影响面</strong>：按 TTL 和 QPS 估脏读次数，决定是「手动删这一个 key」还是「批量重建」。</p></div>
+
+  <div class="qa"><div class="qq">：缓存该设多大？命中率多少算合格？</div>
+  <p>容量按「头部数据」定，不是按全量。Zipf 分布下，缓存 top 1% 能覆盖 72% 的请求，top 10% 覆盖 86% —— 再多就是长尾税（多 5 倍内存只换来 4% 命中率）。命中率按业务定：商品详情 90% 算合格，配置类应该 99.9%，本地缓存 70% 就算发挥了作用。真正该盯的不是绝对命中率，是<strong>「命中率掉了 5 个点」这个变化</strong>，那通常意味着有批量 key 被淘汰或者热 key 消失。</p></div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L12</span><em>模拟面试</em></div>
+  <h2>3 道模拟题，四档回答对照</h2>
+
+  <div class="q">
+    <h4><span>Q1</span>设计商品详情页缓存：QPS 50 万，商品 1000 万，要求改价 1 秒内生效</h4>
+    <div class="lab">考察点</div>
+    <p>分层设计 / 命中率推导 / 一致性窗口 / 失效链路</p>
+    <div class="lab r">不及格</div>
+    <p>「用 Redis 缓存商品详情，设置 30 分钟过期，更新的时候删缓存。」—— 没有容量账，没有说明 50 万 QPS 怎么扛，1 秒生效这个硬要求直接被 TTL 违背。</p>
+    <div class="lab">及格</div>
+    <p>说清三层：本地缓存（Caffeine）+ Redis + DB。本地 3 秒 TTL，Redis 30 分钟，更新时删 Redis + 广播删本地。能说出 50 万 QPS 靠本地缓存扛掉大部分。</p>
+    <div class="lab g">良好</div>
+    <p>把数字算出来。① 容量：1000 万商品按 1KB 算，全量 10GB；但 top 1%（10 万条）覆盖 72% 请求，本地缓存 100MB 就能装下，Redis 存 top 10%（100 万条）1GB 足够。② 流量：50 万 QPS，本地命中 70% → 15 万到 Redis，Redis 命中 95% → 7500 到 DB。③ 一致性：<strong>价格单独拆出来</strong>——商品详情走最终一致（binlog 1 秒内），价格走「读自己写 + 短 TTL 不缓存」，因为改价必须即刻生效。</p>
+    <div class="lab">优秀</div>
+    <p>再补四个工程判断。<br>
+    ① <strong>拆缓存粒度</strong>：详情页拆成「基础信息（标题/图文，改得少，TTL 30min）+ 价格库存（改得多，TTL 3s 或干脆不缓存）+ 促销（计算型，TTL 1min）」。混在一起缓存，任何一个字段变都要整条失效，命中率会被拖垮。<strong>这才是「1 秒生效」的真正解法 —— 不是把 TTL 调到 1 秒，而是把会变的字段拆出去。</strong><br>
+    ② <strong>失效链路</strong>：binlog → canal → MQ（按 item_id 分区保序）→ 消费者删 Redis + 广播版本号。端到端 P99 控制在 500ms 内，留 500ms 余量。<br>
+    ③ <strong>本地缓存的一致性</strong>：不追求实时失效，用「版本号 + 3s TTL」。价格这条特殊处理：查询时比对「本地 entry 的 loadAt 是否落在最近一次调价的 3 秒内」，是就走 Redis。<br>
+    ④ <strong>兜底</strong>：Redis 挂了本地还能撑 70%；DB 前加限流 2000 QPS；详情页整页降级到「静态快照」而不是报错。改价 1 秒生效的验收指标是「P99 端到端 800ms」，要有监控埋点，不能只说方案不验证。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>Q2</span>大促零点，Redis 集群某一片 CPU 100%，接口大面积超时，怎么定位和处置？</h4>
+    <div class="lab">考察点</div>
+    <p>故障定位 / 热 key 判别 / 应急处置 / 根因修复</p>
+    <div class="lab r">不及格</div>
+    <p>「扩容 Redis。」—— 扩容对单 key 热点完全无效，这是本题最大的陷阱。</p>
+    <div class="lab">及格</div>
+    <p>先看监控：如果是某一片 CPU 高而其它片正常，说明是热 key 或分片倾斜，不是整体容量不够。处置：把这个 key 加到本地缓存，或者限流降级。事后做 key 打散。</p>
+    <div class="lab g">良好</div>
+    <p>分三步。① <strong>判别</strong>：看 CPU 分布的标准差。一片 100%、其余 20% → 热点或倾斜；全部 80%+ → 容量不足，那就扩容。再看 <code>redis-cli --hotkeys</code> 或 proxy 日志定位具体 key。② <strong>应急</strong>：这个 key 用 <code>DEBUG SLEEP</code> 不行，正确做法是「本地缓存 + 单 key 限流」热补丁，或者直接把这个 key 写到静态文件/配置中心让所有实例本地读。③ <strong>根因</strong>：热 key 探测上线（客户端 CMS + 聚合推送），并把大促爆款提前预热到本地。</p>
+    <div class="lab">优秀</div>
+    <p>补四个层次。<br>
+    ① <strong>先排除「假热点」</strong>：CPU 高不一定是 QPS 高。<code>SLOWLOG</code> 看有没有慢命令（<code>KEYS</code>、<code>HGETALL</code> 大 hash、<code>SMEMBERS</code> 大集合）；<code>INFO commandstats</code> 看是不是某个命令的 usec_per_call 异常。如果是大 key 导致的慢查询，加本地缓存没用，得拆 key。<br>
+    ② <strong>算一下账</strong>：单个 key 的 QPS = 该片总 QPS × 该 key 占比。如果某片 10 万 QPS 里 8 万是一个 key，那这个 key 就是根因；如果 10 万 QPS 均匀分布在 100 万个 key 上，那就是片容量不够，扩容有效。<strong>这个判别决定了后面所有动作。</strong><br>
+    ③ <strong>应急处置的优先级</strong>：先「降级」（返回兜底数据，让用户能看不能用）→ 再「限流」（保护 Redis 不被彻底打挂）→ 最后才是「热补丁」。顺序反了会延长故障。<br>
+    ④ <strong>事后必须补的三件事</strong>：热点探测上线（5~15 秒发现）、大促前的容量压测（按 3 倍峰值打）、以及「单 key 打满一片」这个故障模式的演练预案 —— 下次不该再靠临场反应。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>Q3</span>运营改了商品价格，用户端还是旧价，持续了 20 分钟才恢复。怎么排查和根治？</h4>
+    <div class="lab">考察点</div>
+    <p>排查路径 / 一致性窗口估算 / 方案选型 / 流程改进</p>
+    <div class="lab r">不及格</div>
+    <p>「清一下缓存就好了。」—— 没有定位为什么没删掉，下次还会发生。</p>
+    <div class="lab">及格</div>
+    <p>先手动删这个 key 止血，然后查删除日志：是删除失败了，还是根本没执行删除。20 分钟这个时长很可疑 —— 如果是 TTL 到期才恢复，说明删除完全丢了。</p>
+    <div class="lab g">良好</div>
+    <p>按 20 分钟反推。① 如果 TTL 是 30 分钟，20 分钟恢复更像是「第二次删除（延时任务）生效」或「用户命中另一个节点后读到新值」。② 查代码：删除是否写在 <code>@Transactional</code> 方法体里（提交前删 → 并发读回填旧值）；是否只在「单品改价」路径删了缓存，而运营用的是「批量改价」接口（<strong>漏了删除逻辑，这是最常见的原因</strong>）。③ 查主从延迟：如果改价后立刻有大量读，从库还是旧值，回填后活到 TTL。</p>
+    <div class="lab">优秀</div>
+    <p>四层根治。<br>
+    ① <strong>漏路径是系统性风险，不是代码 bug</strong>：只要有 N 个写入口（单品改价、批量改价、导入 Excel、运营后台、数据修复脚本），就有 N 次忘记删缓存的机会。正确做法是把失效从「业务代码职责」变成「数据变更事件」—— 上 binlog 订阅，<strong>任何写路径都自动覆盖，包括运维直连数据库改数据</strong>。<br>
+    ② <strong>价格这个字段不该和详情一起缓存</strong>：它是高频变更 + 强时效的字段，混在 30 分钟 TTL 的详情缓存里，等于把「1 秒生效」的需求交给「30 分钟窗口」来兜。拆出来单独短 TTL（3s）或不缓存。<br>
+    ③ <strong>加对账而不是只加日志</strong>：每分钟抽样比对「Redis 里的价格」和「DB 里的价格」，不一致就告警并自动修正。这是唯一能发现「沉默失败」的手段 —— 删除失败的日志可能压根没打。<br>
+    ④ <strong>验收要有数字</strong>：改价后 P99 生效时间 &lt; 1s，用埋点度量而不是靠用户投诉。这次能发现是因为用户投诉，说明监控体系缺了「缓存与 DB 差异」这一环。</p>
+  </div>
+
+  <div class="oneline">
+    <b>下期预告</b>
+    第 18 期：<strong>接口幂等与防重设计</strong> —— token / 唯一索引 / 状态机 / 分布式锁四种方案的边界，「幂等」和「去重」不是一回事，以及重复支付、重复下单、MQ 重复消费的三种真实时序。
+  </div>
+</section>
+
+<footer>
+  Java 面试深水区 · 第 17 期 · 缓存架构与一致性<br>
+  14 张原理图 · 17 段代码 · 14 条问答 · 3 道模拟面试<br>
+  下期：接口幂等与防重设计（token / 唯一索引 / 状态机 / 分布式锁）
+</footer>
+
+</div>
+<script>
+(function () {
+  var kw = 'public|private|protected|static|final|class|interface|extends|implements|new|return|if|else|for|while|try|catch|finally|throw|throws|void|int|long|short|byte|char|float|double|boolean|null|true|false|this|super|import|package|abstract|synchronized|volatile|transient|instanceof|default|break|continue|switch|case|enum|assert|do|SELECT|FROM|WHERE|ORDER|GROUP|LIMIT|INSERT|INTO|VALUES|UPDATE|SET|DELETE|UNION|ALL|AS|CREATE|TABLE|BEGIN|COMMIT';
+  var re = new RegExp('(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/|--[^\\n]*)|("[^"]*"|\'[^\']*\')|\\b(' + kw + ')\\b|\\b(\\d[\\d_]*[LlFfDd]?)\\b', 'g');
+  document.querySelectorAll('pre code').forEach(function (block) {
+    var raw = block.textContent
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    block.innerHTML = raw.replace(re, function (m, c, s, k, n) {
+      if (c) return '<span class="c">' + c + '</span>';
+      if (s) return '<span class="s">' + s + '</span>';
+      if (k) return '<span class="k">' + k + '</span>';
+      if (n) return '<span class="n">' + n + '</span>';
+      return m;
+    });
+  });
+})();
+</script>
+</body>
+</html>

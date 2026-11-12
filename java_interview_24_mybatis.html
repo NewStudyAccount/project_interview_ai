@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 面试深挖 24 · MyBatis 与持久层原理</title>
+<style>
+:root{
+  --ink:#1a1d21; --ink2:#3d454e; --muted:#6b7683; --line:#e4e8ed; --line2:#d4dae1;
+  --bg:#ffffff; --panel:#f7f9fb; --panel2:#eef2f6;
+  --blue:#1a5fb4; --blue-soft:#e8f0fb;
+  --red:#c62828; --red-soft:#fdeceb;
+  --green:#1e7d3c; --green-soft:#e9f5ec;
+  --amber:#9a6400; --amber-soft:#fdf4e3;
+  --purple:#6a3fa0; --purple-soft:#f2ecfb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.78; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px; margin:0 auto; padding:0 28px 80px}
+.hero{padding:56px 0 30px; border-bottom:2px solid var(--ink)}
+.hero .kicker{font-size:12.5px; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; font-weight:600}
+.hero h1{margin:14px 0 10px; font-size:36px; line-height:1.25; letter-spacing:-.5px; font-weight:800}
+.hero .sub{color:var(--ink2); font-size:16.5px; max-width:760px}
+.hero .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+.tag{font-size:12.5px; padding:4px 11px; border-radius:999px; background:var(--panel2); color:var(--ink2); font-weight:600}
+.tag.b{background:var(--blue-soft); color:var(--blue)}
+.tag.r{background:var(--red-soft); color:var(--red)}
+.tag.g{background:var(--green-soft); color:var(--green)}
+
+h2{
+  margin:56px 0 18px; padding:14px 0 14px 18px; font-size:23px; font-weight:800; letter-spacing:-.2px;
+  border-left:4px solid var(--blue); background:linear-gradient(90deg,var(--blue-soft),transparent 62%);
+  border-radius:0 6px 6px 0;
+}
+h2 .n{display:inline-block; min-width:34px; color:var(--blue); font-variant-numeric:tabular-nums}
+h3{margin:32px 0 12px; font-size:17.5px; font-weight:750; color:var(--ink)}
+h3::before{content:""; display:inline-block; width:6px; height:6px; background:var(--blue); border-radius:1px; margin-right:9px; vertical-align:2px}
+p{margin:12px 0}
+strong{font-weight:700; color:#101418}
+em{font-style:normal; background:linear-gradient(transparent 62%, #ffe9a8 62%); padding:0 1px}
+code{font-family:"JetBrains Mono",Consolas,"Courier New",monospace; font-size:13px; background:var(--panel2);
+  padding:1.5px 5px; border-radius:4px; color:#a03060}
+.lead{font-size:16px; color:var(--ink2)}
+
+ul,ol{margin:12px 0; padding-left:22px}
+li{margin:7px 0}
+li::marker{color:var(--muted)}
+
+table{width:100%; border-collapse:collapse; margin:20px 0; font-size:13.5px; background:#fff}
+th{background:var(--panel2); text-align:left; padding:10px 12px; font-weight:700; border-bottom:2px solid var(--line2); font-size:13px}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:1px solid var(--line2)}
+td code{font-size:12.5px}
+.num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum"}
+
+pre{
+  position:relative; margin:20px 0; padding:18px 18px 16px; background:#1c2128; color:#d7dde5;
+  border-radius:9px; overflow-x:auto; font-size:13px; line-height:1.68;
+  font-family:"JetBrains Mono",Consolas,"Courier New",monospace;
+}
+pre::before{content:attr(data-lang); position:absolute; top:0; right:0; font-size:10.5px; letter-spacing:.1em;
+  color:#7d8794; background:#252b33; padding:3px 10px; border-radius:0 9px 0 6px; text-transform:uppercase}
+pre code{background:none; padding:0; color:inherit; font-size:inherit}
+.k{color:#ff7b72}   /* keyword */
+.s{color:#a5d6a7}   /* string */
+.c{color:#8b949e; font-style:italic} /* comment */
+.n{color:#79c0ff}   /* number */
+
+figure{margin:26px 0; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:18px 18px 10px}
+figure svg{display:block; width:100%; height:auto}
+figcaption{margin-top:8px; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.6}
+figcaption b{color:var(--ink2)}
+
+.box{border-radius:9px; padding:14px 18px; margin:20px 0; border:1px solid var(--line2); background:var(--panel)}
+.box .h{font-weight:750; font-size:13.5px; letter-spacing:.02em; margin-bottom:6px; display:flex; align-items:center; gap:8px}
+.box p:last-child{margin-bottom:0}
+.box.blue{background:var(--blue-soft); border-color:#bcd4f2} .box.blue .h{color:var(--blue)}
+.box.red{background:var(--red-soft); border-color:#f3c9c6} .box.red .h{color:var(--red)}
+.box.green{background:var(--green-soft); border-color:#c2e2cc} .box.green .h{color:var(--green)}
+.box.amber{background:var(--amber-soft); border-color:#efd9ab} .box.amber .h{color:var(--amber)}
+.box.purple{background:var(--purple-soft); border-color:#d7c9ef} .box.purple .h{color:var(--purple)}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0}
+.card{background:#fff; border:1px solid var(--line); border-radius:9px; padding:14px 16px}
+.card .t{font-weight:750; font-size:14px; margin-bottom:5px; color:var(--ink)}
+.card .d{font-size:13px; color:var(--ink2); line-height:1.65}
+.card.r{border-top:3px solid var(--red)} .card.g{border-top:3px solid var(--green)}
+.card.b{border-top:3px solid var(--blue)} .card.a{border-top:3px solid var(--amber)}
+
+.qa{border-left:3px solid var(--line2); padding:2px 0 2px 16px; margin:18px 0}
+.qa .q{font-weight:750; color:var(--ink); font-size:14.5px}
+.qa .q::before{content:"Q "; color:var(--blue); font-weight:800}
+.qa .a{color:var(--ink2); font-size:14px; margin-top:5px}
+.qa .a::before{content:"A "; color:var(--green); font-weight:800}
+
+.mt{background:#fff; border:1px solid var(--line); border-radius:11px; padding:20px 22px; margin:24px 0}
+.mt .qh{font-weight:800; font-size:15.5px; margin-bottom:10px; color:var(--ink)}
+.mt .qh span{background:var(--ink); color:#fff; font-size:11.5px; padding:2px 8px; border-radius:4px; margin-right:9px; letter-spacing:.05em}
+.lv{margin-top:14px; padding:11px 14px; border-radius:7px; font-size:13.5px; line-height:1.7}
+.lv .lb{font-weight:750; font-size:12px; letter-spacing:.05em; margin-right:8px}
+.lv.l1{background:#fbeceb; border-left:3px solid #d9534f} .lv.l1 .lb{color:#c62828}
+.lv.l2{background:#fdf6e6; border-left:3px solid #d9a441} .lv.l2 .lb{color:#9a6400}
+.lv.l3{background:#eaf2fd; border-left:3px solid #4a86c8} .lv.l3 .lb{color:#1a5fb4}
+.lv.l4{background:#eaf6ee; border-left:3px solid #3f9b5c} .lv.l4 .lb{color:#1e7d3c}
+
+.foot{margin-top:70px; padding-top:26px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+.next{margin-top:26px; background:var(--panel2); border-radius:9px; padding:16px 20px; font-size:13.5px; color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <div class="kicker">Java 面试深挖 · 第 24 期</div>
+  <h1>MyBatis 与持久层原理<br><span style="font-size:23px;color:var(--ink2);font-weight:600">一条 SQL 要过 9 道关卡，缓存是甜点也是陷阱</span></h1>
+  <div class="sub">前面 23 期讲完了 JVM、并发、Spring、MySQL、Redis、MQ。这一期补上最后一块天天在写、却很少讲清的东西：持久层。不是背「一级缓存二级缓存」，而是把 <code>mapper.selectById(1)</code> 这一行代码拆成 9 个可插桩的位置，每一处都对应一个面试考点。</div>
+  <div class="meta">
+    <span class="tag b">执行链 9 站</span>
+    <span class="tag b">两级缓存</span>
+    <span class="tag b">插件责任链</span>
+    <span class="tag b">HikariCP</span>
+    <span class="tag r">3 处实测反直觉</span>
+  </div>
+</div>
+
+<div class="box blue">
+  <div class="h">本期的取材方式</div>
+  <p>正文里的类名、方法名、默认值，全部来自本机 <code>mybatis-3.5.19.jar</code> 与 <code>HikariCP-5.1.0.jar</code> 的字节码与运行时反射，不是凭记忆写的。有 3 个结论和网上流传的说法不一致，文中都标了「实测」并给了复现方法。涉及版本的用词统一按 3.5.19 / 5.1.0 口径。</p>
+</div>
+
+<h2><span class="n">L0</span>全景：一次 <code>selectById</code> 的九站地图</h2>
+
+<p class="lead">面试问「MyBatis 原理」时，八成的人会答「动态代理 + 缓存 + 插件」。这句话没错，但它没有信息量。真正能拉开差距的是：<strong>你能说清这行代码在哪个对象上中断，以及在哪一层可以插手</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 900 424" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="424" fill="#f7f9fb"/>
+  <text x="30" y="30" font-size="15" font-weight="700" fill="#1a1d21">userMapper.selectById(1L) 的九站（蛇形阅读：1→3 右行，4→6 左行，7→9 右行）</text>
+
+  <rect x="30" y="52" width="250" height="86" rx="8" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.6"/>
+  <circle cx="52" cy="74" r="11" fill="#1a5fb4"/><text x="52" y="78" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+  <text x="72" y="79" font-size="13" font-weight="700" fill="#1a1d21">MapperProxy.invoke</text>
+  <text x="46" y="102" font-size="10.5" fill="#3d454e">JDK 动态代理，方法名即 statement id</text>
+  <text x="46" y="120" font-size="10.5" fill="#6b7683">Method 缓存，避免每次反射查表</text>
+
+  <rect x="325" y="52" width="250" height="86" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <circle cx="347" cy="74" r="11" fill="#3d454e"/><text x="347" y="78" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+  <text x="367" y="79" font-size="13" font-weight="700" fill="#1a1d21">MapperMethod.execute</text>
+  <text x="341" y="102" font-size="10.5" fill="#3d454e">SqlCommand 拼出「接口全名.方法名」</text>
+  <text x="341" y="120" font-size="10.5" fill="#6b7683">ParamNameResolver 把参数转 Map</text>
+
+  <rect x="620" y="52" width="250" height="86" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <circle cx="642" cy="74" r="11" fill="#3d454e"/><text x="642" y="78" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+  <text x="662" y="79" font-size="13" font-weight="700" fill="#1a1d21">DefaultSqlSession</text>
+  <text x="636" y="102" font-size="10.5" fill="#3d454e">门面：拿连接、开事务、提交、关闭</text>
+  <text x="636" y="120" font-size="10.5" fill="#c62828">非线程安全，用完必须关</text>
+
+  <rect x="620" y="167" width="250" height="86" rx="8" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.6"/>
+  <circle cx="642" cy="189" r="11" fill="#1a5fb4"/><text x="642" y="193" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
+  <text x="662" y="194" font-size="13" font-weight="700" fill="#1a1d21">CachingExecutor</text>
+  <text x="636" y="217" font-size="10.5" fill="#3d454e">装饰器：二级缓存先问，未命中才放行</text>
+  <text x="636" y="235" font-size="10.5" fill="#6b7683">cacheEnabled=false 时整层不装</text>
+
+  <rect x="325" y="167" width="250" height="86" rx="8" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.6"/>
+  <circle cx="347" cy="189" r="11" fill="#1a5fb4"/><text x="347" y="193" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">5</text>
+  <text x="367" y="194" font-size="13" font-weight="700" fill="#1a1d21">BaseExecutor.query</text>
+  <text x="341" y="217" font-size="10.5" fill="#3d454e">一级缓存 localCache + CacheKey 比较</text>
+  <text x="341" y="235" font-size="10.5" fill="#c62828">queryStack 防止嵌套查询污染缓存</text>
+
+  <rect x="30" y="167" width="250" height="86" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <circle cx="52" cy="189" r="11" fill="#3d454e"/><text x="52" y="193" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">6</text>
+  <text x="72" y="194" font-size="13" font-weight="700" fill="#1a1d21">SimpleExecutor.doQuery</text>
+  <text x="46" y="217" font-size="10.5" fill="#3d454e">Configuration.newStatementHandler 造 4 件套</text>
+  <text x="46" y="235" font-size="10.5" fill="#6b7683">插件就在这一步被层层包裹</text>
+
+  <rect x="30" y="282" width="250" height="86" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <circle cx="52" cy="304" r="11" fill="#3d454e"/><text x="52" y="308" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">7</text>
+  <text x="72" y="309" font-size="13" font-weight="700" fill="#1a1d21">StatementHandler</text>
+  <text x="46" y="332" font-size="10.5" fill="#3d454e">prepare 预编译 + ParameterHandler 设参</text>
+  <text x="46" y="350" font-size="10.5" fill="#6b7683">#{} 走 setXxx，${} 已在解析期替换</text>
+
+  <rect x="325" y="282" width="250" height="86" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <circle cx="347" cy="304" r="11" fill="#3d454e"/><text x="347" y="308" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">8</text>
+  <text x="367" y="309" font-size="13" font-weight="700" fill="#1a1d21">ResultSetHandler</text>
+  <text x="341" y="332" font-size="10.5" fill="#3d454e">TypeHandler 逐列转换 + 自动映射</text>
+  <text x="341" y="350" font-size="10.5" fill="#c62828">嵌套查询在这里触发第 N+1 次 SQL</text>
+
+  <rect x="620" y="282" width="250" height="86" rx="8" fill="#ffffff" stroke="#1e7d3c" stroke-width="1.6"/>
+  <circle cx="642" cy="304" r="11" fill="#1e7d3c"/><text x="642" y="308" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">9</text>
+  <text x="662" y="309" font-size="13" font-weight="700" fill="#1a1d21">结果返回并延迟关连接</text>
+  <text x="636" y="332" font-size="10.5" fill="#3d454e">ResultSet 遍历完才 close，非提前释放</text>
+  <text x="636" y="350" font-size="10.5" fill="#6b7683">这正是流式查询必须用 Cursor 的原因</text>
+
+  <!-- 箭头 1->2 ->3 -->
+  <polygon points="280,95 298,95 298,90 312,98 298,106 298,101 280,101" fill="#6b7683"/>
+  <polygon points="575,95 593,95 593,90 607,98 593,106 593,101 575,101" fill="#6b7683"/>
+  <!-- 3->4 下行 -->
+  <polygon points="745,138 745,152 740,152 748,166 756,152 751,152 751,138" fill="#6b7683"/>
+  <!-- 4->5 ->6 左行 -->
+  <polygon points="620,210 602,210 602,205 588,213 602,221 602,216 620,216" fill="#6b7683"/>
+  <polygon points="325,210 307,210 307,205 293,213 307,221 307,216 325,216" fill="#6b7683"/>
+  <!-- 6->7 下行 -->
+  <polygon points="155,253 155,267 150,267 158,281 166,267 161,267 161,253" fill="#6b7683"/>
+  <!-- 7->8 ->9 -->
+  <polygon points="280,325 298,325 298,320 312,328 298,336 298,331 280,331" fill="#6b7683"/>
+  <polygon points="575,325 593,325 593,320 607,328 593,336 593,331 575,331" fill="#6b7683"/>
+
+  <text x="30" y="404" font-size="10.5" fill="#6b7683">蓝色框 = 有缓存逻辑的两站（4、5）；红色文字 = 该站的经典事故点。插件可插桩的只有 4/5/7/8 对应的四个接口。</text>
+</svg>
+<figcaption><b>图 1</b>　九站执行链。面试时按这九站讲，比「动态代理 + 缓存 + 插件」三个词有用得多</figcaption>
+</figure>
+
+<h3>面试问法其实只有三层</h3>
+
+<div class="grid3">
+  <div class="card b">
+    <div class="t">第一层：会不会用</div>
+    <div class="d"><code>#</code> 和 <code>$</code> 区别、<code>resultType</code> 与 <code>resultMap</code>、动态 SQL 标签。背一背就过。</div>
+  </div>
+  <div class="card a">
+    <div class="t">第二层：知不知道坑</div>
+    <div class="d">一级缓存为什么会「失效」、二级缓存为什么返回旧值、批量插入为什么还是慢。这一层开始筛人。</div>
+  </div>
+  <div class="card g">
+    <div class="t">第三层：能不能改造</div>
+    <div class="d">插件怎么写的、分页插件为什么拦 Executor、多数据源怎么切换。这一层决定定级。</div>
+  </div>
+</div>
+
+<div class="box amber">
+  <div class="h">先把一个版本事实钉死</div>
+  <p>本文所有结论基于 <strong>MyBatis 3.5.19</strong>。3.5.x 从 3.5.16 起对外部插件做了收紧：<code>Invocation</code> 构造函数里多了一个白名单校验，只允许四个接口作为插件目标（实测见 L6）。如果你背的是老博客里「任意接口都能被 <code>Plugin.wrap</code> 代理」，在 3.5.19 上会直接抛 <code>IllegalArgumentException</code>。</p>
+</div>
+
+<h2><span class="n">L1</span>接口没有实现类，为什么能跑</h2>
+
+<p>先问一个看起来傻但很能筛人的问题：<code>UserMapper</code> 是个接口，没有实现类，Spring 注入的时候不报错吗？</p>
+
+<p>答案是 <code>MapperScannerConfigurer</code> 把它注册成了 <code>MapperFactoryBean</code>，而这个 FactoryBean 的 <code>getObject()</code> 返回的是 <code>MapperProxyFactory.newInstance()</code> 造出来的 <strong>JDK 动态代理</strong>。所以容器里那个 bean 的真实类型是 <code>$Proxy42</code>，不是 <code>UserMapper</code>。</p>
+
+<pre data-lang="java"><code>// MapperProxyFactory —— 精简后的关键三行
+public T newInstance(SqlSession sqlSession) {
+    final MapperProxy&lt;T&gt; mapperProxy = new MapperProxy&lt;&gt;(sqlSession, mapperInterface, methodCache);
+    return newInstance(mapperProxy);
+}
+protected T newInstance(MapperProxy&lt;T&gt; mp) {
+    return (T) Proxy.newProxyInstance(mapperInterface.getClassLoader(),
+            new Class[]{mapperInterface}, mp);   // 只能代理接口 → 这就是为什么 Mapper 必须是接口
+}</code></pre>
+
+<p>进到 <code>MapperProxy.invoke</code> 之后有三条分支，顺序不能乱：</p>
+
+<ol>
+  <li><strong>Object 自带方法</strong>（<code>toString</code>/<code>equals</code>/<code>hashCode</code>）直接放过，不走 SQL。所以你在 IDE 里 <code>toString</code> 一个 Mapper 不会打印 SQL。</li>
+  <li><strong>接口 default 方法</strong>走 <code>DefaultMethodInvoker</code>，用 <code>MethodHandles</code> 调用真实默认实现。这是 3.4.2 之后新增的，很多人不知道 Mapper 里可以写 default 方法做参数拼装。</li>
+  <li><strong>其余</strong>走 <code>PlainMethodInvoker</code>，也就是 <code>MapperMethod.execute</code>。</li>
+</ol>
+
+<h3>statement id 是怎么拼出来的</h3>
+
+<p><code>MapperMethod</code> 的内部类 <code>SqlCommand</code> 在构造时做两件事：拼 id、定类型。拼法就是<strong>接口全限定名 + "." + 方法名</strong>：</p>
+
+<pre data-lang="java"><code>// MapperMethod.SqlCommand 的核心
+this.name = declaringClass.getName() + "." + method.getName();   // com.x.UserMapper.selectById
+this.type = resolveMappedStatement(...).getSqlCommandType();      // 从 MappedStatement 反查 SELECT
+
+// 找不到会抛 BindingException，报错信息里带完整 id —— 这就是 "Invalid bound statement (not found)" 的来源
+// 常见三因：XML 的 namespace 写错、方法名拼错、XML 没被打进 jar（Maven 只打包 .java 不打包 .xml 的经典坑）</code></pre>
+
+<div class="box red">
+  <div class="h">坑 1：「Invalid bound statement」90% 不是代码问题</div>
+  <p>三种典型诱因：① <code>application.yml</code> 里 <code>mapper-locations</code> 只写了 <code>classpath:mapper/*.xml</code>，但 XML 在 <code>mapper/user/</code> 子目录；② Maven 默认不把 <code>src/main/java</code> 下的 <code>.xml</code> 打进 jar，需要在 <code>&lt;resources&gt;</code> 里显式 include；③ 用了 <code>@MapperScan</code> 扫了 A 包，XML 的 namespace 却是 B 包接口。面试时能报出这三条，比说「检查一下配置」强得多。</p>
+</div>
+
+<h3>参数是怎么变成 <code>#{id}</code> 的</h3>
+
+<p><code>ParamNameResolver</code> 的规则一共四条，建议按顺序记：</p>
+
+<table>
+<thead><tr><th>场景</th><th>XML 里怎么写</th><th>原因</th></tr></thead>
+<tbody>
+<tr><td>单个参数、无 <code>@Param</code>、非集合</td><td><code>#{anything}</code> 都行</td><td>直接把对象本身当参数对象传下去</td></tr>
+<tr><td>多个参数</td><td><code>#{param1}</code> / <code>#{arg0}</code></td><td>包成 <code>ParamMap</code>，两种键名同时存在</td></tr>
+<tr><td>加了 <code>@Param("uid")</code></td><td><code>#{uid}</code></td><td>注解名优先，<code>param1</code> 依然可用</td></tr>
+<tr><td>集合 / 数组（单参数）</td><td><code>#{list[0]}</code>、<code>#{collection}</code>、<code>#{array}</code></td><td><code>wrapToMapIfCollection</code> 额外塞了这三个键</td></tr>
+</tbody>
+</table>
+
+<p>还有一条容易忽略的：<code>RowBounds</code> 和 <code>ResultHandler</code> 是<strong>特殊参数</strong>，被 <code>isSpecialParameter</code> 跳过，不参与编号。所以 <code>select(RowBounds rb, long id)</code> 里 <code>id</code> 仍然是 <code>param1</code>，不是 <code>param2</code>。</p>
+
+<h2><span class="n">L2</span>执行器与装饰器：四种 Executor 的真实关系</h2>
+
+<p>很多人以为 <code>SimpleExecutor</code>、<code>ReuseExecutor</code>、<code>BatchExecutor</code>、<code>CachingExecutor</code> 是四选一的兄弟。实际上它们是<strong>两层</strong>：前三个继承 <code>BaseExecutor</code>，CachingExecutor 是<strong>装饰器</strong>，把前三个之一包在里面。</p>
+
+<figure>
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="320" fill="#f7f9fb"/>
+  <text x="30" y="30" font-size="15" font-weight="700" fill="#1a1d21">装饰关系：CachingExecutor 是外壳，一级缓存在里层</text>
+
+  <rect x="42" y="52" width="600" height="200" rx="10" fill="#e8f0fb" stroke="#1a5fb4" stroke-width="1.6"/>
+  <text x="58" y="74" font-size="12.5" font-weight="700" fill="#1a5fb4">CachingExecutor　（装饰器，只管二级缓存）</text>
+  <text x="58" y="92" font-size="10.5" fill="#3d454e">cacheEnabled=false 时不装这一层，直接是内层</text>
+
+  <rect x="72" y="104" width="540" height="128" rx="8" fill="#ffffff" stroke="#3d454e" stroke-width="1.3"/>
+  <text x="88" y="126" font-size="12.5" font-weight="700" fill="#1a1d21">BaseExecutor 子类　（Template Method，管一级缓存）</text>
+  <text x="88" y="145" font-size="10.5" fill="#3d454e">SimpleExecutor / ReuseExecutor / BatchExecutor 三选一</text>
+
+  <rect x="102" y="158" width="480" height="32" rx="5" fill="#fdf4e3" stroke="#9a6400" stroke-dasharray="3 3"/>
+  <text x="116" y="179" font-size="10.5" fill="#9a6400">localCache = PerpetualCache("LocalCache")　一级缓存就在这三个实现共用的父类里</text>
+
+  <rect x="102" y="196" width="480" height="26" rx="5" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="116" y="214" font-size="10.5" fill="#3d454e">JDBC PreparedStatement → ResultSet　（最里面的真活儿）</text>
+
+  <rect x="678" y="52" width="192" height="72" rx="8" fill="#ffffff" stroke="#c62828"/>
+  <text x="692" y="72" font-size="11.5" font-weight="700" fill="#c62828">SimpleExecutor</text>
+  <text x="692" y="90" font-size="10" fill="#3d454e">每次新建 Statement</text>
+  <text x="692" y="106" font-size="10" fill="#3d454e">默认，最安全</text>
+
+  <rect x="678" y="132" width="192" height="72" rx="8" fill="#ffffff" stroke="#9a6400"/>
+  <text x="692" y="152" font-size="11.5" font-weight="700" fill="#9a6400">ReuseExecutor</text>
+  <text x="692" y="170" font-size="10" fill="#3d454e">按 SQL 文本缓存 Statement</text>
+  <text x="692" y="186" font-size="10" fill="#3d454e">同 SQL 复用，省预编译</text>
+
+  <rect x="678" y="212" width="192" height="72" rx="8" fill="#ffffff" stroke="#6a3fa0"/>
+  <text x="692" y="232" font-size="11.5" font-weight="700" fill="#6a3fa0">BatchExecutor</text>
+  <text x="692" y="250" font-size="10" fill="#3d454e">攒 JDBC batch，flush 才发</text>
+  <text x="692" y="266" font-size="10" fill="#c62828">flush 前拿不到自增 ID</text>
+
+  <text x="42" y="284" font-size="10.5" fill="#6b7683">调用链方向：外层 invoke → 二级缓存未命中 → 内层 query → 一级缓存未命中 → JDBC。返回时逐层回包。</text>
+  <text x="42" y="302" font-size="10.5" fill="#6b7683">所以「先关二级缓存再调 SQL」这种改法，改的是外层；一级缓存必须换 SqlSession 才躲得掉。</text>
+</svg>
+<figcaption><b>图 2</b>　四层结构。记住一句：<b>二级缓存在装饰器里（可拆），一级缓存在父类里（拆不掉）</b></figcaption>
+</figure>
+
+<h3>BatchExecutor 那个「拿不到 ID」的问题</h3>
+
+<p><code>BatchExecutor.doUpdate</code> 把 <code>addBatch()</code> 攒起来，直到 <code>flushStatements()</code> 才真正执行。<code>Jdbc3KeyGenerator</code> 是在 <code>executeBatch</code> 返回后统一回填主键的。所以你写了这样一段，<code>id</code> 全是 0：</p>
+
+<pre data-lang="java"><code>// 错误示范
+try (SqlSession s = sqlSessionFactory.openSession(ExecutorType.BATCH)) {
+    for (User u : users) {
+        s.insert("insertUser", u);
+        log.info("id={}", u.getId());     // 0，因为 batch 还没发出去
+    }
+    s.commit();                            // 这一刻才真正发 SQL、才回填自增 ID
+}</code></pre>
+
+<p>正确姿势是 <code>s.flushStatements()</code> 之后再读 id。这也是 <code>BatchExecutor</code> 在「需要主键继续做业务」的场景里不好用的根因。</p>
+
+<h2><span class="n">L3</span>一级缓存：它其实一直都在，只是没人给它机会</h2>
+
+<p>面试里最常听到的一句是「一级缓存默认开启，但 Spring 整合后会失效」。这句话<strong>表述是错的</strong>。一级缓存从未失效，它依附于 <code>SqlSession</code>；<strong>是 SqlSession 的生命周期太短了</strong>。</p>
+
+<p><code>BaseExecutor</code> 里就那么几行：</p>
+
+<pre data-lang="java"><code>// BaseExecutor —— 一级缓存的全部真相（节选）
+protected PerpetualCache localCache;
+protected int queryStack;        // 嵌套查询层数
+
+public &lt;E&gt; List&lt;E&gt; query(...) {
+    if (queryStack == 0 &amp;&amp; ms.isFlushCacheRequired()) { clearLocalCache(); }
+    List&lt;E&gt; list;
+    try {
+        queryStack++;
+        list = resultHandler == null ? (List&lt;E&gt;) localCache.getObject(key) : null;
+        if (list != null) { handleLocallyCachedOutputParameters(...); }
+        else { list = queryFromDatabase(ms, parameter, rowBounds, resultHandler, key, boundSql); }
+    } finally {
+        queryStack--;
+    }
+    if (queryStack == 0) {
+        for (DeferredLoad dl : deferredLoads.values()) { dl.load(); }
+        deferredLoads.clear();
+        if (configuration.getLocalCacheScope() == LocalCacheScope.STATEMENT) { clearLocalCache(); }
+    }
+    return list;
+}
+
+public int update(MappedStatement ms, Object parameter) throws SQLException {
+    ...
+    clearLocalCache();            // 任何一次写，整个 localCache 全清（不分表、不分语句）
+    return doUpdate(ms, parameter);
+}</code></pre>
+
+<p>盯着这两处就能解释所有「缓存没生效」的现象：</p>
+
+<figure>
+<svg viewBox="0 0 900 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="360" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">同样 100 次 selectById(1)，两种生命周期的差别</text>
+
+  <!-- Lane A -->
+  <rect x="30" y="46" width="840" height="140" rx="9" fill="#fdeceb" stroke="#c62828" stroke-width="1.2"/>
+  <text x="46" y="68" font-size="12.5" font-weight="700" fill="#c62828">A. 无 @Transactional：每次调用新建 SqlSession，缓存随对象一起销毁</text>
+
+  <rect x="46" y="82" width="150" height="52" rx="6" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="56" y="101" font-size="10.5" font-weight="700" fill="#1a1d21">第 1 次调用</text>
+  <text x="56" y="118" font-size="10" fill="#3d454e">open → cache{}</text>
+  <text x="56" y="130" font-size="10" fill="#c62828">DB 往返 ×1</text>
+
+  <rect x="216" y="82" width="150" height="52" rx="6" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="226" y="101" font-size="10.5" font-weight="700" fill="#1a1d21">第 2 次调用</text>
+  <text x="226" y="118" font-size="10" fill="#3d454e">open → cache{}</text>
+  <text x="226" y="130" font-size="10" fill="#c62828">DB 往返 ×1</text>
+
+  <text x="382" y="112" font-size="13" fill="#6b7683">……</text>
+
+  <rect x="410" y="82" width="150" height="52" rx="6" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="420" y="101" font-size="10.5" font-weight="700" fill="#1a1d21">第 100 次调用</text>
+  <text x="420" y="118" font-size="10" fill="#3d454e">open → cache{}</text>
+  <text x="420" y="130" font-size="10" fill="#c62828">DB 往返 ×1</text>
+
+  <text x="584" y="104" font-size="12.5" font-weight="700" fill="#c62828">合计 100 次往返</text>
+  <text x="584" y="124" font-size="10.5" fill="#3d454e">按单次 0.5ms 计 ≈ 50ms</text>
+  <text x="584" y="140" font-size="10.5" fill="#6b7683">缓存命中率 0%，但缓存代码一直在跑</text>
+
+  <!-- Lane B -->
+  <rect x="30" y="200" width="840" height="140" rx="9" fill="#e9f5ec" stroke="#1e7d3c" stroke-width="1.2"/>
+  <text x="46" y="222" font-size="12.5" font-weight="700" fill="#1e7d3c">B. 有 @Transactional：整个方法共用一个 SqlSession 与同一个 localCache</text>
+
+  <rect x="46" y="236" width="150" height="52" rx="6" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="56" y="255" font-size="10.5" font-weight="700" fill="#1a1d21">第 1 次调用</text>
+  <text x="56" y="272" font-size="10" fill="#3d454e">cache{} → miss</text>
+  <text x="56" y="284" font-size="10" fill="#1e7d3c">DB 往返 ×1，写入 cache</text>
+
+  <rect x="216" y="236" width="150" height="52" rx="6" fill="#ffffff" stroke="#1e7d3c"/>
+  <text x="226" y="255" font-size="10.5" font-weight="700" fill="#1a1d21">第 2 次调用</text>
+  <text x="226" y="272" font-size="10" fill="#3d454e">cache → hit</text>
+  <text x="226" y="284" font-size="10" fill="#1e7d3c">0 次往返（返回同一 List 引用）</text>
+
+  <text x="382" y="266" font-size="13" fill="#6b7683">……</text>
+
+  <rect x="410" y="236" width="150" height="52" rx="6" fill="#ffffff" stroke="#1e7d3c"/>
+  <text x="420" y="255" font-size="10.5" font-weight="700" fill="#1a1d21">第 100 次调用</text>
+  <text x="420" y="272" font-size="10" fill="#3d454e">cache → hit</text>
+  <text x="420" y="284" font-size="10" fill="#1e7d3c">0 次往返</text>
+
+  <text x="584" y="258" font-size="12.5" font-weight="700" fill="#1e7d3c">合计 1 次往返</text>
+  <text x="584" y="278" font-size="10.5" fill="#3d454e">≈ 0.5ms，省 99%</text>
+  <text x="584" y="294" font-size="10.5" fill="#c62828">但返回的是同一批对象，改它会污染缓存</text>
+</svg>
+<figcaption><b>图 3</b>　一级缓存不是「失效」，而是<b>生命周期跟着 SqlSession</b>。同一事务内 100 次查询只打 1 次库</figcaption>
+</figure>
+
+<h3>六种让缓存「看起来失效」的场景</h3>
+
+<table>
+<thead><tr><th>#</th><th>场景</th><th>机制</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>不同 <code>SqlSession</code>（Spring 无事务时每次调用都新建）</td><td>缓存是实例字段，随对象销毁</td></tr>
+<tr><td>2</td><td>同一 session 里执行过任意 <code>insert/update/delete</code></td><td><code>update()</code> 无条件 <code>clearLocalCache()</code>，<strong>全表全语句一起清</strong></td></tr>
+<tr><td>3</td><td><code>localCacheScope=STATEMENT</code></td><td>每次 query 结束即清空，相当于关掉</td></tr>
+<tr><td>4</td><td><code>&lt;select flushCache="true"&gt;</code></td><td><code>queryStack==0</code> 时先清再查</td></tr>
+<tr><td>5</td><td>手动 <code>sqlSession.clearCache()</code> 或 <code>commit/rollback</code></td><td>显式清理</td></tr>
+<tr><td>6</td><td>参数值变了</td><td>这不是失效，是 <code>CacheKey</code> 不同（见 L5）</td></tr>
+</tbody>
+</table>
+
+<div class="box red">
+  <div class="h">坑 2：一次无关的写会清掉整个一级缓存</div>
+  <p>注意 <code>update()</code> 里那句 <code>clearLocalCache()</code> 是<strong>无条件的</strong>，不判断改的是不是同一张表、同一个 namespace。所以在长事务里「查 100 条 → 更新 1 条 → 再查 100 条」，第二次查会全部回源。这是长事务性能塌方的隐蔽原因之一，也是把大批量读写在同一个 <code>@Transactional</code> 里最危险的地方。</p>
+</div>
+
+<div class="box amber">
+  <div class="h">顺带一个反直觉细节</div>
+  <p>命中一级缓存时 <code>query()</code> 返回的是<strong>同一个 List 对象引用</strong>，里面的元素也是同一批对象。你在业务层 <code>list.get(0).setName("x")</code>，等于改了缓存中的值——下一次「查询」会拿到被改过的脏对象，而且没有任何 SQL 日志提示。要规避就在返回处做拷贝，或者干脆把 <code>localCacheScope</code> 设成 <code>STATEMENT</code>。</p>
+</div>
+
+<h2><span class="n">L4</span>二级缓存：一个「延迟清理」埋下的旧值</h2>
+
+<p>二级缓存和一级缓存最本质的差别不是「跨 session」，而是<strong>它有一个事务暂存区</strong>。写进缓存的动作被推迟到 <code>commit</code>，清理动作也被推迟到 <code>commit</code>。这个设计本意是「事务没提交前不让别人看见」，副作用是：<strong>自己看不见自己的清理</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 900 344" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="344" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">同一事务内：update → select → commit，select 会拿到旧值</text>
+
+  <!-- 阶段竖线 -->
+  <line x1="250" y1="46" x2="250" y2="286" stroke="#d4dae1" stroke-dasharray="4 4"/>
+  <line x1="520" y1="46" x2="520" y2="286" stroke="#d4dae1" stroke-dasharray="4 4"/>
+  <line x1="740" y1="46" x2="740" y2="286" stroke="#d4dae1" stroke-dasharray="4 4"/>
+  <text x="250" y="60" font-size="11.5" font-weight="700" fill="#3d454e" text-anchor="middle">t1 update</text>
+  <text x="520" y="60" font-size="11.5" font-weight="700" fill="#3d454e" text-anchor="middle">t2 select</text>
+  <text x="740" y="60" font-size="11.5" font-weight="700" fill="#3d454e" text-anchor="middle">t3 commit</text>
+
+  <!-- lane 1 TransactionalCache -->
+  <rect x="30" y="74" width="840" height="76" rx="8" fill="#e8f0fb" stroke="#1a5fb4"/>
+  <text x="46" y="94" font-size="12" font-weight="700" fill="#1a5fb4">TransactionalCache（事务暂存区）</text>
+  <text x="46" y="114" font-size="10.5" fill="#3d454e">clearOnCommit / entriesToAddOnCommit 两个标记</text>
+
+  <rect x="150" y="104" width="200" height="34" rx="5" fill="#ffffff" stroke="#9a6400"/>
+  <text x="162" y="126" font-size="10.5" fill="#9a6400">clearOnCommit = true（只打标记）</text>
+
+  <rect x="420" y="104" width="200" height="34" rx="5" fill="#ffffff" stroke="#c62828"/>
+  <text x="432" y="126" font-size="10.5" fill="#c62828">直接放行，不拦也不查暂存区</text>
+
+  <rect x="640" y="104" width="216" height="34" rx="5" fill="#ffffff" stroke="#1e7d3c"/>
+  <text x="652" y="126" font-size="10.5" fill="#1e7d3c">flush 暂存 + 真正 clear</text>
+
+  <!-- lane 2 delegate -->
+  <rect x="30" y="170" width="840" height="76" rx="8" fill="#fdeceb" stroke="#c62828"/>
+  <text x="46" y="190" font-size="12" font-weight="700" fill="#c62828">delegate（真正的 LruCache，key → 旧值）</text>
+  <text x="46" y="210" font-size="10.5" fill="#3d454e">此时里面还躺着 update 之前的旧行</text>
+
+  <rect x="150" y="200" width="200" height="34" rx="5" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="162" y="222" font-size="10.5" fill="#6b7683">无人清理，旧值原地不动</text>
+
+  <rect x="420" y="200" width="200" height="34" rx="5" fill="#ffffff" stroke="#c62828" stroke-width="1.5"/>
+  <text x="432" y="222" font-size="10.5" font-weight="700" fill="#c62828">命中！返回旧值（0 次 SQL）</text>
+
+  <rect x="640" y="200" width="216" height="34" rx="5" fill="#ffffff" stroke="#1e7d3c"/>
+  <text x="652" y="222" font-size="10.5" fill="#1e7d3c">此刻才对外部事务可见</text>
+
+  <!-- 结果条 -->
+  <rect x="330" y="262" width="470" height="30" rx="6" fill="#ffffff" stroke="#c62828" stroke-width="1.4"/>
+  <text x="344" y="282" font-size="11.5" font-weight="700" fill="#c62828">结果：这个事务里「改完再查」，查到的是改之前的脏数据</text>
+  <text x="46" y="282" font-size="10.5" fill="#6b7683">规避：写后读走 mapper 直查 + flushCache，</text>
+  <text x="46" y="300" font-size="10.5" fill="#6b7683">或干脆不开二级缓存</text>
+  <text x="30" y="330" font-size="10.5" fill="#6b7683">注意：一级缓存此时已被 update 清空，所以你会以为「缓存都清了」，但二级缓存这层还留着旧值 —— 这是两级缓存最容易互相打脸的地方。</text>
+</svg>
+<figcaption><b>图 4</b>　二级缓存的三段时序。<b>清理延迟到 commit</b> 是所有「改完查不到新值」的根因</figcaption>
+</figure>
+
+<h3>二级缓存的六个硬约束</h3>
+
+<table>
+<thead><tr><th>约束</th><th>说明</th><th>踩坑表现</th></tr></thead>
+<tbody>
+<tr><td>以 <code>namespace</code> 为界</td><td>一个 Mapper 一个 Cache 实例，跨 Mapper 不共享</td><td>更新 A 表，查 B 表还是旧值</td></tr>
+<tr><td>要显式开启</td><td><code>&lt;cache/&gt;</code> 或 <code>@CacheNamespace</code>，且 <code>cacheEnabled=true</code></td><td>以为默认开了，其实一次都没生效</td></tr>
+<tr><td>结果需可序列化</td><td><code>readWrite=true</code> 时套 <code>SerializedCache</code></td><td><code>NotSerializableException</code></td></tr>
+<tr><td>提交才写入</td><td><code>TransactionalCache.commit()</code></td><td>同一事务内读不到刚写的数据</td></tr>
+<tr><td>更新只清本 namespace</td><td>关联表要靠 <code>&lt;cache-ref&gt;</code></td><td>订单更新了，订单明细缓存不失效</td></tr>
+<tr><td>集群间不互通</td><td>缓存在各自 JVM 堆里</td><td>多实例下脏读率 = 实例数倒数</td></tr>
+</tbody>
+</table>
+
+<p>默认配置也得记：<code>eviction=LRU</code>、<code>size=1024</code>、<code>flushInterval</code> 不设（只靠清理动作）、<code>readWrite=false</code>。装饰顺序是 <code>PerpetualCache → 淘汰装饰 → SerializedCache → LoggingCache → SynchronizedCache</code>，最外层是 <code>SynchronizedCache</code>，所以二级缓存的并发安全是<strong>整表加锁</strong>换来的——高并发下它自己就会成为瓶颈。</p>
+
+<div class="box red">
+  <div class="h">坑 3：分布式部署下二级缓存必须关</div>
+  <p>3 个实例、各带 1024 条本地缓存。A 实例更新数据并清掉自己的缓存，B、C 完全不知道。B 命中缓存返回旧值，脏读窗口 = <code>flushInterval</code> 或下次更新的时间差，没有任何机制兜底。正确做法只有两条：<strong>关掉</strong>，或者换成 <code>RedisCache</code>（自己实现 <code>Cache</code> 接口，把 <code>PerpetualCache</code> 换成 Redis 客户端），并把清理改成发广播。</p>
+</div>
+
+<h2><span class="n">L5</span>CacheKey：三级缓存的命中裁判</h2>
+
+<p>一级缓存和二级缓存的 key 都由 <code>BaseExecutor.createCacheKey</code> 生成，装配顺序固定为四段：<code>statementId</code> → <code>p1..pN</code>（参数值）→ <code>RowBounds.offset</code> → <code>RowBounds.limit</code> → <code>BoundSql.getSql()</code>。注意最后一段是<strong>最终 SQL 文本</strong>，所以动态 SQL 拼出的语句不同，key 自然不同。</p>
+
+<p>而 <code>CacheKey</code> 自己的比较逻辑，是 MyBatis 里少见的「性能优化小心思」，值得单独讲：</p>
+
+<pre data-lang="java"><code>// CacheKey —— 三个字段 + 一个列表
+private static final int DEFAULT_MULTIPLIER = 37;
+private static final int DEFAULT_HASHCODE    = 17;
+private int  hashcode = DEFAULT_HASHCODE;
+private long checksum;
+private int  count;
+private List&lt;Object&gt; updateList = new ArrayList&lt;&gt;();
+
+public void update(Object object) {
+    int baseHashCode = object == null ? 1 : ArrayUtil.hashCode(object);
+    count++;
+    checksum += baseHashCode;
+    baseHashCode *= count;                              // ← 位置权重藏在 count 里
+    hashcode = DEFAULT_MULTIPLIER * hashcode + baseHashCode;
+    updateList.add(object);
+}
+
+public boolean equals(Object object) {
+    if (count != other.count)       return false;        // 闸门 1：元素个数
+    if (checksum != other.checksum) return false;        // 闸门 2：求和校验
+    if (hashcode != other.hashcode) return false;        // 闸门 3：乘法散列
+    // 三道闸门全过，才逐元素 equals            // 闸门 4：最贵的比较
+}</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">equals 的四道闸门：整数比较在前，对象比较垫底</text>
+
+  <rect x="30" y="52" width="180" height="80" rx="8" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.4"/>
+  <text x="46" y="74" font-size="12" font-weight="700" fill="#1a5fb4">闸门 1　count</text>
+  <text x="46" y="94" font-size="10.5" fill="#3d454e">int 比较，1 条指令</text>
+  <text x="46" y="112" font-size="10.5" fill="#6b7683">元素个数不同直接否</text>
+
+  <rect x="240" y="52" width="180" height="80" rx="8" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.4"/>
+  <text x="256" y="74" font-size="12" font-weight="700" fill="#1a5fb4">闸门 2　checksum</text>
+  <text x="256" y="94" font-size="10.5" fill="#3d454e">long 累加，N 次加法</text>
+  <text x="256" y="112" font-size="10.5" fill="#6b7683">任何一个元素不同即否</text>
+
+  <rect x="450" y="52" width="180" height="80" rx="8" fill="#ffffff" stroke="#9a6400" stroke-width="1.4"/>
+  <text x="466" y="74" font-size="12" font-weight="700" fill="#9a6400">闸门 3　hashcode</text>
+  <text x="466" y="94" font-size="10.5" fill="#3d454e">37 进制散列</text>
+  <text x="466" y="112" font-size="10.5" fill="#6b7683">位置敏感，抗交换</text>
+
+  <rect x="660" y="52" width="210" height="80" rx="8" fill="#fdeceb" stroke="#c62828" stroke-width="1.4"/>
+  <text x="676" y="74" font-size="12" font-weight="700" fill="#c62828">闸门 4　逐元素 equals</text>
+  <text x="676" y="94" font-size="10.5" fill="#3d454e">可能触发数组 / List 深比较</text>
+  <text x="676" y="112" font-size="10.5" fill="#6b7683">最贵，但极少被执行</text>
+
+  <polygon points="210,92 224,92 224,87 238,92 224,97 224,92" fill="#6b7683"/>
+  <polygon points="420,92 434,92 434,87 448,92 434,97 434,92" fill="#6b7683"/>
+  <polygon points="630,92 644,92 644,87 658,92 644,97 644,92" fill="#6b7683"/>
+
+  <text x="30" y="162" font-size="12.5" font-weight="700" fill="#1a1d21">实测：改一个参数，hashcode 差多少（JDK 21 + mybatis 3.5.19）</text>
+
+  <rect x="30" y="176" width="840" height="96" rx="8" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="46" y="198" font-size="11" font-weight="700" fill="#6b7683">改动位置</text>
+  <text x="330" y="198" font-size="11" font-weight="700" fill="#6b7683">hashcode 差值</text>
+  <text x="560" y="198" font-size="11" font-weight="700" fill="#6b7683">推导</text>
+  <text x="780" y="198" font-size="11" font-weight="700" fill="#6b7683">checksum 差</text>
+  <line x1="46" y1="208" x2="854" y2="208" stroke="#e4e8ed"/>
+
+  <text x="46" y="228" font-size="10.5" fill="#3d454e">第 2 位（id 1→2）</text>
+  <text x="330" y="228" font-size="10.5" font-weight="700" fill="#c62828">2738</text>
+  <text x="560" y="228" font-size="10.5" fill="#6b7683">1 × 2 × 37²</text>
+  <text x="780" y="228" font-size="10.5" fill="#3d454e">1</text>
+
+  <text x="46" y="248" font-size="10.5" fill="#3d454e">第 3 位（offset 0→1）</text>
+  <text x="330" y="248" font-size="10.5" font-weight="700" fill="#c62828">111</text>
+  <text x="560" y="248" font-size="10.5" fill="#6b7683">1 × 3 × 37¹</text>
+  <text x="780" y="248" font-size="10.5" fill="#3d454e">1</text>
+
+  <text x="46" y="266" font-size="10.5" fill="#3d454e">第 4 位（limit 10→11）</text>
+  <text x="330" y="266" font-size="10.5" font-weight="700" fill="#c62828">4</text>
+  <text x="560" y="266" font-size="10.5" fill="#6b7683">1 × 4 × 37⁰</text>
+  <text x="780" y="266" font-size="10.5" fill="#3d454e">1</text>
+</svg>
+<figcaption><b>图 5</b>　四道闸门与位置权重。差值是 1×count×37^k，<b>count 这一乘法就是「位置权重」的来源</b></figcaption>
+</figure>
+
+<div class="box blue">
+  <div class="h">为什么必须有 checksum 和 count</div>
+  <p>只留 <code>hashcode</code> 会撞：乘法散列在 32 位下必然有碰撞，一旦两个不同参数算出同一 hash，且 <code>equals</code> 只比 hash，就会<strong>跨参数命中缓存</strong>——查到别人的数据。加上 <code>count</code>（防元素个数不同）和 <code>checksum</code>（防内容不同），把碰撞率压到可以接受的范围，再用最贵的逐元素比较兜底。<code>equals</code> 与 <code>hashCode</code> 的契约在这里被用到了极致：<strong>先用便宜的条件否掉绝大多数，再付贵的代价</strong>。</p>
+</div>
+
+<p>还有一个常被忽略的实测结论：<code>CacheKey</code> 的 <code>equals</code> 是<strong>顺序敏感</strong>的。同样四个元素打乱顺序构造，<code>equals</code> 返回 <code>false</code>——因为闸门 4 是按下标逐个比较 <code>updateList</code>。所以「参数一样但顺序不同」不会被误判为同一个 key。</p>
+
+<h2><span class="n">L6</span>插件：只有四个对象能插，而且只能层层包</h2>
+
+<p>MyBatis 插件不是 AOP 那种「切面」，本质是 <strong>JDK 动态代理的责任链</strong>。这句话有两个必须精确的点。</p>
+
+<h3>第一：可插桩的对象只有 4 个（实测）</h3>
+
+<p>3.5.19 的 <code>Invocation</code> 构造函数里有一道白名单：</p>
+
+<pre data-lang="java"><code>// Invocation 的静态初始化（javap -c 读出来的真实列表）
+private static final List&lt;Class&lt;?&gt;&gt; targetClasses = Arrays.asList(
+    Executor.class,            // 拦 SQL 执行、事务、批处理
+    ParameterHandler.class,    // 拦参数设置
+    ResultSetHandler.class,    // 拦结果映射
+    StatementHandler.class     // 拦 SQL 构建与预编译
+);
+
+public Invocation(Object target, Method method, Object[] args) {
+    if (!targetClasses.contains(method.getDeclaringClass())) {
+        throw new IllegalArgumentException("Method '" + method + "' is not supported as a plugin target.");
+    }
+    ...
+}</code></pre>
+
+<p>实测写法：拿一个自定义接口 <code>Foo</code> 加 <code>@Intercepts({@Signature(type = Foo.class, ...)})</code>，<code>Plugin.wrap</code> 能包成功，但<strong>一调用就抛</strong>：</p>
+
+<pre data-lang="bash"><code>Exception in thread "main" java.lang.IllegalArgumentException:
+  Method 'public abstract java.lang.String Exp2$Foo.hi(java.lang.String)'
+  is not supported as a plugin target.
+    at org.apache.ibatis.plugin.Invocation.&lt;init&gt;(Invocation.java:41)</code></pre>
+
+<p>另外一个实测：<code>Interceptor</code> 实现类<strong>忘了写 <code>@Intercepts</code></strong>，不是「不生效」，而是启动期就炸：</p>
+
+<pre data-lang="bash"><code>org.apache.ibatis.plugin.PluginException: No @Intercepts annotation was found in interceptor xxx</code></pre>
+
+<h3>第二：包裹顺序是「后注册的在最外层」</h3>
+
+<figure>
+<svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="340" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">InterceptorChain.pluginAll：for 循环里 target 被反复套娃</text>
+
+  <rect x="42" y="48" width="470" height="216" rx="10" fill="#f2ecfb" stroke="#6a3fa0" stroke-width="1.5"/>
+  <text x="58" y="70" font-size="11.5" font-weight="700" fill="#6a3fa0">最外层 = 最后注册（先被调用）</text>
+
+  <rect x="74" y="80" width="406" height="168" rx="8" fill="#e8f0fb" stroke="#1a5fb4" stroke-width="1.4"/>
+  <text x="90" y="101" font-size="11.5" font-weight="700" fill="#1a5fb4">中间层 = 先注册</text>
+
+  <rect x="108" y="112" width="338" height="118" rx="7" fill="#ffffff" stroke="#3d454e" stroke-width="1.3"/>
+  <text x="124" y="133" font-size="11.5" font-weight="700" fill="#1a1d21">真实对象 Executor</text>
+  <text x="124" y="152" font-size="10.5" fill="#3d454e">$Proxy42 → $Proxy41 → SimpleExecutor</text>
+
+  <rect x="140" y="164" width="274" height="50" rx="6" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="154" y="184" font-size="10.5" fill="#3d454e">interceptorChain.pluginAll(executor)：</text>
+  <text x="154" y="202" font-size="10" fill="#6b7683">for (i : interceptors) target = i.plugin(target)</text>
+
+  <!-- 右侧：注解与签名 -->
+  <text x="548" y="60" font-size="11.5" font-weight="700" fill="#1a1d21">@Intercepts + @Signature 三个必填</text>
+  <rect x="548" y="70" width="322" height="112" rx="7" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="562" y="90" font-size="10.5" fill="#3d454e">type　：四大接口之一（白名单校验）</text>
+  <text x="562" y="110" font-size="10.5" fill="#3d454e">method：方法名字符串，拼错不报错</text>
+  <text x="562" y="130" font-size="10.5" fill="#c62828">args　：参数类型必须<tspan font-weight="700">完全匹配</tspan>重载</text>
+  <text x="562" y="152" font-size="10" fill="#6b7683">args 少写一个 → 静默不拦截，最难查</text>
+  <text x="562" y="170" font-size="10" fill="#6b7683">（方法名对、签名不对，代理根本不进这个方法）</text>
+
+  <!-- 下方：调用方向 -->
+  <text x="42" y="292" font-size="11.5" font-weight="700" fill="#1a1d21">调用方向与常见拦点选择</text>
+  <rect x="42" y="302" width="840" height="26" rx="5" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="56" y="320" font-size="10.5" fill="#3d454e">Executor.query / update：能拿到 MappedStatement 与全部参数 → 分页、SQL 审计、多数据源切换的首选</text>
+</svg>
+<figcaption><b>图 6</b>　插件是「套娃」，不是「切片」。<b>后注册的在最外层</b>，这与拦截器链的直觉相反，务必记牢</figcaption>
+</figure>
+
+<p>拦截点的选型是有讲究的，这也是一道区分度很高的题：</p>
+
+<table>
+<thead><tr><th>拦截对象</th><th>能拿到什么</th><th>适合做什么</th><th>不适合</th></tr></thead>
+<tbody>
+<tr><td><code>Executor</code></td><td>MappedStatement、参数、RowBounds</td><td>分页改写、读写分离路由、SQL 审计、强制走缓存</td><td>拿不到最终 SQL（此时还没 BoundSql）</td></tr>
+<tr><td><code>StatementHandler</code></td><td>BoundSql、Connection</td><td>改写 SQL 文本、加 hint、改 fetchSize</td><td>改参数值不方便</td></tr>
+<tr><td><code>ParameterHandler</code></td><td>BoundSql、参数对象</td><td>参数加密、脱敏、统一填充租户 ID</td><td>改 SQL 结构</td></tr>
+<tr><td><code>ResultSetHandler</code></td><td>结果 List、ResultMap</td><td>字段解密、脱敏、结果过滤</td><td>影响分页计数</td></tr>
+</tbody>
+</table>
+
+<div class="box amber">
+  <div class="h">坑 4：多个插件互相踩参数</div>
+  <p>因为插件是套娃，<code>Plugin.invoke</code> 里拿到的是 <code>Invocation</code>，<code>invocation.getArgs()[0]</code> 可能是<strong>上一层插件替换过的新对象</strong>。典型事故：分页插件把 <code>RowBounds</code> 换了，后面的租户插件读到的还是旧引用。规避办法是每层都用 <code>invocation.getArgs()</code> 重新取，别在 <code>plugin()</code> 里缓存目标对象。</p>
+</div>
+
+<h2><span class="n">L7</span><code>#{}</code> 与 <code>${}</code>：不是「一个安全一个不安全」这么简单</h2>
+
+<p>标准答案会说「<code>#{}</code> 预编译防注入，<code>${}</code> 字符串拼接有风险」。这句话对了七成，缺的那三成是：<strong>它们发生在完全不同的阶段，走的是不同的对象</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 900 336" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="336" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">两条路径：${} 在解析期定型，#{} 在执行期绑定</text>
+
+  <!-- 上：${} -->
+  <rect x="30" y="46" width="400" height="124" rx="9" fill="#fdeceb" stroke="#c62828" stroke-width="1.5"/>
+  <text x="46" y="68" font-size="12.5" font-weight="700" fill="#c62828">${}　字符串替换（解析期）</text>
+  <rect x="46" y="78" width="170" height="34" rx="5" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="58" y="100" font-size="10.5" fill="#3d454e">XML 解析 → TextSqlNode</text>
+  <rect x="236" y="78" width="178" height="34" rx="5" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="248" y="100" font-size="10.5" fill="#3d454e">OGNL 求值 → 拼进 SQL 文本</text>
+  <rect x="46" y="122" width="368" height="34" rx="5" fill="#ffffff" stroke="#c62828"/>
+  <text x="58" y="144" font-size="10.5" fill="#c62828">结果是最终 SQL，每次参数不同 → 执行计划无法复用</text>
+
+  <!-- 下：#{} -->
+  <rect x="30" y="186" width="400" height="124" rx="9" fill="#e9f5ec" stroke="#1e7d3c" stroke-width="1.5"/>
+  <text x="46" y="208" font-size="12.5" font-weight="700" fill="#1e7d3c">#{}　占位符绑定（执行期）</text>
+  <rect x="46" y="218" width="170" height="34" rx="5" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="58" y="240" font-size="10.5" fill="#3d454e">解析成 ? 与 ParameterMapping</text>
+  <rect x="236" y="218" width="178" height="34" rx="5" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="248" y="240" font-size="10.5" fill="#3d454e">ParameterHandler + TypeHandler</text>
+  <rect x="46" y="262" width="368" height="34" rx="5" fill="#ffffff" stroke="#1e7d3c"/>
+  <text x="58" y="284" font-size="10.5" fill="#1e7d3c">SQL 结构固定，只有参数变 → 计划可缓存</text>
+
+  <!-- 右侧：注入对照 -->
+  <text x="456" y="60" font-size="11.5" font-weight="700" fill="#1a1d21">同样的入参：id = <tspan font-family="monospace">1 OR 1=1</tspan></text>
+
+  <rect x="456" y="72" width="414" height="86" rx="7" fill="#ffffff" stroke="#c62828"/>
+  <text x="470" y="92" font-size="10.5" font-weight="700" fill="#c62828">${} 拼出来的 SQL</text>
+  <text x="470" y="112" font-size="10.5" font-family="monospace" fill="#1a1d21">WHERE id = 1 OR 1=1</text>
+  <text x="470" y="132" font-size="10.5" fill="#6b7683">全表返回。参数就是 SQL 的一部分，无法区分</text>
+  <text x="470" y="150" font-size="10.5" fill="#c62828">这是语法层面的失控，不是转义能补的</text>
+
+  <rect x="456" y="170" width="414" height="86" rx="7" fill="#ffffff" stroke="#1e7d3c"/>
+  <text x="470" y="190" font-size="10.5" font-weight="700" fill="#1e7d3c">#{} 绑定后的 SQL</text>
+  <text x="470" y="210" font-size="10.5" font-family="monospace" fill="#1a1d21">WHERE id = ?　　← 参数 "1 OR 1=1"</text>
+  <text x="470" y="230" font-size="10.5" fill="#6b7683">数据库把它当字符串比较，0 行</text>
+  <text x="470" y="248" font-size="10.5" fill="#1e7d3c">注入在这里是「不可能」，不是「被过滤」</text>
+
+  <rect x="456" y="268" width="414" height="52" rx="7" fill="#fdf4e3" stroke="#9a6400"/>
+  <text x="470" y="288" font-size="10.5" font-weight="700" fill="#9a6400">但 order by / 表名 / 列名 只能用 ${}</text>
+  <text x="470" y="308" font-size="10.5" fill="#3d454e">因为 ? 不能替换标识符 → 必须白名单枚举，不能直接透传</text>
+</svg>
+<figcaption><b>图 7</b>　区别的实质是<b>「SQL 结构是否固定」</b>，而不是「有没有做转义」</figcaption>
+</figure>
+
+<p>延伸出去还有三个能加分的细节：</p>
+
+<ul>
+  <li><strong><code>#{} </code>可以带三个属性</strong>：<code>#{id,javaType=long,jdbcType=BIGINT,typeHandler=xxx}</code>。Oracle 插 <code>null</code> 必须显式给 <code>jdbcType</code>，否则报「无效的列类型」，这是真实高频事故。</li>
+  <li><strong><code>${}</code> 也能用 <code>@Param</code> 变量</strong>，所以它并非只能拼常量。危险恰恰在这里——你以为拼的是常量，实际拼的是用户输入。</li>
+  <li><strong>排序字段的白名单要写成枚举 + 映射</strong>，把 <code>price_desc</code> 映射成 <code>price DESC</code>，而不是校验「不含空格关键字」。后者永远漏。</li>
+</ul>
+
+<h3>TypeHandler 的三处注册点</h3>
+
+<table>
+<thead><tr><th>注册方式</th><th>作用范围</th><th>优先级</th></tr></thead>
+<tbody>
+<tr><td><code>mybatis-config.xml</code> 的 <code>&lt;typeHandlers&gt;</code></td><td>全局，按 Java 类型 + JDBC 类型双匹配</td><td>低</td></tr>
+<tr><td><code>@MappedTypes</code> / <code>@MappedJdbcTypes</code> 注解</td><td>全局，由 <code>TypeHandlerRegistry</code> 扫描注册</td><td>中</td></tr>
+<tr><td><code>resultMap</code> 里的 <code>typeHandler</code> 属性</td><td>单字段</td><td>最高</td></tr>
+</tbody>
+</table>
+
+<p>一个 1 万行 × 8 列的结果集，<code>ResultSetHandler</code> 要调 <strong>8 万次</strong> <code>TypeHandler.getResult</code>。所以自定义 TypeHandler 里别放 IO、别 <code>new SimpleDateFormat</code>（非线程安全且极慢），这类细节在「查询慢但 SQL 只要 3ms」的排查里经常是元凶。</p>
+
+<h2><span class="n">L8</span>ResultSetHandler 与 N+1：慢的不是 SQL，是往返次数</h2>
+
+<p><code>&lt;collection&gt;</code> 配 <code>select</code> 属性（嵌套查询），会把一条 SQL 拆成 1 + N 条。很多人以为这是「延迟加载所以没关系」，但延迟加载只是把 N 次挪到遍历时，<strong>次数一次没少</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">查 100 条订单、每条 3 条明细：两种写法的总成本</text>
+
+  <text x="30" y="66" font-size="11.5" font-weight="700" fill="#c62828">嵌套查询（N+1）　301 次往返</text>
+  <rect x="30" y="76" width="800" height="30" rx="4" fill="#fdeceb" stroke="#c62828"/>
+  <rect x="30" y="76" width="30" height="30" rx="4" fill="#c62828"/>
+  <text x="72" y="97" font-size="10.5" fill="#c62828">1 次主查询 + 100 × 3 次子查询 = 301 次网络往返；按 RTT 0.5ms 计 ≈ 150ms（还没算数据库解析开销）</text>
+
+  <text x="30" y="136" font-size="11.5" font-weight="700" fill="#1e7d3c">一次 join（或两次批量 in）　1 次往返</text>
+  <rect x="30" y="146" width="800" height="30" rx="4" fill="#e9f5ec" stroke="#1e7d3c"/>
+  <rect x="30" y="146" width="8" height="30" rx="3" fill="#1e7d3c"/>
+  <text x="52" y="167" font-size="10.5" fill="#1e7d3c">1 次往返 ≈ 0.5ms + 传输 300 行 × 200B ≈ 60KB；代价是结果集膨胀，要去重</text>
+
+  <!-- 对比柱 -->
+  <text x="30" y="200" font-size="11" font-weight="700" fill="#6b7683">往返次数</text>
+  <text x="110" y="220" font-size="10.5" font-weight="700" fill="#c62828">嵌套查询</text>
+  <rect x="180" y="206" width="660" height="22" rx="3" fill="#c62828" opacity="0.9"/>
+  <text x="196" y="222" font-size="11" font-weight="700" fill="#ffffff">301 次</text>
+
+  <text x="110" y="250" font-size="10.5" font-weight="700" fill="#1e7d3c">一次 join</text>
+  <rect x="180" y="236" width="6" height="22" rx="3" fill="#1e7d3c"/>
+  <text x="192" y="252" font-size="11" font-weight="700" fill="#1e7d3c">1 次</text>
+  <line x1="180" y1="266" x2="870" y2="266" stroke="#d4dae1"/>
+  <text x="30" y="286" font-size="10.5" fill="#6b7683">柱长按真实比例绘制，301 : 1 ≈ 一条线。RTT 越大（跨可用区、跨地域），嵌套查询惩罚越重。</text>
+</svg>
+<figcaption><b>图 8</b>　N+1 的代价是<b>往返次数 × RTT</b>，不是「SQL 条数」本身。这也是为什么本地测不出来、上线就变慢</figcaption>
+</figure>
+
+<div class="box green">
+  <div class="h">三层修法，按代价从低到高</div>
+  <p>① <code>fetchType="lazy"</code> + 全局 <code>lazyLoadingEnabled=true</code>：只是延后，不改次数，仅在「确实不需要子集合」时有用；② 改 <code>&lt;collection&gt;</code> 为 <code>select</code> 改成两次 <code>IN</code> 查询后在内存里分组（<strong>最常用</strong>，可控且不膨胀结果集）；③ 直接 <code>join</code> + <code>&lt;collection&gt;</code> 嵌套结果映射，一次往返但行数膨胀，注意 <code>&lt;id&gt;</code> 必须配对否则去重失效。</p>
+</div>
+
+<p>另外 <code>ResultSetHandler</code> 还有一个反直觉行为：<strong>结果集是在 <code>handleResultSets</code> 里一次性全部读进内存的</strong>。所以查 100 万行一定会 OOM，不是「内存不够」而是「设计上没打算流式」。要流式只能用 <code>ResultHandler</code> 或 <code>Cursor&lt;T&gt;</code>（后者要求 <code>fetchSize=Integer.MIN_VALUE</code> 走 MySQL 的流式协议，并且必须在 <code>@Transactional</code> 内）。</p>
+
+<h2><span class="n">L9</span>动态 SQL：便宜的还是贵的</h2>
+
+<p><code>SqlSource</code> 有三个实现，区别在于「什么时候定型」：</p>
+
+<figure>
+<svg viewBox="0 0 900 316" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="316" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">三种 SqlSource：Raw 在解析期定型，Dynamic 每次执行都重算</text>
+
+  <rect x="30" y="48" width="270" height="130" rx="9" fill="#ffffff" stroke="#1e7d3c" stroke-width="1.5"/>
+  <text x="46" y="70" font-size="12" font-weight="700" fill="#1e7d3c">RawSqlSource（便宜）</text>
+  <text x="46" y="92" font-size="10.5" fill="#3d454e">无 ${}、无动态标签时自动选中</text>
+  <text x="46" y="112" font-size="10.5" fill="#3d454e">解析期就生成 StaticSqlSource</text>
+  <text x="46" y="132" font-size="10.5" fill="#3d454e">执行期只做参数替换</text>
+  <text x="46" y="156" font-size="10.5" font-weight="700" fill="#1e7d3c">每次执行开销 ≈ 0</text>
+
+  <rect x="325" y="48" width="270" height="130" rx="9" fill="#ffffff" stroke="#c62828" stroke-width="1.5"/>
+  <text x="341" y="70" font-size="12" font-weight="700" fill="#c62828">DynamicSqlSource（贵）</text>
+  <text x="341" y="92" font-size="10.5" fill="#3d454e">含 &lt;if&gt;/&lt;foreach&gt;/&lt;where&gt;/${}</text>
+  <text x="341" y="112" font-size="10.5" fill="#3d454e">每次 getBoundSql 都 walk SqlNode 树</text>
+  <text x="341" y="132" font-size="10.5" fill="#3d454e">每个条件一次 OGNL 求值</text>
+  <text x="341" y="156" font-size="10.5" font-weight="700" fill="#c62828">按 2~5μs/次估算</text>
+
+  <rect x="620" y="48" width="250" height="130" rx="9" fill="#ffffff" stroke="#9a6400" stroke-width="1.5"/>
+  <text x="636" y="70" font-size="12" font-weight="700" fill="#9a6400">ProviderSqlSource</text>
+  <text x="636" y="92" font-size="10.5" fill="#3d454e">@SelectProvider 注解</text>
+  <text x="636" y="112" font-size="10.5" fill="#3d454e">用 Java 方法拼 SQL</text>
+  <text x="636" y="132" font-size="10.5" fill="#3d454e">类型安全，但难统一治理</text>
+  <text x="636" y="156" font-size="10.5" font-weight="700" fill="#9a6400">灵活性最高</text>
+
+  <!-- 执行循环 -->
+  <text x="30" y="208" font-size="11.5" font-weight="700" fill="#1a1d21">同一个 &lt;if&gt; 语句在循环里被调用 1 万次</text>
+  <rect x="30" y="220" width="150" height="34" rx="5" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="46" y="242" font-size="10.5" fill="#3d454e">第 1 次：OGNL 求值</text>
+  <polygon points="180,237 194,237 194,232 208,237 194,242 194,237" fill="#6b7683"/>
+  <rect x="208" y="220" width="150" height="34" rx="5" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="224" y="242" font-size="10.5" fill="#3d454e">第 2 次：再求一遍</text>
+  <polygon points="358,237 372,237 372,232 386,237 372,242 372,237" fill="#6b7683"/>
+  <rect x="386" y="220" width="170" height="34" rx="5" fill="#fdeceb" stroke="#c62828"/>
+  <text x="402" y="242" font-size="10.5" fill="#c62828">第 10000 次：还是求一遍</text>
+  <text x="576" y="240" font-size="10.5" fill="#3d454e">→ 1 万次调用 × 每次 OGNL 求值</text>
+  <text x="576" y="258" font-size="10.5" fill="#6b7683">量级 20~50ms，可接受但可优化</text>
+
+  <text x="30" y="284" font-size="10.5" fill="#6b7683">结论：动态 SQL 不是性能杀手，它的开销在「μs 级 × 循环次数」。真正致命的是在 for 循环里调用 Mapper（每次一个新 SqlSession、一次往返），</text>
+  <text x="30" y="302" font-size="10.5" fill="#6b7683">那才是 ms 级的乘法。面试被问「动态 SQL 会不会慢」，先分清是 μs 还是 ms。</text>
+</svg>
+<figcaption><b>图 9</b>　三种 SqlSource 的分界点。量级为估算（OGNL 单次 2~5μs），非实测</figcaption>
+</figure>
+
+<h2><span class="n">L10</span>连接池：并发数不是「越大越好」，是「越小越快」</h2>
+
+<p>MyBatis 自己不管连接，它从 <code>DataSource</code> 拿。Spring Boot 2 之后默认是 HikariCP。下面这组默认值是<strong>实测打印出来的</strong>，不是抄文档：</p>
+
+<table>
+<thead><tr><th>参数</th><th>实测默认值</th><th>含义与陷阱</th></tr></thead>
+<tbody>
+<tr><td><code>maximumPoolSize</code></td><td class="num">-1</td><td>构造后是 -1，<code>validate()</code> 时才解析成 <strong>10</strong>。所以「默认 10 个连接」</td></tr>
+<tr><td><code>minimumIdle</code></td><td class="num">-1</td><td>-1 表示「等于 maximumPoolSize」，即<strong>默认不缩容</strong></td></tr>
+<tr><td><code>connectionTimeout</code></td><td class="num">30000</td><td>30s 拿不到连接就抛异常，这是「池打满」的报警线</td></tr>
+<tr><td><code>validationTimeout</code></td><td class="num">5000</td><td>连接有效性检测超时，必须 < connectionTimeout</td></tr>
+<tr><td><code>idleTimeout</code></td><td class="num">600000</td><td>10min 空闲回收；<strong>必须 < maxLifetime</strong>，否则被忽略</td></tr>
+<tr><td><code>maxLifetime</code></td><td class="num">1800000</td><td>30min 强制换新；<strong>必须小于链路上所有超时</strong></td></tr>
+<tr><td><code>keepaliveTime</code></td><td class="num">0</td><td>默认关闭。开着能防中间件静默断连</td></tr>
+<tr><td><code>leakDetectionThreshold</code></td><td class="num">0</td><td>默认关闭。开了能打印「谁借了没还」的堆栈</td></tr>
+</tbody>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">maxLifetime 必须落在「最短的那个超时」左侧</text>
+
+  <!-- 轴 -->
+  <line x1="60" y1="230" x2="860" y2="230" stroke="#3d454e" stroke-width="1.4"/>
+  <text x="60" y="250" font-size="10" fill="#6b7683">0</text>
+  <text x="130" y="250" font-size="10" fill="#6b7683">30s</text>
+  <text x="258" y="250" font-size="10" fill="#6b7683">5min</text>
+  <text x="420" y="250" font-size="10" fill="#6b7683">30min</text>
+  <text x="700" y="250" font-size="10" fill="#6b7683">8h</text>
+  <text x="820" y="250" font-size="10" fill="#6b7683">时间 →</text>
+
+  <!-- 三条线 -->
+  <line x1="392" y1="70" x2="392" y2="230" stroke="#1e7d3c" stroke-width="2.4"/>
+  <text x="398" y="84" font-size="11" font-weight="700" fill="#1e7d3c">maxLifetime 30min（默认）</text>
+  <text x="398" y="102" font-size="10" fill="#3d454e">连接最多活这么久，到期即换新</text>
+
+  <line x1="298" y1="120" x2="298" y2="230" stroke="#c62828" stroke-width="2.4" stroke-dasharray="5 3"/>
+  <text x="304" y="136" font-size="11" font-weight="700" fill="#c62828">中间件空闲断连（常见几分钟级）</text>
+  <text x="304" y="153" font-size="10" fill="#3d454e">LB / ProxySQL / RDS 代理，各自不同</text>
+
+  <line x1="706" y1="170" x2="706" y2="230" stroke="#9a6400" stroke-width="2.4"/>
+  <text x="712" y="186" font-size="11" font-weight="700" fill="#9a6400">MySQL wait_timeout 8h（默认）</text>
+  <text x="712" y="203" font-size="10" fill="#3d454e">云数据库常被改成 300s~1800s</text>
+
+  <!-- 安全区 -->
+  <rect x="60" y="70" width="232" height="160" fill="#e9f5ec" opacity="0.55"/>
+  <text x="72" y="90" font-size="10.5" font-weight="700" fill="#1e7d3c">安全区</text>
+  <text x="72" y="108" font-size="10" fill="#3d454e">maxLifetime 取</text>
+  <text x="72" y="124" font-size="10" fill="#3d454e">链路最小超时</text>
+  <text x="72" y="140" font-size="10" fill="#3d454e">再减 30~60s</text>
+  <text x="72" y="160" font-size="10" font-weight="700" fill="#1e7d3c">例：25~28min</text>
+
+  <text x="30" y="278" font-size="10.5" fill="#c62828">若 maxLifetime 跨过了中间件的断连点：中间件已经悄悄关掉连接，Hikari 仍以为它活着 → 借出去执行必报 CommunicationsException / connection closed。</text>
+</svg>
+<figcaption><b>图 10</b>　三个超时谁最短谁说了算。<b>「连接莫名断开」几乎都是这张图的顺序画错了</b></figcaption>
+</figure>
+
+<h3>池该开多大：两个公式互相校验</h3>
+
+<div class="grid2">
+  <div class="card b">
+    <div class="t">公式 A：Hikari 官方推荐口径</div>
+    <div class="d"><code>connections = CPU 核数 × 2 + 有效磁盘数</code><br>8 核 + 1 块盘 = <strong>17</strong>。适用于「以 CPU 计算为主」的库。</div>
+  </div>
+  <div class="card g">
+    <div class="t">公式 B：Little's Law 反算</div>
+    <div class="d"><code>连接数 = QPS × 平均持连时长</code><br>2000 QPS × 5ms = <strong>10</strong>。适用于「以 IO 等待为主」的库。</div>
+  </div>
+</div>
+
+<p>两个公式给出的量级都在 10~17，这个巧合正是重点：<strong>数据库能并行干活的线程数就那么点，你给 200 个连接，多出来的 183 个只是在抢锁和切换上下文</strong>。第 20 期讲线程池时算过同一笔账，这里是它的第二次应用。</p>
+
+<figure>
+<svg viewBox="0 0 900 288" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="288" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">池大小 vs 吞吐：过拐点之后是负收益</text>
+
+  <line x1="70" y1="228" x2="840" y2="228" stroke="#3d454e"/>
+  <line x1="70" y1="228" x2="70" y2="60" stroke="#3d454e"/>
+  <text x="76" y="76" font-size="10" fill="#6b7683">QPS</text>
+  <text x="800" y="246" font-size="10" fill="#6b7683">连接数 →</text>
+
+  <!-- 区域（先画底，避免半透明层压住曲线） -->
+  <rect x="70" y="60" width="350" height="168" fill="#e9f5ec" opacity="0.6"/>
+  <rect x="420" y="60" width="420" height="168" fill="#fdeceb" opacity="0.6"/>
+
+  <!-- 曲线 -->
+  <polyline points="70,224 130,180 200,132 270,104 340,92 420,88 500,90 580,100 660,120 740,148 810,182"
+            fill="none" stroke="#1a5fb4" stroke-width="2.6"/>
+  <!-- 拐点 -->
+  <line x1="420" y1="88" x2="420" y2="228" stroke="#c62828" stroke-dasharray="4 4"/>
+  <circle cx="420" cy="88" r="5" fill="#c62828"/>
+  <text x="428" y="80" font-size="11" font-weight="700" fill="#c62828">拐点 ≈ 10~17</text>
+  <text x="428" y="98" font-size="10" fill="#3d454e">正好等于 CPU×2+盘数</text>
+
+  <text x="110" y="216" font-size="10.5" font-weight="700" fill="#1e7d3c">线性区：加连接就涨</text>
+  <text x="470" y="216" font-size="10.5" font-weight="700" fill="#c62828">淤积区：加连接反而降</text>
+
+  <text x="70" y="270" font-size="10.5" fill="#6b7683">下降原因：DB 侧线程上下文切换 + 行锁/页锁竞争 + 每个连接一份内存缓冲（MySQL 每连接约 256KB~1MB session buffer）</text>
+</svg>
+<figcaption><b>图 11</b>　曲线形状与线程池完全同构。<b>「池打满」的正确反应是查慢查询，不是调大池</b></figcaption>
+</figure>
+
+<div class="box red">
+  <div class="h">坑 5：把 maxPoolSize 从 10 调到 200 之后系统更慢了</div>
+  <p>这是最常见的错误处置。池打满的真实含义是「连接被占用的时间变长了」，要么慢 SQL，要么事务里包了远程调用，要么连接泄漏。<strong>调大池只是把排队从应用层挪到数据库层</strong>，同时还多消耗 190 份连接内存。正确顺序：先开 <code>leakDetectionThreshold=60000</code> 抓泄漏，再看 <code>SHOW PROCESSLIST</code> 里 Sleep 多久的连接有多少，最后才是扩容读库。</p>
+</div>
+
+<h2><span class="n">L11</span>生产七坑：每条都有可算的代价</h2>
+
+<table>
+<thead><tr><th>#</th><th>坑</th><th>代价（可算）</th><th>处置</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>批量插入没开 <code>rewriteBatchedStatements=true</code></td><td>1 万条 = 1 万次往返，约 5s；开了拼成约 100 条多值 INSERT，约 50ms</td><td>JDBC URL 加参数，并确认驱动版本</td></tr>
+<tr><td>2</td><td>在 for 循环里调 Mapper，且方法无事务</td><td>每次新 SqlSession + 借还连接，1000 次约 50ms 纯开销，且一级缓存全废</td><td>批量接口一次查完，或用 <code>IN</code></td></tr>
+<tr><td>3</td><td><code>@Transactional</code> 里调 RPC / 发 MQ</td><td>连接被占 N 秒；池 10 个 × 3s = 30 并发就排队，第 31 个等 30s 后失败</td><td>事务只包 DB 操作，外部调用移到事务外</td></tr>
+<tr><td>4</td><td>大结果集全量 <code>selectList</code></td><td>100 万行 × 200B ≈ 200MB 堆内对象，直接顶到 OOM</td><td><code>Cursor</code> / <code>ResultHandler</code> / 分页</td></tr>
+<tr><td>5</td><td>多实例开二级缓存</td><td>脏读窗口 = 其他实例的缓存 TTL，无上限兜底</td><td>关闭，或换 RedisCache + 广播失效</td></tr>
+<tr><td>6</td><td><code>${}</code> 透传排序/表名</td><td>一次注入即可全表拖库，无法靠转义补救</td><td>枚举白名单映射</td></tr>
+<tr><td>7</td><td><code>select *</code> + 自动映射 + <code>tinyint(1)</code></td><td>MySQL 的 <code>tinyint(1)</code> 被驱动映射成 <code>Boolean</code>，100 这种值静默变 <code>true</code></td><td>显式 <code>resultMap</code> 指定 <code>javaType</code></td></tr>
+</tbody>
+</table>
+
+<p>第 7 条值得单独说，因为它是「数据静默错误」而不是报错：<code>status tinyint(1)</code> 存了 100，实体字段是 <code>Boolean</code>，MyBatis 走 <code>BooleanTypeHandler.getNullableResult</code> → <code>rs.getBoolean()</code> → 非 0 即 <code>true</code>。你查出来的「是否有效」全是 <code>true</code>，日志里一句警告都没有。</p>
+
+<h2><span class="n">L12</span>数字速查（背这一页够答八成追问）</h2>
+
+<table>
+<thead><tr><th>维度</th><th>数字</th><th>出处 / 含义</th></tr></thead>
+<tbody>
+<tr><td>一级缓存容器</td><td class="num">1</td><td><code>PerpetualCache</code>，无淘汰，靠整表清空</td></tr>
+<tr><td>一级缓存失效触发</td><td class="num">任意 1 次写</td><td><code>update()</code> 无条件 <code>clearLocalCache()</code></td></tr>
+<tr><td>CacheKey 段数</td><td class="num">4</td><td>statementId / 参数 / offset / limit / SQL 文本</td></tr>
+<tr><td>CacheKey 乘法因子</td><td class="num">37</td><td><code>DEFAULT_MULTIPLIER</code>，实测确认</td></tr>
+<tr><td>CacheKey 初始 hash</td><td class="num">17</td><td><code>DEFAULT_HASHCODE</code></td></tr>
+<tr><td>equals 闸门</td><td class="num">4 道</td><td>count → checksum → hashcode → 逐元素</td></tr>
+<tr><td>二级缓存默认容量</td><td class="num">1024</td><td><code>size</code>，默认 <code>LRU</code></td></tr>
+<tr><td>可插桩对象</td><td class="num">4 个</td><td>Executor / StatementHandler / ParameterHandler / ResultSetHandler</td></tr>
+<tr><td>插件包裹顺序</td><td class="num">后注册在外</td><td><code>pluginAll</code> 顺序套娃</td></tr>
+<tr><td>执行器实现</td><td class="num">3 + 1</td><td>Simple / Reuse / Batch + 装饰器 Caching</td></tr>
+<tr><td>Hikari 默认池</td><td class="num">10</td><td><code>maximumPoolSize</code> 从 -1 解析而来</td></tr>
+<tr><td>Hikari connectionTimeout</td><td class="num">30000</td><td>池打满的报错延时</td></tr>
+<tr><td>Hikari maxLifetime</td><td class="num">1800000</td><td>30min，必须小于链路最小超时</td></tr>
+<tr><td>Hikari idleTimeout</td><td class="num">600000</td><td>10min，且必须 < maxLifetime</td></tr>
+<tr><td>Hikari 最小 idle 阈值</td><td class="num">10000</td><td>小于 10s 会被强制改回默认并告警</td></tr>
+<tr><td>池大小经验值</td><td class="num">CPU×2+盘</td><td>8 核 ≈ 17</td></tr>
+<tr><td>N+1 往返</td><td class="num">1+N×M</td><td>100 单 × 3 明细 = 301</td></tr>
+<tr><td>TypeHandler 调用</td><td class="num">行 × 列</td><td>1 万行 × 8 列 = 8 万次</td></tr>
+<tr><td>动态 SQL 重解析</td><td class="num">每次执行</td><td>DynamicSqlSource 不复用 BoundSql</td></tr>
+<tr><td>批量插入往返压缩</td><td class="num">100 : 1</td><td>1 万条 → 约 100 条多值 INSERT</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">L13</span>十四个必答问题（压缩到要点）</h2>
+
+<div class="qa"><div class="q">Mapper 接口没有实现类，为什么能注入？为什么必须是接口？</div>
+<div class="a"><code>MapperFactoryBean.getObject()</code> 返回 <code>MapperProxyFactory</code> 造出的 JDK 动态代理。JDK 代理只能代理接口，所以 Mapper 必须是接口——这是技术约束，不是设计偏好。</div></div>
+
+<div class="qa"><div class="q">一级缓存和二级缓存的区别？一级缓存为什么「失效」？</div>
+<div class="a">作用域：SqlSession vs namespace；容器：<code>PerpetualCache</code>（无淘汰）vs 可配 LRU/FIFO；生效时机：立即 vs commit 后。一级缓存从未失效，是 <strong>SqlSession 生命周期太短</strong>——Spring 无事务时每次调用新建 session，缓存随对象销毁。</div></div>
+
+<div class="qa"><div class="q">二级缓存为什么必须 commit 才生效？这带来什么副作用？</div>
+<div class="a"><code>TransactionalCache</code> 把写和清都推迟到 commit，避免未提交数据外泄。副作用是<strong>清理也被推迟</strong>：同一事务内 update 后 select，一级缓存已清、二级缓存未清，命中旧值。</div></div>
+
+<div class="qa"><div class="q"><code>#{}</code> 和 <code>${}</code> 的本质区别？</div>
+<div class="a">不是「转义与否」，而是<strong>SQL 结构是否固定</strong>。<code>#{}</code> 生成 <code>?</code> 走 <code>ParameterHandler</code> 绑定，结构固定可复用执行计划；<code>${}</code> 在解析期由 <code>TextSqlNode</code> 做 OGNL 替换，结构随参数变。二者不可互相替代。</div></div>
+
+<div class="qa"><div class="q">哪些地方只能用 <code>${}</code>？怎么保证安全？</div>
+<div class="a">表名、列名、<code>order by</code>、<code>limit</code> 的某些方言写法——因为占位符不能替换标识符。安全做法是<strong>枚举白名单 + 映射</strong>（<code>price_desc → price DESC</code>），不要用「过滤关键字」这种黑名单思路。</div></div>
+
+<div class="qa"><div class="q">MyBatis 插件能拦哪些对象？</div>
+<div class="a">只有 4 个：<code>Executor</code>、<code>StatementHandler</code>、<code>ParameterHandler</code>、<code>ResultSetHandler</code>。3.5.19 的 <code>Invocation</code> 构造函数里有白名单校验，拦其他接口会直接抛 <code>IllegalArgumentException</code>（实测）。</div></div>
+
+<div class="qa"><div class="q">多个插件的执行顺序怎么定？</div>
+<div class="a"><code>InterceptorChain.pluginAll</code> 按注册顺序 <code>target = i.plugin(target)</code> 循环套娃，<strong>后注册的在最外层、先被调用</strong>。要调整顺序就调 <code>@Bean</code> 的声明顺序或用 <code>@Order</code>（Spring 注入 List 时生效）。</div></div>
+
+<div class="qa"><div class="q">为什么插件写了却不生效，日志也没有？</div>
+<div class="a">最可能是 <code>@Signature</code> 的 <code>args</code> 与实际重载<strong>不完全匹配</strong>。<code>Plugin.getSignatureMap</code> 只把「名字 + 参数类型」都命中的方法放进代理集合，没命中就整个方法不被代理，<strong>不报错、不打日志</strong>。另外忘了 <code>@Intercepts</code> 会直接抛 <code>PluginException</code>。</div></div>
+
+<div class="qa"><div class="q">ResultSet 是怎么变成对象的？</div>
+<div class="a"><code>ResultSetHandler.handleResultSets</code> → 按 <code>ResultMap</code> 逐列取 <code>TypeHandler.getResult</code> → 反射/Setter 赋值；无 <code>resultMap</code> 时走 <code>AutoMappingBehavior</code>（默认 PARTIAL）按列名与属性名匹配。<strong>全程一次性读进内存</strong>，不做流式。</div></div>
+
+<div class="qa"><div class="q">怎么发现 N+1？</div>
+<div class="a">看 SQL 日志里「同一条子查询按不同参数重复出现 N 次」；或把 <code>lazyLoadingEnabled</code> 关掉后统计一次请求的 SQL 条数。100 条主记录配 3 个嵌套集合就是 301 条。</div></div>
+
+<div class="qa"><div class="q">批量插入怎么写才真的快？</div>
+<div class="a">三层同时满足：<code>ExecutorType.BATCH</code>（少创建 Statement）+ <code>rewriteBatchedStatements=true</code>（驱动拼多值 INSERT）+ 单个事务（少提交）。只开 BATCH 不开 rewrite，仍然是逐条发送，几乎没提升。</div></div>
+
+<div class="qa"><div class="q">报 <code>Connection is not available, request timed out after 30000ms</code> 怎么查？</div>
+<div class="a">三步：① 开 <code>leakDetectionThreshold</code> 抓「借了没还」的堆栈；② <code>SHOW PROCESSLIST</code> 看 <code>Sleep</code> 与 <code>Query</code> 的比例——大量 Sleep 是连接被事务占着，大量 Query 是慢 SQL；③ 检查 <code>@Transactional</code> 里是否包了 RPC/MQ。<strong>不要先调大池</strong>。</div></div>
+
+<div class="qa"><div class="q">动态 SQL 会不会成为性能瓶颈？</div>
+<div class="a">它的开销是「每次执行重新 walk SqlNode 树 + OGNL 求值」，量级 2~5μs。1 万次调用约 20~50ms，能被接受。真正致命的是在 for 循环里调 Mapper——那是每次一次网络往返（ms 级）。先分清是 μs 还是 ms。</div></div>
+
+<div class="qa"><div class="q">怎么实现读写分离 / 多数据源？</div>
+<div class="a">拦 <code>Executor</code>，按 <code>MappedStatement.getSqlCommandType()</code> 判断读写，配合 <code>AbstractRoutingDataSource</code> 切换。<strong>关键陷阱</strong>：必须保证「同一事务内全走主库」，否则主从延迟会让「写完立刻查」查不到——判断依据是 <code>TransactionSynchronizationManager.isActualTransactionActive()</code>。</div></div>
+
+<h2><span class="n">L14</span>三道模拟面试（含四档对照）</h2>
+
+<div class="mt">
+  <div class="qh"><span>题 1</span>订单列表页：100 万订单，每页 20 条，要显示每单的明细条数。要求不能 N+1、不能深翻页慢、不能 OOM。说说你的持久层设计。</div>
+  <p style="font-size:13.5px;color:var(--ink2)">考察点：是否会算往返次数、是否知道深分页的真实代价、是否分得清「统计」和「取数」。</p>
+  <div class="lv l1"><span class="lb">不及格</span>写 <code>selectList</code> 查全量再内存分页；或者 <code>&lt;collection&gt;</code> 嵌套查询拿明细条数。</div>
+  <div class="lv l2"><span class="lb">及格</span>用 <code>limit offset, size</code> 分页，明细数用 <code>&lt;collection&gt;</code> 的 <code>select</code> 或 <code>count(*)</code> 子查询。功能对，但 20 条 = 21 次往返，翻到第 5 万页时 <code>offset 1000000</code> 要扫 100 万行。</div>
+  <div class="lv l3"><span class="lb">良好</span>明细数用一条 <code>left join + group by</code> 或「<code>in (20 个 id)</code> 再内存分组」压到 2 次往返；分页改游标式 <code>where id &lt; lastId order by id desc limit 20</code>，避开 offset；总数用单独计数接口 + 缓存。</div>
+  <div class="lv l4"><span class="lb">优秀</span>在上面基础上再补三点：① 明细条数属于<strong>可容忍延迟的统计量</strong>，落一张 <code>order_stat</code> 表由 MQ 异步增量维护，列表页零 join；② 游标分页要求排序键唯一且与索引一致，向面试官确认「是否允许跳页」——不允许才能用游标；③ 明确说<strong>不开二级缓存</strong>（多实例脏读），热点用本地缓存 + 版本号，与第 17 期缓存一致性的口径对齐。</div>
+</div>
+
+<div class="mt">
+  <div class="qh"><span>题 2</span>线上大量 <code>Connection is not available, request timed out after 30000ms</code>，但应用 CPU 只有 20%，数据库连接数接近上限。你怎么定位？</div>
+  <div class="lv l1"><span class="lb">不及格</span>「把 <code>maximumPoolSize</code> 调到 200」。</div>
+  <div class="lv l2"><span class="lb">及格</span>先看慢查询日志，确认有没有缺索引的大 SQL；再看连接是否泄漏。</div>
+  <div class="lv l3"><span class="lb">良好</span>CPU 低 + 连接满 = <strong>连接被持有但不干活</strong>。三个方向：① 开 <code>leakDetectionThreshold=60000</code> 抓借出点堆栈；② <code>SHOW PROCESSLIST</code> 看 <code>Sleep</code> 占比，Sleep 多说明连接在事务里空等；③ 查 <code>@Transactional</code> 方法内是否有 HTTP/MQ 调用，把持连时间从毫秒拉到秒级。</div>
+  <div class="lv l4"><span class="lb">优秀</span>再往前推一步，把账算出来：池 10 个、单请求持连 3s，理论并发上限 = 10 / 3 ≈ 3.3 QPS，超过就排队，排队 30s 抛异常——<strong>用 Little's Law 反证「不是池小，是持连太长」</strong>。然后给处置顺序：缩短事务 → 拆外部调用 → 加读库 → 最后才考虑调池，并说明调池的代价是每连接 256KB~1MB session buffer 与更严重的锁竞争。</div>
+</div>
+
+<div class="mt">
+  <div class="qh"><span>题 3</span>写一个插件：自动填充 <code>create_time</code>/<code>update_time</code>，并强制所有查询带上 <code>tenant_id</code> 条件。<strong>你拦哪个对象，为什么？</strong></div>
+  <div class="lv l1"><span class="lb">不及格</span>拦 <code>ResultSetHandler</code>，或者干脆在每个 XML 里手写。</div>
+  <div class="lv l2"><span class="lb">及格</span>时间填充拦 <code>ParameterHandler.setParameters</code>；租户条件拦 <code>StatementHandler.prepare</code> 改 SQL。</div>
+  <div class="lv l3"><span class="lb">良好</span>说明取舍：时间填充在 <code>ParameterHandler</code> 能拿到参数对象与 <code>BoundSql</code>，改属性即可；租户条件必须改 SQL 结构，只有 <code>StatementHandler</code> 或 <code>Executor</code> 能做。<strong>但改 SQL 要注意 <code>BoundSql.sql</code> 与 <code>parameterMappings</code> 必须同步改</strong>，否则 <code>?</code> 数量对不上，报参数越界。</div>
+  <div class="lv l4"><span class="lb">优秀</span>再补四个工程细节：① 两个插件不要合成一个类（<code>@Signature</code> 数组虽支持多签名，但混在一起后顺序不可控）；② 用 <code>@Intercepts</code> 时 <code>args</code> 必须精确到重载，否则静默不生效；③ 租户条件要跳过 <code>select count</code> 之外的 <code>information_schema</code> 类语句，避免把系统查询也加上条件；④ 提供 <code>@IgnoreTenant</code> 注解作为逃生口，并说明「插件生效顺序后注册在外层，所以租户插件应最后注册」。最后主动提一句：<strong>这类全局改写更适合放在 MyBatis-Plus 的 <code>TenantLineInnerInterceptor</code> 或直接用数据库行级安全，自研插件的维护成本要提前告知。</strong></div>
+</div>
+
+<h2><span class="n">L15</span>全 24 期知识地图（到此收束）</h2>
+
+<p>这一期是第 24 期，按每 2 小时的节奏，24 个主题刚好覆盖一线 Java 后端面试的全部主干。把地图放在这里，方便你按板块抽查自己哪一块还是空的。</p>
+
+<table>
+<thead><tr><th>板块</th><th>期号 · 主题</th><th>一句话抓手</th></tr></thead>
+<tbody>
+<tr><td rowspan="2">语言与集合</td><td>01 · HashMap → ConcurrentHashMap</td><td>扰动函数、树化阈值 8/6/64、扩容 2 次幂</td></tr>
+<tr><td>23 · 泛型擦除 · 反射 · 动态代理</td><td>桥方法、inflation 15、稳态反射只慢 7 倍</td></tr>
+<tr><td rowspan="4">JVM</td><td>02 · 内存模型与 GC</td><td>三色标记、CMS→G1→ZGC</td></tr>
+<tr><td>12 · 调优与压测</td><td>Eden = 分配速率 × YGC 间隔</td></tr>
+<tr><td>21 · 内存泄漏取证</td><td>支配树、ThreadLocal 七跳链</td></tr>
+<tr><td>22 · JIT 与基准测试</td><td>内联 35/325、逃逸分析、JMH 七坑</td></tr>
+<tr><td rowspan="4">并发</td><td>03 · 锁升级 · AQS · 线程池</td><td>Mark Word 三位、CLH 队列</td></tr>
+<tr><td>14 · 集合并发容器</td><td>ArrayList 1.5 倍、CHM 锁粒度</td></tr>
+<tr><td>20 · 线程池深水区</td><td>ctl 3+29 位、依赖栈 LIFO</td></tr>
+<tr><td>19 · NIO 与 Netty</td><td>epoll 红黑树、ByteBuf 双指针</td></tr>
+<tr><td rowspan="3">框架</td><td>04 · Spring 核心</td><td>refresh 十二步、三级缓存</td></tr>
+<tr><td>15 · Boot 自动配置</td><td>153→60→40 六阶段</td></tr>
+<tr><td>13 · 类加载与新特性</td><td>双亲委派四次被打破、虚拟线程 pinning</td></tr>
+<tr><td rowspan="3">存储</td><td>05 · MySQL 索引与事务</td><td>B+ 树三层 1170 扇出、ReadView 四字段</td></tr>
+<tr><td>16 · 分库分表与迁移</td><td>2053 万行上限、基因法</td></tr>
+<tr><td><strong>24 · MyBatis 与持久层</strong></td><td><strong>九站执行链、CacheKey 37 进制、四道闸门</strong></td></tr>
+<tr><td rowspan="2">缓存</td><td>06 · Redis</td><td>单线程边界、跳表、混合持久化</td></tr>
+<tr><td>17 · 缓存一致性</td><td>失败率是乘法：99.85% → 1.35 亿次脏读</td></tr>
+<tr><td rowspan="4">分布式</td><td>07 · MQ 与分布式事务</td><td>LEO/HW/ISR、六种事务方案</td></tr>
+<tr><td>08 · Spring Cloud</td><td>三级缓存 90~180s、重试放大 27 倍</td></tr>
+<tr><td>18 · 幂等与防重</td><td>0 行双重语义、处理中带租期</td></tr>
+<tr><td>10 · 大厂场景设计</td><td>秒杀四道闸门、雪花位图</td></tr>
+<tr><td rowspan="2">工程能力</td><td>09 · 线上排查</td><td>CPU 六真凶、OOM 九落点</td></tr>
+<tr><td>11 · 设计模式</td><td>策略替 if-else、责任链三变形</td></tr>
+</tbody>
+</table>
+
+<div class="box blue">
+  <div class="h">这一期在整张地图里的位置</div>
+  <p>05 讲了 B+ 树与索引，那是「数据库怎么想」；24 讲的是「框架怎么问」。两者的接缝处正是面试最爱问的地方：为什么这条 SQL 走了索引还是慢（框架侧是 N+1、是假批量、是连接被占），为什么加了索引但没生效（框架侧是 <code>${}</code> 拼接让 SQL 结构每次都变、是 <code>select *</code> 导致覆盖索引失效）。能把两侧连起来讲的人，比只会背索引口诀的人高一档。</p>
+</div>
+
+<div class="foot">
+  <p><strong>本期事实来源</strong>：<code>mybatis-3.5.19.jar</code> 字节码（<code>javap -p -c</code>）与运行时反射实验、<code>HikariCP-5.1.0.jar</code> 默认值实测、JDK 21.0.7。所有标注「实测」的数字均可复现，标注「估算」的已注明。</p>
+  <p>Java 面试深挖 · 第 24 期 · 生成于 2026-11-12</p>
+  <div class="next"><strong>下期预告</strong>　第 25 期：Java 模块化与工程化边界——<code>module-info</code> 能解决什么、classpath hell 的真实成因、<code>jdeps</code> 查循环依赖、Multi-Release JAR 与 shade 冲突、为什么大多数团队用 ArchUnit 而不是 JPMS。</div>
+</div>
+
+</div>
+<script>
+(function () {
+  var KW = /\b(public|private|protected|static|final|class|interface|extends|implements|new|return|if|else|for|while|try|catch|finally|throw|throws|void|int|long|boolean|this|super|null|true|false|import|package|abstract|synchronized|volatile|instanceof|enum|record|var|default|break|continue|switch|case|do|char|double|float|byte|short)\b/g;
+  var blocks = document.querySelectorAll('pre code');
+  for (var i = 0; i < blocks.length; i++) {
+    var el = blocks[i];
+    var text = el.textContent;
+    var out = '';
+    // 单次扫描：注释 | 字符串 | 关键字 | 数字
+    var re = /(\/\/[^\n]*|#[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|([A-Za-z_$][\w$]*)|(\b\d+(?:\.\d+)?\b)/g;
+    var last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      out += esc(text.slice(last, m.index));
+      if (m[1]) out += '<span class="c">' + esc(m[1]) + '</span>';
+      else if (m[2]) out += '<span class="s">' + esc(m[2]) + '</span>';
+      else if (m[3]) {
+        if (KW.test(m[3])) { KW.lastIndex = 0; out += '<span class="k">' + esc(m[3]) + '</span>'; }
+        else { KW.lastIndex = 0; out += esc(m[3]); }
+      } else if (m[4]) out += '<span class="n">' + esc(m[4]) + '</span>';
+      last = m.index + m[0].length;
+    }
+    out += esc(text.slice(last));
+    el.innerHTML = out;
+  }
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+})();
+</script>
+</body>
+</html>

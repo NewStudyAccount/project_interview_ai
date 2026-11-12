@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 20 · 线程池深水区与异步编排：29 位里的并发</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:28px; line-height:1.34; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:790px}
+  .sub b{color:#be123c}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.7px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21; line-height:1.6}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Java 面试深水区 · 第 20 期</div>
+  <h1>线程池深水区<span class="arrow">→</span>29 位里装下的并发</h1>
+  <p class="sub">第 03 期已经讲过「七个参数 + 四种拒绝策略」，那是会背就能过的一层。这一期只干一件事：<b>把 <code class="inl">ThreadPoolExecutor</code> 那一个 int 拆开看</b>——3 位状态 + 29 位线程数，为什么必须挤在同一个 int 里；<code class="inl">execute()</code> 里那三次 CAS 和一次回滚分别在挡什么；<code class="inl">getTask()</code> 的 <code class="inl">timedOut</code> 为什么要多转一圈才退出；<code class="inl">CompletableFuture</code> 的依赖栈为什么是 Treiber 栈；虚拟线程来了以后，<code class="inl">newFixedThreadPool</code> 到底该不该删。</p>
+  <div class="meta">
+    <div><strong>15</strong>层递进</div>
+    <div><strong>14</strong>张手绘图</div>
+    <div><strong>21</strong>段源码与可跑代码</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span>L0 三笔账</span><span class="on">L1 ctl 29 位</span><span>L2 三次 CAS</span>
+  <span>L3 参数可算</span><span>L4 getTask</span><span>L5 依赖栈</span>
+  <span>L6 工作窃取</span><span>L7 编排实战</span><span>L8 拒绝与关闭</span>
+  <span>L9 监控</span><span>L10 虚拟线程</span><span>L11 六坑</span>
+  <span>L12 速查</span><span>L13 问答</span><span>L14 模拟题</span>
+</div>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>地基</em></div>
+  <h2>线程池不是对象池，是一个带队列的限流器</h2>
+  <p>先纠一个几乎所有人都背错的定性。教科书说「线程池复用线程，避免频繁创建销毁的开销」——这话只对了 10%。</p>
+  <p>如果目标只是「复用」，那把线程用完放回一个 <code class="inl">List</code> 里就够了，不需要 <code class="inl">corePoolSize</code>、<code class="inl">maximumPoolSize</code>、队列、拒绝策略这一整套。线程池真正在做的事是：<strong>把「无限并发」压缩成「有限并发 + 排队」</strong>。它是流量整形器，池化只是实现手段。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 400" role="img" aria-label="三种并发方式在 1 万并发下的资源账">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">上：三种「让 1 万个请求同时跑」的方案</text>
+
+      <rect x="24" y="36" width="276" height="126" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="58" font-size="12" fill="#be123c" font-weight="700">每任务 new Thread</text>
+      <text x="42" y="80" font-size="10.5" fill="#475569">创建成本　60 μs / 次</text>
+      <text x="42" y="100" font-size="10.5" fill="#475569">栈预留　　1 MB / 线程</text>
+      <text x="42" y="120" font-size="10.5" fill="#475569">并发上限　系统线程上限</text>
+      <text x="42" y="142" font-size="10.5" fill="#be123c" font-weight="700">1 万并发 → 10 GB 栈</text>
+
+      <rect x="312" y="36" width="276" height="126" rx="10" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="330" y="58" font-size="12" fill="#0369a1" font-weight="700">固定大小线程池</text>
+      <text x="330" y="80" font-size="10.5" fill="#475569">创建成本　一次 200 × 60 μs</text>
+      <text x="330" y="100" font-size="10.5" fill="#475569">栈预留　　200 MB（固定）</text>
+      <text x="330" y="120" font-size="10.5" fill="#475569">并发上限　200（其余排队）</text>
+      <text x="330" y="142" font-size="10.5" fill="#b45309" font-weight="700">1 万并发 → 9800 个在排队</text>
+
+      <rect x="600" y="36" width="276" height="126" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="618" y="58" font-size="12" fill="#047857" font-weight="700">每任务一条虚拟线程</text>
+      <text x="618" y="80" font-size="10.5" fill="#475569">创建成本　约 0.3 μs / 次</text>
+      <text x="618" y="100" font-size="10.5" fill="#475569">栈　　　　按需增长，KB 级</text>
+      <text x="618" y="120" font-size="10.5" fill="#475569">并发上限　百万级（堆决定）</text>
+      <text x="618" y="142" font-size="10.5" fill="#047857" font-weight="700">1 万并发 → 约 16 MB（堆上）</text>
+
+      <line x1="24" y1="182" x2="876" y2="182" stroke="#e2e8f0"/>
+
+      <text x="24" y="206" font-size="12.5" fill="#334155" font-weight="700">下：1 万并发下的栈内存（对数轴，每格 10 倍）</text>
+
+      <line x1="190" y1="222" x2="190" y2="320" stroke="#e2e8f0"/>
+      <line x1="190" y1="320" x2="740" y2="320" stroke="#e2e8f0"/>
+      <line x1="360" y1="222" x2="360" y2="320" stroke="#eef2f7" stroke-dasharray="3 3"/>
+      <line x1="530" y1="222" x2="530" y2="320" stroke="#eef2f7" stroke-dasharray="3 3"/>
+      <line x1="700" y1="222" x2="700" y2="320" stroke="#eef2f7" stroke-dasharray="3 3"/>
+      <text x="190" y="336" font-size="9.5" fill="#94a3b8" text-anchor="middle">10MB</text>
+      <text x="360" y="336" font-size="9.5" fill="#94a3b8" text-anchor="middle">100MB</text>
+      <text x="530" y="336" font-size="9.5" fill="#94a3b8" text-anchor="middle">1GB</text>
+      <text x="700" y="336" font-size="9.5" fill="#94a3b8" text-anchor="middle">10GB</text>
+
+      <text x="24" y="242" font-size="10.5" fill="#475569">虚拟线程</text>
+      <rect x="190" y="230" width="36" height="18" rx="3" fill="#a7f3d0"/>
+      <text x="234" y="244" font-size="10.5" fill="#047857" font-weight="700">16 MB</text>
+
+      <text x="24" y="274" font-size="10.5" fill="#475569">池化 200</text>
+      <rect x="190" y="262" width="221" height="18" rx="3" fill="#bcdcf2"/>
+      <text x="419" y="276" font-size="10.5" fill="#0369a1" font-weight="700">200 MB</text>
+
+      <text x="24" y="306" font-size="10.5" fill="#475569">直连 1 万</text>
+      <rect x="190" y="294" width="512" height="18" rx="3" fill="#fecdd3"/>
+      <text x="710" y="308" font-size="10.5" fill="#be123c" font-weight="700">10 GB</text>
+
+      <text x="24" y="366" font-size="10.5" fill="#64748b">池化省的是第一列的 200 次创建（约 12 ms），代价是第四列：9800 个请求排队等 200 个人干完</text>
+      <text x="24" y="386" font-size="10.5" fill="#94a3b8">这就是为什么「线程池调优」调的从来不是性能，而是「并发度与延迟的兑换比例」</text>
+    </svg>
+    <figcaption><b>图 1</b>　池化只解决了「创建贵」，没解决「装不下」。这张图是整期的地基：所有参数选择都是在这三列之间做取舍</figcaption>
+  </figure>
+
+  <h3>三笔账，先算清楚再谈参数</h3>
+  <table>
+    <tr><th>账目</th><th>量级</th><th>谁在付</th><th>怎么省</th></tr>
+    <tr><td>创建 / 销毁</td><td>50~100 μs（Linux <code>clone()</code> + 栈分配 + 内核 task_struct）</td><td>频繁创建时 CPU</td><td><strong>池化</strong>：一次创建用 N 年</td></tr>
+    <tr><td>栈内存</td><td>默认 1 MB <strong>预留</strong>，实际 commit 约 8~16 KB（<code>-Xss</code>）</td><td>虚拟地址空间 / 物理内存</td><td>池化限数量；或虚拟线程</td></tr>
+    <tr><td>上下文切换</td><td>3~8 μs，线程越多切换越频繁</td><td>CPU（sys 态）</td><td>线程数别超过核数太多</td></tr>
+  </table>
+
+  <p>第三条是关键，也是面试里最能分出层次的一句：<strong>线程数不是越多越好，超过「并发度需求」之后每多一个线程都在增加切换成本，而不增加吞吐。</strong> 吞吐在某个点之后就完全由 CPU、IO、锁决定，线程只是排队的人。</p>
+
+  <div class="oneline"><b>面试口径</b>「线程池的核心作用是<strong>资源隔离与流量整形</strong>：用有限的线程数把无界的并发请求转成有界的队列，从而把『过载』从『打挂数据库』变成『排队变慢』。复用线程只是顺带的收益。」——这句话说出来，比背七个参数有效得多。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>一个 int 的两个字段</em></div>
+  <h2>ctl：3 位状态 + 29 位线程数，为什么要挤在一起</h2>
+  <p>打开 <code class="inl">ThreadPoolExecutor</code> 的第一行关键代码就是它。注意 JDK 21 里这个常量已经改名叫 <code class="inl">COUNT_MASK</code>（JDK 18 及以前叫 <code class="inl">CAPACITY</code>），面试时能顺口提一句「老版本叫 CAPACITY」是加分项。</p>
+
+<pre><code>private static final int COUNT_BITS = Integer.SIZE - 3;      // 29
+private static final int COUNT_MASK = (1 &lt;&lt; COUNT_BITS) - 1; // 536870911 = 2^29 - 1
+
+// 高 3 位存状态（用负数表示，方便 compareAndSet 时整体比较）
+private static final int RUNNING    = -1 &lt;&lt; COUNT_BITS;  // 111 0...0
+private static final int SHUTDOWN   =  0 &lt;&lt; COUNT_BITS;  // 000 0...0
+private static final int STOP       =  1 &lt;&lt; COUNT_BITS;  // 001 0...0
+private static final int TIDYING    =  2 &lt;&lt; COUNT_BITS;  // 010 0...0
+private static final int TERMINATED =  3 &lt;&lt; COUNT_BITS;  // 011 0...0
+
+private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
+
+private static int ctlOf(int rs, int wc) { return rs | wc; }        // 打包
+private static int runStateOf(int c)     { return c &amp; ~COUNT_MASK; } // 取高 3 位
+private static int workerCountOf(int c)  { return c &amp; COUNT_MASK; }  // 取低 29 位</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 268" role="img" aria-label="ctl 的 32 位拆解与五种状态迁移">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">一个 int 的 32 位，被切成两段用</text>
+
+      <text x="105" y="44" font-size="10" fill="#94a3b8" text-anchor="middle">bit 31 · 30 · 29</text>
+      <text x="486" y="44" font-size="10" fill="#94a3b8" text-anchor="middle">bit 28 ─────────────────── 0</text>
+
+      <rect x="60" y="52" width="90" height="36" rx="6" fill="#ede9fe" stroke="#c4b5fd"/>
+      <text x="105" y="70" font-size="11" fill="#6d28d9" font-weight="700" text-anchor="middle">runState</text>
+      <text x="105" y="82" font-size="9" fill="#7c3aed" text-anchor="middle">3 位 / 5 个值</text>
+
+      <rect x="154" y="52" width="660" height="36" rx="6" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="484" y="70" font-size="11" fill="#0369a1" font-weight="700" text-anchor="middle">workerCount</text>
+      <text x="484" y="82" font-size="9" fill="#0369a1" text-anchor="middle">29 位 / 最大 536,870,911 个线程</text>
+
+      <text x="24" y="116" font-size="11" fill="#475569" font-weight="700">五种状态（高 3 位的值，用十进制表示方便对比大小）</text>
+
+      <rect x="24" y="128" width="160" height="52" rx="8" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="104" y="148" font-size="11" fill="#047857" font-weight="700" text-anchor="middle">RUNNING</text>
+      <text x="104" y="166" font-size="9.5" fill="#64748b" text-anchor="middle">-536870912　收任务</text>
+
+      <rect x="196" y="128" width="160" height="52" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="276" y="148" font-size="11" fill="#0369a1" font-weight="700" text-anchor="middle">SHUTDOWN</text>
+      <text x="276" y="166" font-size="9.5" fill="#64748b" text-anchor="middle">0　不收新任务</text>
+
+      <rect x="368" y="128" width="160" height="52" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="448" y="148" font-size="11" fill="#b45309" font-weight="700" text-anchor="middle">STOP</text>
+      <text x="448" y="166" font-size="9.5" fill="#64748b" text-anchor="middle">536870912　中断中</text>
+
+      <rect x="540" y="128" width="160" height="52" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="620" y="148" font-size="11" fill="#be123c" font-weight="700" text-anchor="middle">TIDYING</text>
+      <text x="620" y="166" font-size="9.5" fill="#64748b" text-anchor="middle">1073741824　将终止</text>
+
+      <rect x="712" y="128" width="164" height="52" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="794" y="148" font-size="11" fill="#334155" font-weight="700" text-anchor="middle">TERMINATED</text>
+      <text x="794" y="166" font-size="9.5" fill="#64748b" text-anchor="middle">1610612736　已死</text>
+
+      <line x1="184" y1="154" x2="192" y2="154" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="192,154 186,151 186,157" fill="#94a3b8"/>
+      <line x1="356" y1="154" x2="364" y2="154" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="364,154 358,151 358,157" fill="#94a3b8"/>
+      <line x1="528" y1="154" x2="536" y2="154" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="536,154 530,151 530,157" fill="#94a3b8"/>
+      <line x1="700" y1="154" x2="708" y2="154" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="708,154 702,151 702,157" fill="#94a3b8"/>
+
+      <text x="24" y="206" font-size="10.5" fill="#64748b">① 状态用「有序的整数」编码，所以判断状态可以直接比大小：runStateAtLeast(c, SHUTDOWN) 就是 c &gt;= SHUTDOWN</text>
+      <text x="24" y="226" font-size="10.5" fill="#64748b">② 只有 RUNNING 是负数 —— 这一条让 isRunning(c) 简写成 c &lt; SHUTDOWN，也让它永远排在最小值</text>
+      <text x="24" y="246" font-size="10.5" fill="#94a3b8">③ 5 个状态值间隔恰好是 2^29，等于给低 29 位留出了不干扰高位的整数加法空间</text>
+      <text x="24" y="264" font-size="10.5" fill="#b45309" font-weight="700">一个 int 同时承载「状态机」和「计数器」，是为了让两者能用一次 CAS 原子地联动</text>
+    </svg>
+    <figcaption><b>图 2</b>　上：32 位切成 3 + 29；下：五个状态值按大小排成一条线，因此状态判断可以退化成整数比较</figcaption>
+  </figure>
+
+  <h3>为什么不能写成两个字段</h3>
+  <p>这是本题真正的考点。假设拆成 <code class="inl">volatile int runState</code> 和 <code class="inl">AtomicInteger workerCount</code>，会立刻出现一个无法消除的窗口：</p>
+
+<pre><code>// 危险写法：两个独立变量
+if (runState == RUNNING) {          // ① 检查：此刻是 RUNNING
+    // &lt;-- 这个缝隙里，别的线程调用了 shutdown()，runState 变成 SHUTDOWN
+    if (workerCount.incrementAndGet() &lt;= maximumPoolSize) {  // ② 加线程
+        startNewWorker();           // ③ 在 SHUTDOWN 状态下启动了新线程 → 泄漏
+    }
+}</code></pre>
+
+  <p>你没法用一把锁解决它——因为 <code class="inl">execute()</code> 是热路径，每次提交任务都加 <code class="inl">mainLock</code> 会把线程池变成串行。把两个值塞进一个 int，<strong>一次 CAS 就能同时校验「状态没变」和「数量没超」</strong>，这是无锁编程里最经典的「打包（word tearing 反向操作）」手法。</p>
+
+  <div class="oneline"><b>面试口径</b>「<code class="inl">ctl</code> 是一个把状态和数量打包进 32 位的整数。这样 <code class="inl">compareAndSet(expect, expect + 1)</code> 就能在一次原子操作里完成『确认还在 RUNNING』和『worker 数 +1』两件事。如果分成两个字段，无论如何都存在状态检查与数量修改之间的竞态窗口，而加锁会让提交路径串行化。」</div>
+
+  <h3>五种状态的语义差异，只在两个方法上体现</h3>
+  <table>
+    <tr><th>状态</th><th>收新任务</th><th>跑队列里的任务</th><th>中断在跑的线程</th><th>由谁触发</th></tr>
+    <tr><td><code>RUNNING</code></td><td>是</td><td>是</td><td>否</td><td>构造</td></tr>
+    <tr><td><code>SHUTDOWN</code></td><td><strong>否</strong></td><td><strong>是</strong>（清空队列）</td><td>否</td><td><code>shutdown()</code></td></tr>
+    <tr><td><code>STOP</code></td><td>否</td><td><strong>否</strong></td><td><strong>是</strong></td><td><code>shutdownNow()</code></td></tr>
+    <tr><td><code>TIDYING</code></td><td>否</td><td>否</td><td>否</td><td>队列空且 worker 为 0</td></tr>
+    <tr><td><code>TERMINATED</code></td><td>否</td><td>否</td><td>否</td><td><code>terminated()</code> 执行完</td></tr>
+  </table>
+  <p>记住一句话：<strong><code class="inl">shutdown()</code> 是「关店门、把手上的人伺候完」，<code class="inl">shutdownNow()</code> 是「关店门、赶人走、桌上东西全扔」</strong>。<code class="inl">shutdownNow()</code> 的返回值就是被扔出来的那堆任务（<code class="inl">List&lt;Runnable&gt;</code>）——这个返回值不是给你看的，是给你<strong>落盘补偿</strong>用的。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>提交路径</em></div>
+  <h2>execute()：三次 CAS、一次回滚、一次双重检查</h2>
+  <p>这是全篇最值得逐行读的方法，因为它只有 15 行，却包含了三个面试高频追问。先看源码（JDK 21，注释已删）。</p>
+
+<pre><code>public void execute(Runnable command) {
+    if (command == null) throw new NullPointerException();
+    int c = ctl.get();
+    if (workerCountOf(c) &lt; corePoolSize) {           // ① 第一道：还没到核心数
+        if (addWorker(command, true)) return;
+        c = ctl.get();                                // 失败就重新读，别用旧值
+    }
+    if (isRunning(c) &amp;&amp; workQueue.offer(command)) {  // ② 第二道：入队
+        int recheck = ctl.get();                      // ③ 入队后必须重读
+        if (!isRunning(recheck) &amp;&amp; remove(command))
+            reject(command);                          // 已关闭：把刚入队的捞回来再拒
+        else if (workerCountOf(recheck) == 0)
+            addWorker(null, false);                   // 队里有活但没人：补一个空 worker
+    }
+    else if (!addWorker(command, false))              // ④ 第三道：扩容到 max
+        reject(command);
+}</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 466" role="img" aria-label="execute 的四条分支与每一条的防守目标">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">execute() 的决策骨架（左侧）与每道闸门在防什么（右侧）</text>
+
+      <rect x="24" y="36" width="336" height="62" rx="9" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="42" y="58" font-size="11.5" fill="#0369a1" font-weight="700">① wc &lt; corePoolSize ?</text>
+      <text x="42" y="78" font-size="10.5" fill="#475569">addWorker(command, true) → 成功即 return</text>
+      <text x="42" y="93" font-size="9.5" fill="#94a3b8">addWorker 内部会 CAS 校验状态 + 数量</text>
+
+      <rect x="414" y="36" width="462" height="62" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="432" y="60" font-size="10.8" fill="#334155">核心线程数是「常驻编制」，不是「上限」。到编就停，</text>
+      <text x="432" y="80" font-size="10.8" fill="#334155">不会为了快而临时多招——这是线程池与缓存池最大的区别</text>
+
+      <line x1="192" y1="98" x2="192" y2="122" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="192,122 188,114 196,114" fill="#94a3b8"/>
+      <text x="202" y="115" font-size="10" fill="#94a3b8">否 / 加线程失败</text>
+
+      <rect x="24" y="126" width="336" height="62" rx="9" fill="#ede9fe" stroke="#c4b5fd"/>
+      <text x="42" y="148" font-size="11.5" fill="#6d28d9" font-weight="700">② isRunning &amp;&amp; queue.offer ?</text>
+      <text x="42" y="168" font-size="10.5" fill="#475569">入队成功 → 立刻 recheck 一次 ctl</text>
+      <text x="42" y="183" font-size="9.5" fill="#94a3b8">这行 else if 是整段最容易读漏的地方</text>
+
+      <rect x="414" y="126" width="462" height="62" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="432" y="150" font-size="10.8" fill="#334155">队列优先于扩容：先排满队，再考虑加人。所以带无界队列时</text>
+      <text x="432" y="170" font-size="10.8" fill="#be123c" font-weight="700">maximumPoolSize 永远不会生效（L3 详证）</text>
+
+      <line x1="192" y1="188" x2="192" y2="212" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="192,212 188,204 196,204" fill="#94a3b8"/>
+      <text x="202" y="205" font-size="10" fill="#94a3b8">入队成功</text>
+
+      <rect x="24" y="216" width="336" height="88" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="42" y="238" font-size="11.5" fill="#b45309" font-weight="700">③ recheck 双重检查</text>
+      <text x="42" y="258" font-size="10.2" fill="#475569">!isRunning &amp;&amp; remove(成功) → reject</text>
+      <text x="42" y="276" font-size="10.2" fill="#475569">wc == 0 → addWorker(null, false)</text>
+      <text x="42" y="294" font-size="9.5" fill="#94a3b8">remove 失败说明任务已被执行 → 不拒，放它跑完</text>
+
+      <rect x="414" y="216" width="462" height="88" rx="9" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="432" y="240" font-size="10.8" fill="#334155">这是「先入队、后加人」顺序带来的必然代价：入队到检查之间</text>
+      <text x="432" y="260" font-size="10.8" fill="#334155">池可能被关闭，也可能原有线程全部超时退出。所以必须</text>
+      <text x="432" y="280" font-size="10.8" fill="#be123c">入队后再读一次、必要时回滚（remove）或补救（补 worker）</text>
+      <text x="432" y="298" font-size="9.5" fill="#94a3b8">这两行防的都是「入队成功后世界变了」</text>
+
+      <line x1="192" y1="304" x2="192" y2="328" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="192,328 188,320 196,320" fill="#94a3b8"/>
+      <text x="202" y="321" font-size="10" fill="#94a3b8">入队失败（队满）</text>
+
+      <rect x="24" y="332" width="336" height="62" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="354" font-size="11.5" fill="#be123c" font-weight="700">④ addWorker(command, false)</text>
+      <text x="42" y="374" font-size="10.5" fill="#475569">扩容到 maximumPoolSize，仍失败 → reject</text>
+      <text x="42" y="389" font-size="9.5" fill="#94a3b8">addWorker 内部失败会回滚 ctl 与 workers</text>
+
+      <rect x="414" y="332" width="462" height="62" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="432" y="356" font-size="10.8" fill="#334155">走到这里说明：池已关 / 已到 max / 系统创建线程失败。</text>
+      <text x="432" y="376" font-size="10.8" fill="#be123c" font-weight="700">三种原因共用一个 RejectedExecutionException，这是排查痛点</text>
+
+      <text x="24" y="420" font-size="10.5" fill="#64748b">三次 CAS 分别发生在：① addWorker 里 incrementWorkerCount、② ③ 之间没有 CAS 只有重读、④ addWorker 再一次 incrementWorkerCount</text>
+      <text x="24" y="440" font-size="10.5" fill="#64748b">真正「无锁」的只有计数与在建线程数；workers 集合的新增/删除仍要走 mainLock —— 记住这一点，画成图 3 才能圆回来</text>
+      <text x="24" y="460" font-size="10.5" fill="#94a3b8">失败回滚链路：addWorkerFailed → workers.remove(w) → decrementWorkerCount() → tryTerminate()</text>
+    </svg>
+    <figcaption><b>图 3</b>　四条分支对应四种结局；右侧每一栏都是「如果没有这一行会怎样」，这才是面试官想听的深度</figcaption>
+  </figure>
+
+  <h3>追问一：addWorker 失败后为什么必须重新读 ctl</h3>
+  <p>源码里那句 <code class="inl">c = ctl.get()</code> 不是冗余。如果继续用进来时读到的旧 <code class="inl">c</code>，下面 <code class="inl">isRunning(c)</code> 就会拿一个可能已经过期的状态做判断——池已经被 <code class="inl">shutdown()</code> 了，你还以为它在 RUNNING，于是把任务入队，然后被 <code class="inl">recheck</code> 捞回来拒绝。逻辑上不会错（recheck 兜住了），但会多一次无谓的入队和出队。</p>
+
+  <h3>追问二：addWorker 失败是怎么回滚的</h3>
+<pre><code>private boolean addWorker(Runnable firstTask, boolean core) {
+    retry:
+    for (int c = ctl.get();;) {
+        // 状态检查：SHUTDOWN 且（队列非空 或 firstTask != null）→ 不许加
+        if (runStateAtLeast(c, SHUTDOWN)
+            &amp;&amp; (runStateAtLeast(c, STOP) || firstTask != null || workQueue.isEmpty()))
+            return false;
+        for (;;) {
+            if (workerCountOf(c) &gt;= ((core ? corePoolSize : maximumPoolSize) &amp; COUNT_MASK))
+                return false;                                  // 数量到顶，直接失败
+            if (compareAndIncrementWorkerCount(c))             // ★ 第一次 CAS
+                break retry;
+            c = ctl.get();                                     // CAS 失败 → 重读重试
+            if (runStateAtLeast(c, SHUTDOWN)) continue retry;
+        }
+    }
+    boolean workerStarted = false, workerAdded = false;
+    Worker w = null;
+    try {
+        w = new Worker(firstTask);                             // 这里可能 OOM / 无法建线程
+        final Thread t = w.thread;
+        if (t != null) {
+            mainLock.lock();                                   // ★ 集合操作仍需加锁
+            try {
+                int c = ctl.get();
+                if (isRunning(c) || (runStateLessThan(c, STOP) &amp;&amp; firstTask == null)) {
+                    workers.add(w);
+                    workerAdded = true;
+                }
+            } finally { mainLock.unlock(); }
+            if (workerAdded) { t.start(); workerStarted = true; }
+        }
+    } finally {
+        if (!workerStarted)
+            addWorkerFailed(w);                                // ★ 回滚：数量减回去 + 移除
+    }
+    return workerStarted;
+}</code></pre>
+
+  <p>三个知识点藏在这一段里：</p>
+  <ul>
+    <li><strong>计数先加、线程后建</strong>：所以必须靠 <code class="inl">finally</code> 里的 <code class="inl">addWorkerFailed</code> 兜底，否则计数会永久泄漏（池看起来满了，实际没线程干活——这是死锁的一种形态）。</li>
+    <li><strong><code class="inl">workers</code> 是 <code class="inl">HashSet</code>，不是并发容器</strong>：所以 <code class="inl">add</code> / <code class="inl">remove</code> 都要 <code class="inl">mainLock</code>。所谓「线程池是无锁的」只在计数路径上成立。</li>
+    <li><strong>状态检查在锁外做了一遍、锁内又做了一遍</strong>：锁外是为了快速失败，锁内是为了防止「检查后到加锁前」池被关闭。</li>
+  </ul>
+
+  <div class="trap"><b>高频踩坑</b><code class="inl">execute()</code> 抛出 <code class="inl">RejectedExecutionException</code> 时，很多人只看「池满了」。实际有<strong>三种完全不同的原因</strong>共用这一个异常：① 池已 SHUTDOWN / STOP；② worker 数已达 max；③ <strong>操作系统拒绝创建线程</strong>（<code class="inl">OutOfMemoryError: unable to create native thread</code> 被包成 <code class="inl">addWorker</code> 返回 false）。第三种情况下线程池其实是空的，监控面板一片绿，只有日志里那一行异常。定位方法：catch 住之后打印 <code class="inl">poolSize</code> / <code class="inl">queue.size()</code> / <code class="inl">isShutdown()</code>。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>参数可算</em></div>
+  <h2>线程数到底设多少：从 8 核算出 56</h2>
+  <p>「CPU 密集型设 N+1，IO 密集型设 2N」——这句话在面试里说出来基本等于没答，因为真实业务既不是纯 CPU 也不是纯 IO。正确做法是拿公式算，而公式只有一条：</p>
+
+  <div class="oneline"><b>核心公式</b><code class="inl">N = N_cpu × U_cpu × (1 + W / C)</code>　其中 W = 单请求等待时间，C = 单请求计算时间。这条式子和 Little's Law 是同一件事的两种写法，可以互相验证。</div>
+
+  <p>代入一个具体业务：<strong>8 核机器，单请求 50 ms，其中 CPU 计算 5 ms、等下游 45 ms，目标 CPU 利用率 70%</strong>。</p>
+
+<pre><code>N = 8 × 0.7 × (1 + 45 / 5) = 8 × 0.7 × 10 = 56 个线程
+
+交叉验证（Little's Law）：
+  吞吐 = 56 / 0.05s = 1120 QPS
+  CPU 占用 = 1120 × 5ms = 5.6 核 = 70% ✓ 恰好命中目标
+  再往上顶到 CPU 100%：8000ms / 5ms = 1600 QPS → 需要 1600 × 0.05 = 80 个线程</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 384" role="img" aria-label="线程数与吞吐、延迟的关系曲线">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">线程数 vs 吞吐（上）与 vs 平均延迟（下）：同一条 x 轴，两个拐点</text>
+
+      <rect x="249" y="36" width="69" height="286" fill="#f0fdf4"/>
+      <rect x="318" y="36" width="342" height="286" fill="#fef2f2"/>
+
+      <line x1="90" y1="170" x2="660" y2="170" stroke="#e2e8f0"/>
+      <line x1="90" y1="130" x2="660" y2="130" stroke="#f1f5f9"/>
+      <line x1="90" y1="90" x2="660" y2="90" stroke="#f1f5f9"/>
+      <line x1="90" y1="50" x2="660" y2="50" stroke="#f1f5f9"/>
+      <text x="84" y="174" font-size="9" fill="#94a3b8" text-anchor="end">0</text>
+      <text x="84" y="134" font-size="9" fill="#94a3b8" text-anchor="end">500</text>
+      <text x="84" y="94" font-size="9" fill="#94a3b8" text-anchor="end">1000</text>
+      <text x="84" y="54" font-size="9" fill="#94a3b8" text-anchor="end">1500</text>
+      <text x="70" y="40" font-size="9.5" fill="#64748b" font-weight="700">QPS</text>
+
+      <polyline points="90,170 135.6,146.9 181.2,123.8 249.6,89.1 318,54.4 432,54.4 546,53.2 660,55.9"
+                fill="none" stroke="#0369a1" stroke-width="2.2"/>
+      <circle cx="318" cy="54.4" r="3.6" fill="#be123c"/>
+      <text x="326" y="46" font-size="10" fill="#be123c" font-weight="700">80 线程 → 1600 QPS，CPU 100%，此后水平</text>
+
+      <line x1="318" y1="36" x2="318" y2="322" stroke="#be123c" stroke-dasharray="4 3" stroke-width="1.2"/>
+      <text x="283" y="198" font-size="9.5" fill="#047857" text-anchor="middle" font-weight="700">56 甜点</text>
+      <text x="480" y="196" font-size="9.5" fill="#be123c" text-anchor="middle">过载区</text>
+
+      <line x1="90" y1="322" x2="660" y2="322" stroke="#cbd5e1"/>
+
+      <line x1="90" y1="300" x2="660" y2="300" stroke="#f1f5f9"/>
+      <line x1="90" y1="270" x2="660" y2="270" stroke="#f1f5f9"/>
+      <line x1="90" y1="240" x2="660" y2="240" stroke="#f1f5f9"/>
+      <text x="84" y="304" font-size="9" fill="#94a3b8" text-anchor="end">0</text>
+      <text x="84" y="274" font-size="9" fill="#94a3b8" text-anchor="end">85</text>
+      <text x="84" y="244" font-size="9" fill="#94a3b8" text-anchor="end">170</text>
+      <text x="70" y="236" font-size="9.5" fill="#64748b" font-weight="700">ms</text>
+
+      <polyline points="90,292.5 135.6,292.5 181.2,292.5 249.6,292.5 318,292.5 432,278.8 546,265 660,251.3"
+                fill="none" stroke="#b45309" stroke-width="2.2"/>
+      <text x="200" y="286" font-size="10" fill="#b45309" font-weight="700">50 ms 平线：还没排上队</text>
+      <text x="440" y="268" font-size="10" fill="#be123c" font-weight="700">排队开始：延迟 = 线程数 / 1600</text>
+
+      <line x1="90" y1="292.5" x2="318" y2="292.5" stroke="#b45309" stroke-width="0.8" stroke-dasharray="2 3"/>
+
+      <line x1="181" y1="330" x2="181" y2="336" stroke="#cbd5e1"/>
+      <line x1="318" y1="330" x2="318" y2="336" stroke="#cbd5e1"/>
+      <line x1="432" y1="330" x2="432" y2="336" stroke="#cbd5e1"/>
+      <line x1="546" y1="330" x2="546" y2="336" stroke="#cbd5e1"/>
+      <line x1="660" y1="330" x2="660" y2="336" stroke="#cbd5e1"/>
+      <text x="181" y="350" font-size="9.5" fill="#94a3b8" text-anchor="middle">32</text>
+      <text x="318" y="350" font-size="9.5" fill="#be123c" text-anchor="middle">80</text>
+      <text x="432" y="350" font-size="9.5" fill="#94a3b8" text-anchor="middle">120</text>
+      <text x="546" y="350" font-size="9.5" fill="#94a3b8" text-anchor="middle">160</text>
+      <text x="660" y="350" font-size="9.5" fill="#94a3b8" text-anchor="middle">200</text>
+      <text x="375" y="372" font-size="10" fill="#64748b" text-anchor="middle">线程数</text>
+
+          </svg>
+    <figcaption><b>图 4</b>　56 是「按目标 CPU 利用率算出的编制」，80 是「CPU 打满的物理极限」。超过 80 之后再加线程，吞吐一根不多、延迟线性变差——这就是为什么「加大线程池」从不是性能优化</figcaption>
+  </figure>
+
+  <h3>队列容量：一个从延迟倒推出来的数</h3>
+  <p>队列长度不是拍脑袋。它是「你愿意让请求等多久」的翻译：</p>
+<pre><code>队列容量 = 到达率 × 可容忍排队时间
+         = 1000 QPS × 0.15s = 150
+
+校验：150 个任务 × 单任务对象约 1KB = 150KB（安全）
+     若任务里持有一个 1MB 的 byte[]（比如上传文件）→ 150MB（危险）</code></pre>
+  <p>所以「队列设 10000」这句话背后真正的含义是：<strong>你允许最多 1 万个请求在这里干等</strong>。在 1000 QPS 下，第 1 万个请求要等 10 秒——用户早就走了，你还在替他排队。更糟的是这些「僵尸任务」还占着内存，而且执行时下游可能已经超时了。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="有界队列与无界队列下 maximumPoolSize 是否生效">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">同样的 core=8 / max=32，只改队列容量，行为完全不同</text>
+
+      <rect x="24" y="36" width="852" height="112" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="42" y="58" font-size="11.5" fill="#047857" font-weight="700">A · 有界队列（ArrayBlockingQueue 100）：max 会生效</text>
+      <rect x="42" y="70" width="118" height="34" rx="6" fill="#fff" stroke="#bcdcf2"/>
+      <text x="101" y="91" font-size="10" fill="#0369a1" text-anchor="middle">8 个核心线程</text>
+      <text x="172" y="91" font-size="11" fill="#94a3b8" text-anchor="middle">满</text>
+      <rect x="192" y="70" width="118" height="34" rx="6" fill="#fff" stroke="#bcdcf2"/>
+      <text x="251" y="91" font-size="10" fill="#0369a1" text-anchor="middle">队列 100</text>
+      <text x="322" y="91" font-size="11" fill="#94a3b8" text-anchor="middle">满</text>
+      <rect x="342" y="70" width="118" height="34" rx="6" fill="#fff" stroke="#bcdcf2"/>
+      <text x="401" y="91" font-size="10" fill="#0369a1" text-anchor="middle">扩到 32</text>
+      <text x="472" y="91" font-size="11" fill="#94a3b8" text-anchor="middle">仍满</text>
+      <rect x="492" y="70" width="118" height="34" rx="6" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="551" y="91" font-size="10" fill="#be123c" text-anchor="middle">拒绝（可见）</text>
+      <text x="42" y="126" font-size="10" fill="#047857">线程数上限 = 32，队列上限 = 100 → 系统总容量 132，超了立刻报错，压力可见、可告警</text>
+      <text x="42" y="142" font-size="9.5" fill="#94a3b8">第 133 个请求拿到 RejectedExecutionException，这是好事：过载被显式暴露</text>
+
+      <rect x="24" y="160" width="852" height="112" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="182" font-size="11.5" fill="#be123c" font-weight="700">B · 无界队列（LinkedBlockingQueue 默认）：max 永不生效</text>
+      <rect x="42" y="194" width="118" height="34" rx="6" fill="#fff" stroke="#f5ccd4"/>
+      <text x="101" y="215" font-size="10" fill="#be123c" text-anchor="middle">8 个核心线程</text>
+      <rect x="192" y="194" width="418" height="34" rx="6" fill="#fff" stroke="#f5ccd4" stroke-dasharray="4 3"/>
+      <text x="401" y="215" font-size="10" fill="#be123c" text-anchor="middle">队列 = Integer.MAX_VALUE（21 亿），永远装得下</text>
+      <rect x="642" y="194" width="90" height="34" rx="6" fill="#f8fafc" stroke="#dbe3ee" stroke-dasharray="3 3"/>
+      <text x="687" y="211" font-size="9.5" fill="#94a3b8" text-anchor="middle">max=32</text>
+      <text x="687" y="223" font-size="9" fill="#94a3b8" text-anchor="middle">永不到达</text>
+      <text x="42" y="250" font-size="10" fill="#be123c">32 这个数字从头到尾没被读过一次。第 9 个请求开始全部排队，第 10 万个也在排队 —— 直到堆被吃满</text>
+      <text x="42" y="266" font-size="9.5" fill="#94a3b8">这就是 Executors.newFixedThreadPool 的真实形态：core = max = n，队列无界，等于「一个不会扩、也不会拒的池」</text>
+
+      <text x="24" y="300" font-size="10.5" fill="#475569">结论：maximumPoolSize 只有在「队列先满」时才可能生效。要它有意义，队列必须有界 —— 而队列有界又要求你给出拒绝策略</text>
+      <text x="24" y="320" font-size="10.5" fill="#94a3b8">三个参数是绑在一起的：有界队列 ↔ 有意义的最大线程数 ↔ 明确的拒绝策略。缺一个，另外两个都是装饰品</text>
+    </svg>
+    <figcaption><b>图 5</b>　A 与 B 的差别只有一个数字，但 A 的过载是「可见的 503」，B 的过载是「不可见的 Full GC」——后者更难查</figcaption>
+  </figure>
+
+  <h3>把四个参数一次配准</h3>
+<pre><code>int core = 56;                                    // 上式计算
+int max  = 80;                                    // CPU 打满的物理极限
+BlockingQueue&lt;Runnable&gt; q = new ArrayBlockingQueue&lt;&gt;(150);  // 1000 QPS × 0.15s
+ThreadFactory tf = r -&gt; {
+    Thread t = new Thread(r, "order-pool-" + SEQ.getAndIncrement());
+    t.setDaemon(false);                           // 别用守护线程，否则 JVM 退出会砍任务
+    t.setUncaughtExceptionHandler((th, e) -&gt; log.error("worker died: {}", th.getName(), e));
+    return t;
+};
+ThreadPoolExecutor pool = new ThreadPoolExecutor(
+        core, max, 60L, TimeUnit.SECONDS, q,
+        tf, new ThreadPoolExecutor.CallerRunsPolicy());   // 反压，见 L8</code></pre>
+
+  <p>四个数字，三句话就能在面试里讲清：</p>
+  <table>
+    <tr><th>参数</th><th>值</th><th>依据</th><th>改了会怎样</th></tr>
+    <tr><td><code>core</code></td><td>56</td><td><code>8 × 0.7 × (1 + 45/5)</code></td><td>调小 → CPU 用不满；调大 → 空闲线程多、切换变多</td></tr>
+    <tr><td><code>max</code></td><td>80</td><td>CPU 100% 时的并发度</td><td>调大 → 只增加排队与切换，吞吐不涨</td></tr>
+    <tr><td>队列</td><td>150</td><td>1000 QPS × 150 ms 容忍</td><td>调大 → 延迟无限膨胀；调小 → 更早拒绝</td></tr>
+    <tr><td><code>keepAlive</code></td><td>60 s</td><td>突发流量后回收非核心线程</td><td>配合 <code>allowCoreThreadTimeOut</code> 连核心一起收</td></tr>
+  </table>
+
+  <div class="warn"><b>一个反直觉的事实</b>：如果你的 <code class="inl">core = max</code> 且队列无界（也就是 <code class="inl">newFixedThreadPool</code>），那么 <code class="inl">keepAliveTime</code>、<code class="inl">maximumPoolSize</code>、拒绝策略<strong>三样全部不生效</strong>。整个线程池退化成「n 个线程 + 一个无限长的队列」。这不是「简单够用」，这是「没有任何过载保护」。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L4</span><em>回收与调参</em></div>
+  <h2>getTask()：为什么超时之后还要多转一圈</h2>
+  <p>线程池里最反直觉的一段代码就在这。先看 <code class="inl">getTask()</code> 的骨架，注意那个 <code class="inl">boolean timedOut</code> 是<strong>方法内局部变量</strong>，每次调用都从 <code class="inl">false</code> 开始。</p>
+
+<pre><code>private Runnable getTask() {
+    boolean timedOut = false;                     // 上一轮 poll 是否超时
+    for (;;) {
+        int c = ctl.get();
+        // 关闭检查：SHUTDOWN 后若队列也空了（或已 STOP），worker 就该退场
+        if (runStateAtLeast(c, SHUTDOWN)
+            &amp;&amp; (runStateAtLeast(c, STOP) || workQueue.isEmpty())) {
+            decrementWorkerCount();
+            return null;
+        }
+        int wc = workerCountOf(c);
+        // ★ 只有「允许核心回收」或「已经超过核心数」的线程才受超时约束
+        boolean timed = allowCoreThreadTimeOut || wc &gt; corePoolSize;
+
+        if ((wc &gt; maximumPoolSize || (timed &amp;&amp; timedOut))
+            &amp;&amp; (wc &gt; 1 || workQueue.isEmpty())) {
+            if (compareAndDecrementWorkerCount(c)) return null;   // CAS 减成功才真的退出
+            continue;                                            // 减失败（别人也在退）→ 重来
+        }
+        try {
+            Runnable r = timed
+                ? workQueue.poll(keepAliveTime, TimeUnit.NANOSECONDS)  // 有超时
+                : workQueue.take();                                    // 死等
+            if (r != null) return r;
+            timedOut = true;                       // ★ 只是打标记，不退出
+        } catch (InterruptedException retry) {
+            timedOut = false;                      // 被中断 → 清标记，继续等
+        }
+    }
+}</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 344" role="img" aria-label="worker 循环与 getTask 的两轮判定">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">上：一个 Worker 的一生（runWorker 的外层循环）</text>
+
+      <rect x="24" y="34" width="180" height="50" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="114" y="58" font-size="10.8" fill="#334155" font-weight="700" text-anchor="middle">worker 出生</text>
+      <text x="114" y="74" font-size="9.2" fill="#94a3b8" text-anchor="middle">addWorker 里 new Worker</text>
+
+      <rect x="252" y="34" width="180" height="50" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="342" y="58" font-size="10.8" fill="#0369a1" font-weight="700" text-anchor="middle">getTask()</text>
+      <text x="342" y="74" font-size="9.2" fill="#94a3b8" text-anchor="middle">take / poll 拿一个任务</text>
+
+      <rect x="480" y="34" width="180" height="50" rx="8" fill="#ede9fe" stroke="#c4b5fd"/>
+      <text x="570" y="58" font-size="10.8" fill="#6d28d9" font-weight="700" text-anchor="middle">run() 执行业务</text>
+      <text x="570" y="74" font-size="9.2" fill="#94a3b8" text-anchor="middle">before / afterExecute 钩子</text>
+
+      <rect x="708" y="34" width="168" height="50" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="792" y="58" font-size="10.8" fill="#be123c" font-weight="700" text-anchor="middle">拿不到 → 退出</text>
+      <text x="792" y="74" font-size="9.2" fill="#94a3b8" text-anchor="middle">processWorkerExit</text>
+
+      <line x1="206" y1="59" x2="248" y2="59" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="248,59 240,55 240,63" fill="#94a3b8"/>
+      <line x1="434" y1="59" x2="476" y2="59" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="476,59 468,55 468,63" fill="#94a3b8"/>
+      <line x1="662" y1="59" x2="704" y2="59" stroke="#94a3b8" stroke-width="1.6"/>
+      <polygon points="704,59 696,55 696,63" fill="#94a3b8"/>
+
+      <path d="M570,84 L570,104 L342,104 L342,88" fill="none" stroke="#b45309" stroke-width="1.4" stroke-dasharray="4 3"/>
+      <polygon points="342,88 338,96 346,96" fill="#b45309"/>
+      <text x="456" y="120" font-size="9.5" fill="#b45309" text-anchor="middle">跑完一个再回到 getTask，直到返回 null 才退出（不为空不退出）</text>
+
+      <line x1="24" y1="136" x2="876" y2="136" stroke="#e2e8f0"/>
+
+      <text x="24" y="158" font-size="12.5" fill="#334155" font-weight="700">下：getTask 内部的「两轮才退出」—— 一轮拿不到不算，两轮才算</text>
+
+      <rect x="24" y="172" width="404" height="150" rx="10" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="42" y="194" font-size="10.5" fill="#b45309" font-weight="700">第 1 轮：timedOut = false</text>
+      <text x="42" y="216" font-size="10" fill="#475569">timed = true（超过核心数）</text>
+      <text x="42" y="236" font-size="10" fill="#475569">→ poll(keepAliveTime) 阻塞 60 秒</text>
+      <text x="42" y="256" font-size="10" fill="#475569">→ 返回 null</text>
+      <text x="42" y="276" font-size="10" fill="#be123c" font-weight="700">→ 只执行 timedOut = true，然后 continue</text>
+      <text x="42" y="300" font-size="9.5" fill="#94a3b8">关键：此时绝不能再 poll 一次，否则又白等 60 秒</text>
+
+      <rect x="452" y="172" width="424" height="150" rx="10" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="470" y="194" font-size="10.5" fill="#047857" font-weight="700">第 2 轮：timedOut = true</text>
+      <text x="470" y="216" font-size="10" fill="#475569">重新读 ctl（可能这一瞬间又被 offer 了任务）</text>
+      <text x="470" y="236" font-size="10" fill="#475569">(timed &amp;&amp; timedOut) 成立 → CAS 递减 workerCount</text>
+      <text x="470" y="256" font-size="10" fill="#475569">CAS 成功 → return null → worker 退出</text>
+      <text x="470" y="276" font-size="10" fill="#be123c" font-weight="700">CAS 失败（别人也在退）→ continue，从头再来</text>
+      <text x="470" y="300" font-size="9.5" fill="#94a3b8">同时 guarantee：wc &gt; 1 或队列已空，避免最后一个 worker 走掉</text>
+
+      <text x="24" y="340" font-size="10" fill="#94a3b8">两轮的意义：poll 超时的那一刻世界可能刚变（新任务入队 / 池被关闭），必须用最新 ctl 再判一次，否则会丢掉刚入队的任务</text>
+    </svg>
+    <figcaption><b>图 6</b>　上：worker 的生死循环；下：<code>timedOut</code> 只是个标记，真正退出发生在下一轮——这是 <code>getTask()</code> 里 <code>for(;;)</code> 存在的唯一理由</figcaption>
+  </figure>
+
+  <h3>三个参数陷阱，全部有源码依据</h3>
+
+  <div class="trap"><b>陷阱 1：<code class="inl">allowCoreThreadTimeOut(true)</code> 配 <code class="inl">keepAliveTime = 0</code> 直接抛异常</b>
+<pre><code>public void allowCoreThreadTimeOut(boolean value) {
+    if (value &amp;&amp; keepAliveTime &lt;= 0)
+        throw new IllegalArgumentException("Core threads must have nonzero keep alive times");
+    ...
+}</code></pre>
+  而 <code class="inl">Executors.newFixedThreadPool</code> 的默认 <code class="inl">keepAliveTime</code> 恰好是 <strong>0</strong>。所以「我想让核心线程也能回收」这个需求，在 <code class="inl">newFixedThreadPool</code> 上必须先把 keepAlive 改成非 0 才能开。</div>
+
+  <div class="trap"><b>陷阱 2：<code class="inl">keepAliveTime</code> 内部一律折算成纳秒，单位写错 1000 倍</b>
+<pre><code>long keepAliveTime = unit.toNanos(time);   // 存进字段时统一成纳秒
+// 于是 1 秒 = 1e9 纳秒；把 SECONDS 误写成 MILLISECONDS，就是 1 秒变 1 毫秒</code></pre>
+  这个字段常从配置中心读。<code class="inl">keepAliveTime=60</code> 配 <code class="inl">SECONDS</code> 是 60 秒，配 <code class="inl">MILLISECONDS</code> 是 60 毫秒——后者会让每个空闲 worker 每 60ms 醒一次、判断、退出，线程反复创建销毁，CPU 的 <code class="inl">sys</code> 时间莫名升高。真实事故，不是理论。</div>
+
+  <div class="warn"><b>陷阱 3：<code class="inl">setCorePoolSize</code> 调大时不会无条件补线程</b>
+<pre><code>int delta = corePoolSize - this.corePoolSize;
+this.corePoolSize = corePoolSize;
+if (workerCountOf(ctl.get()) &gt; corePoolSize) interruptIdleWorkers();
+else if (delta &gt; 0) {
+    int k = Math.min(delta, workQueue.size());     // ★ 上限是「队列里积压的任务数」
+    while (k-- &gt; 0 &amp;&amp; addWorker(null, true)) {
+        if (workQueue.isEmpty()) break;
+    }
+}</code></pre>
+  也就是说：队列空的时候把 core 从 10 调到 100，线程数<strong>一个都不会变</strong>，要等任务进来才逐个创建。运维平台「我扩容了但没生效」十有八九是这个。</div>
+
+  <h3>动态调参的正确姿势</h3>
+<pre><code>// 真正可运维的线程池：参数可从配置中心热更，且改完能观测到
+public class ResizablePool extends ThreadPoolExecutor {
+    public ResizablePool(int core, int max, long keepAliveSec, BlockingQueue&lt;Runnable&gt; q) {
+        super(core, max, keepAliveSec, TimeUnit.SECONDS, q, NAMED_FACTORY,
+              new CallerRunsPolicy());
+    }
+    // 顺序很重要：先扩 max，再扩 core；缩的时候反过来
+    public void resize(int core, int max) {
+        if (max &gt;= core) {
+            setMaximumPoolSize(max);      // 扩 max 先
+            setCorePoolSize(core);        // 再扩 core
+        } else {
+            setCorePoolSize(core);        // 缩 core 先
+            setMaximumPoolSize(max);      // 再缩 max
+        }
+    }
+}</code></pre>
+  <p>顺序为什么不能反：<code class="inl">setCorePoolSize</code> 里有一句 <code class="inl">if (maximumPoolSize &lt; corePoolSize) throw new IllegalArgumentException()</code>。先扩 core 到 100 而 max 还是 80，直接抛异常。缩的时候反过来同理。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L5</span><em>异步编排的地基</em></div>
+  <h2>CompletableFuture：依赖栈、回调逆序、四种线程归属</h2>
+  <p>99% 的人能说出 <code class="inl">thenApply</code> 和 <code class="inl">thenApplyAsync</code> 的区别，但说不清「<strong>thenApply 到底在哪个线程上跑</strong>」。这个问题的答案不是一句「当前线程」，而是一个分四种情况的表。而这张表来自它的数据结构：一个字段 <code class="inl">result</code> 加一个<strong>栈</strong>。</p>
+
+<pre><code>volatile Object result;      // 结果；null = 未完成，AltResult 包装异常或 null 值
+volatile Completion stack;   // 依赖动作的 Treiber 栈（无锁头插）
+
+abstract static class Completion extends ForkJoinTask&lt;Void&gt;
+        implements Runnable, AsynchronousCompletionTask {
+    volatile Completion next;   // 栈的 next 指针
+}</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 900 296" role="img" aria-label="CompletableFuture 的 result 与 Completion 依赖栈">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">一个 future 的两个字段：结果 + 依赖动作栈（后注册的在前）</text>
+
+      <rect x="24" y="40" width="238" height="120" rx="10" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="44" y="62" font-size="11" fill="#0369a1" font-weight="700">CompletableFuture</text>
+      <line x1="44" y1="70" x2="242" y2="70" stroke="#bcdcf2"/>
+      <text x="44" y="92" font-size="10" fill="#475569">result</text>
+      <text x="230" y="92" font-size="10" fill="#94a3b8" text-anchor="end">null</text>
+      <text x="44" y="116" font-size="10" fill="#475569">stack</text>
+      <text x="230" y="116" font-size="10" fill="#94a3b8" text-anchor="end">c3</text>
+      <text x="44" y="144" font-size="9.2" fill="#94a3b8">未完成时回调全部挂在这里，完成时一次弹空</text>
+
+      <line x1="264" y1="112" x2="316" y2="90" stroke="#0369a1" stroke-width="1.6"/>
+      <polygon points="316,90 307,89 310,97" fill="#0369a1"/>
+
+      <rect x="320" y="56" width="150" height="52" rx="8" fill="#fff" stroke="#0369a1"/>
+      <text x="395" y="76" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">c3  thenApply③</text>
+      <text x="395" y="94" font-size="9" fill="#94a3b8" text-anchor="middle">最后注册 → 栈顶</text>
+
+      <rect x="500" y="56" width="150" height="52" rx="8" fill="#fff" stroke="#bcdcf2"/>
+      <text x="575" y="76" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">c2  thenApply②</text>
+      <text x="575" y="94" font-size="9" fill="#94a3b8" text-anchor="middle">next →</text>
+
+      <rect x="680" y="56" width="150" height="52" rx="8" fill="#fff" stroke="#bcdcf2"/>
+      <text x="755" y="76" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">c1  thenApply①</text>
+      <text x="755" y="94" font-size="9" fill="#94a3b8" text-anchor="middle">next = null</text>
+
+      <line x1="470" y1="82" x2="496" y2="82" stroke="#94a3b8" stroke-width="1.4"/>
+      <polygon points="496,82 489,79 489,85" fill="#94a3b8"/>
+      <line x1="650" y1="82" x2="676" y2="82" stroke="#94a3b8" stroke-width="1.4"/>
+      <polygon points="676,82 669,79 669,85" fill="#94a3b8"/>
+
+      <text x="24" y="192" font-size="10.5" fill="#475569" font-weight="700">注册顺序：① → ② → ③（头插，所以栈顶是最新的）</text>
+      <text x="24" y="212" font-size="10.5" fill="#be123c" font-weight="700">触发顺序：③ → ② → ①（postComplete 从头弹，LIFO）</text>
+      <text x="24" y="232" font-size="10" fill="#64748b">这一步「逆序」是可观测的：同一个 future 上挂三个带副作用的回调，执行顺序与书写顺序相反。面试时提到这点，基本可以结束这道题了</text>
+
+      <rect x="24" y="246" width="852" height="42" rx="8" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="263" font-size="10" fill="#334155">postComplete()：while ((h = stack) != null) { if (stack == h &amp;&amp; STACK.compareAndSet(this, h, h.next)) { for (;;) { h.tryFire(NESTED); ... } } }</text>
+      <text x="42" y="280" font-size="9.5" fill="#94a3b8">用 CAS 从栈顶摘一个节点，然后沿着它的 next 继续（NESTED 模式），所以一条链上的回调会「深度优先」全部跑完，不会来回弹栈</text>
+    </svg>
+    <figcaption><b>图 7</b>　依赖动作挂在 Treiber 栈上：注册即入栈（无锁头插），完成即弹栈（LIFO）。这张图解释了「回调逆序」这个冷门现象</figcaption>
+  </figure>
+
+  <h3>四种线程归属，一张表说清</h3>
+  <table>
+    <tr><th>写法</th><th>上游是否已完成</th><th>回调在哪个线程跑</th><th>常见后果</th></tr>
+    <tr><td rowspan="2"><code>thenApply(fn)</code></td><td><strong>已完成</strong></td><td><strong>调用 <code>thenApply</code> 的那个线程</strong>（同步执行）</td><td>链路变长 → 栈更深；在 EventLoop 里调用会阻塞 IO</td></tr>
+    <tr><td>未完成</td><td><strong>完成上游的那个线程</strong>（可能是业务线程、IO 线程、commonPool worker）</td><td>你以为是 A 线程，实际在 B 线程，ThreadLocal 全丢</td></tr>
+    <tr><td><code>thenApplyAsync(fn)</code></td><td>无关</td><td><code>ForkJoinPool.commonPool()</code>；若并行度 ≤ 1 则<strong>每次新建线程</strong></td><td>commonPool 被阻塞任务占满 → 全 JVM 的 parallelStream 一起饿死</td></tr>
+    <tr><td><code>thenApplyAsync(fn, pool)</code></td><td>无关</td><td>你给的池</td><td><strong>唯一可控的写法</strong>，生产代码应该只用这一种</td></tr>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 900 318" role="img" aria-label="四种写法下回调最终在哪个线程执行">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">同一条 thenApply，四种落点；只有最后一行是你能确定的</text>
+
+      <rect x="24" y="34" width="336" height="54" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="42" y="54" font-size="10.5" fill="#b45309" font-weight="700">① 上游已完成 + thenApply</text>
+      <text x="42" y="74" font-size="9.8" fill="#64748b">调用者线程直接同步执行 fn</text>
+
+      <line x1="362" y1="61" x2="404" y2="61" stroke="#b45309" stroke-width="1.5"/>
+      <polygon points="404,61 396,57 396,65" fill="#b45309"/>
+
+      <rect x="408" y="34" width="216" height="54" rx="8" fill="#fff" stroke="#f4dcc2"/>
+      <text x="516" y="54" font-size="10.5" fill="#b45309" font-weight="700" text-anchor="middle">当前线程（同步）</text>
+      <text x="516" y="74" font-size="9.5" fill="#94a3b8" text-anchor="middle">main / 调用方</text>
+
+      <text x="640" y="56" font-size="9.8" fill="#94a3b8">风险：层层嵌套 thenApply</text>
+      <text x="640" y="74" font-size="9.8" fill="#94a3b8">会让调用栈线性变深</text>
+
+      <rect x="24" y="100" width="336" height="54" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="42" y="120" font-size="10.5" fill="#0369a1" font-weight="700">② 上游未完成 + thenApply</text>
+      <text x="42" y="140" font-size="9.8" fill="#64748b">回调被 push 到 stack，等上游 complete 时触发</text>
+
+      <line x1="362" y1="127" x2="404" y2="127" stroke="#0369a1" stroke-width="1.5"/>
+      <polygon points="404,127 396,123 396,131" fill="#0369a1"/>
+
+      <rect x="408" y="100" width="216" height="54" rx="8" fill="#fff" stroke="#bcdcf2"/>
+      <text x="516" y="120" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">完成上游的那个线程</text>
+      <text x="516" y="140" font-size="9.5" fill="#94a3b8" text-anchor="middle">不可预知</text>
+
+      <text x="640" y="122" font-size="9.8" fill="#94a3b8">风险：ThreadLocal / MDC</text>
+      <text x="640" y="140" font-size="9.8" fill="#94a3b8">在这里静默丢失</text>
+
+      <rect x="24" y="166" width="336" height="54" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="186" font-size="10.5" fill="#be123c" font-weight="700">③ thenApplyAsync(fn)</text>
+      <text x="42" y="206" font-size="9.8" fill="#64748b">默认 commonPool；并行度 ≤ 1 时 new Thread</text>
+
+      <line x1="362" y1="193" x2="404" y2="193" stroke="#be123c" stroke-width="1.5"/>
+      <polygon points="404,193 396,189 396,197" fill="#be123c"/>
+
+      <rect x="408" y="166" width="216" height="54" rx="8" fill="#fff" stroke="#f5ccd4"/>
+      <text x="516" y="186" font-size="10.5" fill="#be123c" font-weight="700" text-anchor="middle">ForkJoinPool.commonPool</text>
+      <text x="516" y="206" font-size="9.5" fill="#94a3b8" text-anchor="middle">全局共享，CPU 核数 - 1</text>
+
+      <text x="640" y="188" font-size="9.8" fill="#be123c">风险：全 JVM 共用一个池</text>
+      <text x="640" y="206" font-size="9.8" fill="#94a3b8">一段阻塞代码能拖死所有人</text>
+
+      <rect x="24" y="232" width="336" height="54" rx="8" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="42" y="252" font-size="10.5" fill="#047857" font-weight="700">④ thenApplyAsync(fn, myPool)</text>
+      <text x="42" y="272" font-size="9.8" fill="#64748b">显式指定执行器</text>
+
+      <line x1="362" y1="259" x2="404" y2="259" stroke="#047857" stroke-width="1.5"/>
+      <polygon points="404,259 396,255 396,263" fill="#047857"/>
+
+      <rect x="408" y="232" width="216" height="54" rx="8" fill="#fff" stroke="#cceddc"/>
+      <text x="516" y="252" font-size="10.5" fill="#047857" font-weight="700" text-anchor="middle">你指定的线程池</text>
+      <text x="516" y="272" font-size="9.5" fill="#94a3b8" text-anchor="middle">可限流、可隔离、可监控</text>
+
+      <text x="640" y="254" font-size="9.8" fill="#047857" font-weight="700">生产代码只该用这一种</text>
+      <text x="640" y="272" font-size="9.8" fill="#94a3b8">拒绝策略与队列都在你手里</text>
+
+      <line x1="24" y1="302" x2="876" y2="302" stroke="#e2e8f0"/>
+      <text x="24" y="316" font-size="9.8" fill="#94a3b8">判据来自源码：uniApplyStage 里若 d.result == null 就入栈，否则立刻 e.execute(...)，而 SYNC 模式下 e 就是调用者线程</text>
+    </svg>
+    <figcaption><b>图 8</b>　「thenApply 在哪个线程跑」没有单一答案，只有这四行。答出第 ② 行（完成上游的线程）才叫及格</figcaption>
+  </figure>
+
+  <h3>allOf 到底会不会抛异常</h3>
+  <p>网上流传「<code class="inl">allOf</code> 不会传播异常，必须逐个 <code class="inl">join</code>」——这句话<strong>只说对了一半，而且错的那一半更危险</strong>。</p>
+<pre><code>// 源码：allOf 递归建一棵二叉树，每个节点是个 BiRelay
+static CompletableFuture&lt;Void&gt; andTree(CompletableFuture&lt;?&gt;[] cfs, int lo, int hi) {
+    ...
+    if ((r = a.result) == null || (s = b.result) == null)
+        a.bipush(b, new BiRelay&lt;&gt;(d, a, b));       // 两个都完成才触发
+    else if (r 是异常 || s 是异常)
+        d.result = encodeThrowable(x, z);           // 只有一个异常被保留
+    else d.result = NIL;
+}</code></pre>
+  <ul>
+    <li><strong>会抛</strong>：<code class="inl">allOf(...).join()</code> 在上游有异常时确实抛 <code class="inl">CompletionException</code>。</li>
+    <li><strong>但不是快速失败</strong>：<code class="inl">BiRelay</code> 要等左右两棵子树<strong>都完成</strong>才 fire。所以第 1 个任务 100ms 就挂了，你仍然要等全部 10 个任务跑完才能拿到异常——这就是它的真实语义。</li>
+    <li><strong>而且只留一个异常</strong>：多个失败时你只能看到其中一个，其余被丢弃。</li>
+  </ul>
+  <div class="warn"><b>所以正确写法是</b>：如果业务要求「任一失败立刻返回」，<code class="inl">allOf</code> 不满足，得用「<code class="inl">anyOf</code> + 自建失败信号」或者给每个 future 挂 <code class="inl">whenComplete</code> 主动 set 一个共享的失败 future。这个追问能答出来，说明你是真读过源码而不是抄博客。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L6</span><em>工作窃取</em></div>
+  <h2>ForkJoinPool：为什么它敢用「双端队列」</h2>
+  <p>普通线程池是「一个队列，所有线程抢」，ForkJoinPool 是「每个线程一个队列，各干各的，闲了去偷」。这一句话的差别，全在队列的<strong>两端</strong>上。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="ForkJoinPool 的双端队列与工作窃取方向">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">每个 worker 一个双端队列：主人从 top 端进出，小偷从 base 端拿</text>
+
+      <text x="24" y="52" font-size="10.5" fill="#0369a1" font-weight="700">Worker A 的队列</text>
+      <rect x="180" y="36" width="480" height="40" rx="6" fill="#eff6fc" stroke="#bcdcf2"/>
+      <line x1="240" y1="36" x2="240" y2="76" stroke="#bcdcf2"/>
+      <line x1="360" y1="36" x2="360" y2="76" stroke="#bcdcf2"/>
+      <line x1="480" y1="36" x2="480" y2="76" stroke="#bcdcf2"/>
+      <line x1="600" y1="36" x2="600" y2="76" stroke="#bcdcf2"/>
+      <text x="210" y="61" font-size="9.5" fill="#94a3b8" text-anchor="middle">t4</text>
+      <text x="300" y="61" font-size="9.5" fill="#94a3b8" text-anchor="middle">t3</text>
+      <text x="420" y="61" font-size="9.5" fill="#94a3b8" text-anchor="middle">t2</text>
+      <text x="540" y="61" font-size="9.5" fill="#94a3b8" text-anchor="middle">t1</text>
+      <text x="630" y="61" font-size="9.5" fill="#475569" text-anchor="middle">新任务</text>
+
+      <text x="186" y="94" font-size="9.5" fill="#047857" font-weight="700">base（最老的）</text>
+      <text x="654" y="94" font-size="9.5" fill="#0369a1" font-weight="700">top（最新的）</text>
+
+      <line x1="660" y1="56" x2="712" y2="56" stroke="#0369a1" stroke-width="1.6"/>
+      <polygon points="712,56 704,52 704,60" fill="#0369a1"/>
+      <text x="720" y="52" font-size="10" fill="#0369a1" font-weight="700">A 自己 push / pop</text>
+      <text x="720" y="68" font-size="9.2" fill="#64748b">LIFO，缓存友好</text>
+
+      <line x1="124" y1="56" x2="172" y2="56" stroke="#047857" stroke-width="1.6"/>
+      <polygon points="172,56 164,52 164,60" fill="#047857"/>
+
+      <text x="24" y="132" font-size="10.5" fill="#be123c" font-weight="700">Worker B 的队列</text>
+      <rect x="180" y="116" width="480" height="40" rx="6" fill="#fff8f0" stroke="#f4dcc2"/>
+      <line x1="420" y1="116" x2="420" y2="156" stroke="#f4dcc2"/>
+      <text x="240" y="141" font-size="9.5" fill="#94a3b8" text-anchor="middle">（空）</text>
+      <text x="510" y="141" font-size="9.5" fill="#475569" text-anchor="middle">t1'</text>
+      <text x="630" y="141" font-size="9.5" fill="#475569" text-anchor="middle">新任务</text>
+
+      <line x1="176" y1="136" x2="240" y2="96" stroke="#be123c" stroke-width="1.5" stroke-dasharray="5 3"/>
+      <polygon points="240,96 231,99 236,105" fill="#be123c"/>
+      <text x="24" y="196" font-size="10" fill="#be123c" font-weight="700">B 空了 → 去偷 A 的 base</text>
+      <text x="24" y="212" font-size="9.2" fill="#64748b">偷最老的，FIFO 语义</text>
+
+      <rect x="24" y="230" width="852" height="52" rx="8" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="250" font-size="10" fill="#334155">为什么主人 LIFO、小偷 FIFO：主人取最新的任务，数据大概率还在 CPU 缓存里；小偷取最老的，与主人形成「一前一后」的互补，减少争抢</text>
+      <text x="42" y="270" font-size="9.8" fill="#94a3b8">代价：base/top 是两个独立的 int，steal 时用 CAS 只动 base；owner 只动 top —— 这就是它比「一个共享队列 + 全局锁」快一个数量级的原因</text>
+    </svg>
+    <figcaption><b>图 9</b>　双端队列是工作窃取的全部秘密：两端由不同角色操作，把竞争降到接近零</figcaption>
+  </figure>
+
+  <h3>三个必须知道的数字与陷阱</h3>
+  <table>
+    <tr><th>项</th><th>值 / 行为</th><th>意味着什么</th></tr>
+    <tr><td>commonPool 并行度</td><td><code>Math.max(1, CPU 核数 - 1)</code></td><td>8 核 = 7 个 worker。7 个阻塞任务就能让全 JVM 的 <code>parallelStream</code> 卡死</td></tr>
+    <tr><td>并行度 ≤ 1 时</td><td>每个任务 <code>new Thread()</code></td><td>单核机器上 <code>thenApplyAsync</code> 变成「每任务一线程」，比同步还慢</td></tr>
+    <tr><td>分治阈值</td><td><code>Arrays.parallelSort</code> 是 8192</td><td>小于 8192 个元素直接单线程排——切分开销大于收益</td></tr>
+  </table>
+
+<pre><code>// 反例：在 commonPool 里跑阻塞 IO，一个池拖死整个 JVM
+list.parallelStream().map(id -&gt; httpGet(id)).collect(toList());   // 每个 httpGet 50ms
+// 7 个 worker 全被占住 → 同一个 JVM 里所有 parallelStream、所有 thenApplyAsync 一起排队
+
+// 正解 1：换专用池
+ForkJoinPool pool = new ForkJoinPool(32);
+pool.submit(() -&gt; list.parallelStream().map(...).collect(toList())).get();
+
+// 正解 2：阻塞任务声明为 ManagedBlocker，让池子临时扩员
+ForkJoinPool.managedBlock(new ForkJoinPool.ManagedBlocker() {
+    public boolean block() { result = httpGet(id); return true; }
+    public boolean isReleasable() { return result != null; }
+});</code></pre>
+
+  <div class="oneline"><b>面试口径</b>「ForkJoinPool 适合<strong>可切分、CPU 密集、任务粒度不小于 8192</strong> 的场景。它不适合阻塞 IO——因为 worker 被阻塞时不会自动补人（除非用 <code class="inl">ManagedBlocker</code>），并行度会被永久吃掉。而 <code class="inl">CompletableFuture</code> 的 <code class="inl">Async</code> 系列默认就用这个池，这就是为什么生产代码必须显式传执行器。」</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L7</span><em>编排实战</em></div>
+  <h2>并行调三个下游：从 580 ms 到 200 ms，以及超时的真相</h2>
+  <p>真实场景：下单页要同时拿<strong>库存（60 ms）、价格（220 ms）、优惠券（300 ms 偶尔更慢）</strong>。串行等就是 580 ms，而用户的可忍受上限通常按 200 ms 算。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 344" role="img" aria-label="串行、并行、并行加超时三种编排的耗时对比">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">上：时间轴。三个下游并行发起，总耗时 = 最慢的那个</text>
+
+      <text x="24" y="60" font-size="10.5" fill="#475569">库存 60ms</text>
+      <rect x="150" y="46" width="136" height="22" rx="4" fill="#a7f3d0"/>
+      <text x="218" y="61" font-size="9.5" fill="#047857" text-anchor="middle" font-weight="700">60</text>
+
+      <text x="24" y="96" font-size="10.5" fill="#475569">价格 220ms</text>
+      <rect x="150" y="82" width="499" height="22" rx="4" fill="#a7f3d0"/>
+      <text x="400" y="97" font-size="9.5" fill="#047857" text-anchor="middle" font-weight="700">220</text>
+
+      <text x="24" y="132" font-size="10.5" fill="#475569">优惠券 300ms</text>
+      <rect x="150" y="118" width="453" height="22" rx="4" fill="#bcdcf2"/>
+      <text x="376" y="133" font-size="9.5" fill="#0369a1" text-anchor="middle" font-weight="700">只等到 200</text>
+      <rect x="603" y="118" width="227" height="22" rx="4" fill="#fed7aa" stroke="#f4dcc2" stroke-dasharray="4 3"/>
+      <text x="716" y="133" font-size="9.5" fill="#b45309" text-anchor="middle">线程仍在跑，没人中断它</text>
+
+      <line x1="603" y1="40" x2="603" y2="146" stroke="#be123c" stroke-dasharray="4 3" stroke-width="1.2"/>
+      <text x="603" y="162" font-size="9.5" fill="#be123c" text-anchor="middle" font-weight="700">orTimeout(200ms)</text>
+
+      <line x1="150" y1="140" x2="830" y2="140" stroke="#cbd5e1"/>
+      <line x1="150" y1="140" x2="150" y2="146" stroke="#cbd5e1"/>
+      <line x1="263" y1="140" x2="263" y2="146" stroke="#cbd5e1"/>
+      <line x1="376" y1="140" x2="376" y2="146" stroke="#cbd5e1"/>
+      <line x1="490" y1="140" x2="490" y2="146" stroke="#cbd5e1"/>
+      <line x1="716" y1="140" x2="716" y2="146" stroke="#cbd5e1"/>
+      <line x1="830" y1="140" x2="830" y2="146" stroke="#cbd5e1"/>
+      <text x="150" y="158" font-size="9" fill="#94a3b8" text-anchor="middle">0</text>
+      <text x="263" y="158" font-size="9" fill="#94a3b8" text-anchor="middle">50</text>
+      <text x="376" y="158" font-size="9" fill="#94a3b8" text-anchor="middle">100</text>
+      <text x="490" y="158" font-size="9" fill="#94a3b8" text-anchor="middle">150</text>
+      <text x="716" y="158" font-size="9" fill="#94a3b8" text-anchor="middle">250</text>
+      <text x="830" y="158" font-size="9" fill="#94a3b8" text-anchor="middle">300 ms</text>
+
+      <line x1="24" y1="176" x2="876" y2="176" stroke="#e2e8f0"/>
+
+      <text x="24" y="198" font-size="10.5" fill="#475569">串行</text>
+      <rect x="150" y="186" width="609" height="18" rx="3" fill="#fecdd3"/>
+      <text x="768" y="200" font-size="10" fill="#be123c" font-weight="700">580 ms</text>
+
+      <text x="24" y="228" font-size="10.5" fill="#475569">并行 allOf</text>
+      <rect x="150" y="216" width="315" height="18" rx="3" fill="#fed7aa"/>
+      <text x="474" y="230" font-size="10" fill="#b45309" font-weight="700">300 ms</text>
+
+      <text x="24" y="258" font-size="10.5" fill="#475569">并行 + 超时</text>
+      <rect x="150" y="246" width="210" height="18" rx="3" fill="#a7f3d0"/>
+      <text x="369" y="260" font-size="10" fill="#047857" font-weight="700">200 ms（最慢的可控了）</text>
+
+      <text x="24" y="292" font-size="10" fill="#64748b">并行能省掉的是「等待的叠加」，省不掉「最慢的那个」。所以真正决定 P99 的永远是慢依赖 —— 这就是必须有超时的原因</text>
+      <text x="24" y="312" font-size="10" fill="#be123c">关键真相：orTimeout 只是让 future 提前以 TimeoutException 完成，底层任务不会被中断，仍在占着线程和下游连接</text>
+      <text x="24" y="332" font-size="10" fill="#94a3b8">所以「超时 + 重试」会让线程占用翻倍：请求 200ms 就返回了，但优惠券的线程还在跑到 300ms 甚至 5s</text>
+    </svg>
+    <figcaption><b>图 10</b>　并行只解决「叠加」，超时只解决「等待上限」，两者都不解决「慢下游本身」——后者只能靠熔断和降级</figcaption>
+  </figure>
+
+  <h3>可落地的写法（每行都有理由）</h3>
+<pre><code>// 三个下游各自一个池：慢的不会拖累快的（隔离）
+ExecutorService inv  = pool("inv",  32);
+ExecutorService price = pool("price", 32);
+ExecutorService promo = pool("promo", 16);
+
+public OrderView build(long skuId, long userId) {
+    // ① 必须显式传执行器。不传就走 commonPool，全 JVM 共享 7 个线程
+    CompletableFuture&lt;Stock&gt; f1 = CompletableFuture
+            .supplyAsync(() -&gt; invClient.get(skuId), inv)
+            .orTimeout(150, TimeUnit.MILLISECONDS)
+            .exceptionally(e -&gt; Stock.UNKNOWN);          // ② 降级成「库存未知」，不阻断下单
+
+    CompletableFuture&lt;Price&gt; f2 = CompletableFuture
+            .supplyAsync(() -&gt; priceClient.get(skuId), price)
+            .orTimeout(180, TimeUnit.MILLISECONDS)
+            .exceptionally(e -&gt; Price.CACHED);           // ③ 降级到本地缓存价
+
+    CompletableFuture&lt;Coupon&gt; f3 = CompletableFuture
+            .supplyAsync(() -&gt; promoClient.best(userId, skuId), promo)
+            .orTimeout(120, TimeUnit.MILLISECONDS)
+            .exceptionally(e -&gt; Coupon.NONE);            // ④ 优惠券拿不到就当没有
+
+    // ⑤ join 不会抛受检异常；三个都已 exceptionally 兜底，这里不会抛
+    CompletableFuture.allOf(f1, f2, f3).join();
+    return new OrderView(f1.join(), f2.join(), f3.join());
+}</code></pre>
+
+  <p>这段代码里五个决策，每个都能被追问：</p>
+  <table>
+    <tr><th>决策</th><th>为什么</th><th>不这么做会怎样</th></tr>
+    <tr><td>每个下游一个池</td><td>慢下游只吃自己的线程</td><td>优惠券慢的时候，库存查询也被堵在同一条队列里</td></tr>
+    <tr><td>显式传执行器</td><td>commonPool 并行度 7，且全局共享</td><td>一段阻塞代码影响同 JVM 所有 <code>Async</code> 调用与 <code>parallelStream</code></td></tr>
+    <tr><td><code>orTimeout</code></td><td>给每个依赖设独立上限</td><td>总耗时 = 最慢依赖的无限长尾</td></tr>
+    <tr><td><code>exceptionally</code> 降级</td><td>单点失败不该阻断主流程</td><td><code>allOf</code> 等全部完成后抛异常，整页 500</td></tr>
+    <tr><td><code>allOf().join()</code></td><td>等待全部（已兜底）</td><td>少写一个 join，可能拿到未完成的值</td></tr>
+  </table>
+
+  <h3>超时之后，那个线程去哪了</h3>
+  <p>这是本题的分水岭。看 <code class="inl">orTimeout</code> 的源码，它只做了一件事：起一个定时任务，到点把 <strong>future 标记为异常完成</strong>。</p>
+<pre><code>public CompletableFuture&lt;T&gt; orTimeout(long timeout, TimeUnit unit) {
+    if (unit == null) throw new NullPointerException();
+    if (result == null)
+        whenComplete(new Canceller(Delayer.delay(new Timeout(this), timeout, unit)));
+    return this;                      // ★ 返回 this，不是新对象
+}
+static final class Timeout implements Runnable {
+    public void run() {
+        if (f != null &amp;&amp; !f.isDone())
+            f.completeExceptionally(new TimeoutException());   // ★ 只改状态，不 interrupt
+    }
+}</code></pre>
+  <div class="trap"><b>由此推出的三个生产事故</b>
+  <ol>
+    <li><strong>线程被「僵尸请求」占满</strong>：接口 200ms 就返回了，但下游调用还在跑 5s。QPS 1000 时，5 秒内积压 5000 个还在跑的任务——池子看起来「活跃线程数 100%」，但你早就超时返回了。这就是「超时了但线程池还是满」的根因。</li>
+    <li><strong>写操作超时 ≠ 没执行</strong>：下单接口 200ms 超时返回失败，下游其实 800ms 后成功了。用户重试 → 重复下单。<strong>超时只对读接口安全，写接口必须配幂等键</strong>（第 18 期讲过）。</li>
+    <li><strong>重试放大</strong>：超时 + 3 次重试 = 一个用户请求占用 4 个下游连接。下游只是慢了 10%，被你重试打成雪崩。</li>
+  </ol></div>
+
+  <p>要真正「取消」，只能靠下游客户端自己的读超时（HTTP client 的 <code class="inl">readTimeout</code>、gRPC 的 <code class="inl">deadline</code>），让连接层主动断开。<strong><code class="inl">orTimeout</code> 是给你自己看的，不是给下游看的。</strong></p>
+
+  <h3>上下文传递：TaskDecorator 是唯一干净的解法</h3>
+<pre><code>// 问题：MDC / TraceId 存在 ThreadLocal 里，切线程就丢
+log.info("before");                                  // traceId=abc
+CompletableFuture.runAsync(() -&gt; log.info("in"));     // traceId=null ← 丢了
+
+// 解法：装饰每一个提交的任务，把上下文搬过去再搬回来
+public class MdcDecorator implements TaskDecorator {
+    @Override
+    public Runnable decorate(Runnable r) {
+        Map&lt;String, String&gt; ctx = MDC.getCopyOfContextMap();   // 提交线程的上下文
+        return () -&gt; {
+            Map&lt;String, String&gt; old = MDC.getCopyOfContextMap();
+            try {
+                if (ctx != null) MDC.setContextMap(ctx);
+                r.run();
+            } finally {
+                if (old != null) MDC.setContextMap(old);       // ★ 必须还原
+                else MDC.clear();                              // ★ 池化线程会复用，不还原就是脏数据
+            }
+        };
+    }
+}
+// Spring 里一行接上
+executor.setTaskDecorator(new MdcDecorator());</code></pre>
+  <div class="warn"><b>最容易漏的那一行</b>是 <code class="inl">finally</code> 里的还原。线程池的线程是复用的，如果任务结束时不清 MDC，下一个任务会带着上一个请求的 traceId 打日志——排查线上问题时看到「两个不同用户的日志串在一个 traceId 下」，九成是这个原因。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L8</span><em>过载与下线</em></div>
+  <h2>拒绝策略：四种行为，一个反压回路</h2>
+  <p>拒绝策略只有在「队列有界」时才会被触发（图 5 已经证明）。一旦触发，四种策略的差别不是「优雅 vs 粗暴」，而是<strong>「谁来承担过载」</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 336" role="img" aria-label="四种拒绝策略的落点与 CallerRuns 的反压回路">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">请求走完三道闸门之后，四种策略把它推向四个方向</text>
+
+      <rect x="24" y="44" width="132" height="52" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="90" y="66" font-size="10.5" fill="#334155" font-weight="700" text-anchor="middle">提交线程</text>
+      <text x="90" y="84" font-size="9.2" fill="#94a3b8" text-anchor="middle">Tomcat / RPC</text>
+
+      <rect x="192" y="44" width="120" height="52" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="252" y="66" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">核心线程</text>
+      <text x="252" y="84" font-size="9.2" fill="#94a3b8" text-anchor="middle">已满</text>
+
+      <rect x="348" y="44" width="120" height="52" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="408" y="66" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">队列</text>
+      <text x="408" y="84" font-size="9.2" fill="#94a3b8" text-anchor="middle">已满</text>
+
+      <rect x="504" y="44" width="120" height="52" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="564" y="66" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">扩到 max</text>
+      <text x="564" y="84" font-size="9.2" fill="#94a3b8" text-anchor="middle">已满</text>
+
+      <rect x="660" y="44" width="132" height="52" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="726" y="66" font-size="10.5" fill="#be123c" font-weight="700" text-anchor="middle">reject()</text>
+      <text x="726" y="84" font-size="9.2" fill="#94a3b8" text-anchor="middle">四种分叉</text>
+
+      <line x1="158" y1="70" x2="188" y2="70" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="188,70 181,66 181,74" fill="#94a3b8"/>
+      <line x1="314" y1="70" x2="344" y2="70" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="344,70 337,66 337,74" fill="#94a3b8"/>
+      <line x1="470" y1="70" x2="500" y2="70" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="500,70 493,66 493,74" fill="#94a3b8"/>
+      <line x1="626" y1="70" x2="656" y2="70" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="656,70 649,66 649,74" fill="#94a3b8"/>
+
+      <rect x="24" y="140" width="204" height="76" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="160" font-size="10.5" fill="#be123c" font-weight="700">AbortPolicy（默认）</text>
+      <text x="42" y="180" font-size="9.8" fill="#475569">抛 RejectedExecutionException</text>
+      <text x="42" y="198" font-size="9.2" fill="#94a3b8">过载被显式暴露，但调用方必须 catch</text>
+
+      <rect x="240" y="140" width="204" height="76" rx="8" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="258" y="160" font-size="10.5" fill="#047857" font-weight="700">CallerRunsPolicy</text>
+      <text x="258" y="180" font-size="9.8" fill="#475569">在提交线程里同步跑 r.run()</text>
+      <text x="258" y="198" font-size="9.2" fill="#94a3b8">反压：提交变慢 → 上游流量自然下降</text>
+
+      <rect x="456" y="140" width="204" height="76" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="474" y="160" font-size="10.5" fill="#334155" font-weight="700">DiscardPolicy</text>
+      <text x="474" y="180" font-size="9.8" fill="#475569">空实现，静默丢弃</text>
+      <text x="474" y="198" font-size="9.2" fill="#94a3b8">最难查：数据静默丢失，监控一片绿</text>
+
+      <rect x="672" y="140" width="204" height="76" rx="8" fill="#f8fafc" stroke="#dbe3ee"/>
+      <text x="690" y="160" font-size="10.5" fill="#334155" font-weight="700">DiscardOldestPolicy</text>
+      <text x="690" y="180" font-size="9.8" fill="#475569">poll 掉队头，再 execute 自己</text>
+      <text x="690" y="198" font-size="9.2" fill="#94a3b8">丢的是「等最久的」，通常是最该被服务的</text>
+
+      <path d="M342,140 L342,116 L90,116 L90,100" fill="none" stroke="#047857" stroke-width="1.6" stroke-dasharray="5 3"/>
+      <polygon points="90,100 86,108 94,108" fill="#047857"/>
+      <text x="216" y="112" font-size="9.5" fill="#047857" text-anchor="middle" font-weight="700">反压回路：过载 → 提交变慢</text>
+
+      <text x="24" y="242" font-size="10" fill="#334155" font-weight="700">CallerRunsPolicy 的双面性</text>
+      <text x="24" y="262" font-size="9.8" fill="#047857">✓ 批处理 / 后台任务：天然的背压，让生产者自己慢下来，比抛异常温和得多</text>
+      <text x="24" y="280" font-size="9.8" fill="#be123c">✗ Netty EventLoop / Tomcat 请求线程：一个 50ms 的任务就卡住 800 个连接，把线程池问题升级成全站阻塞</text>
+      <text x="24" y="298" font-size="9.8" fill="#be123c">✗ 定时任务：它在调度线程里跑，会拖慢后续所有 trigger</text>
+      <text x="24" y="318" font-size="9.5" fill="#94a3b8">判断口诀：提交线程是「可以慢的业务线程」就用 CallerRuns；是「不能慢的 IO 线程」就绝对不能用</text>
+    </svg>
+    <figcaption><b>图 11</b>　四种策略的本质区别是「过载成本由谁承担」：调用方（Abort）、提交线程（CallerRuns）、被丢弃的数据（Discard）、最老的请求（DiscardOldest）</figcaption>
+  </figure>
+
+  <h3>shutdown 与 shutdownNow，差了两个字，差了一个世界</h3>
+  <table>
+    <tr><th></th><th><code>shutdown()</code></th><th><code>shutdownNow()</code></th></tr>
+    <tr><td>状态</td><td>RUNNING → SHUTDOWN</td><td>RUNNING → STOP</td></tr>
+    <tr><td>队列里的任务</td><td><strong>全部执行完</strong></td><td><strong>返回给你</strong>（不执行）</td></tr>
+    <tr><td>正在跑的任务</td><td>不打断</td><td><code>interrupt()</code></td></tr>
+    <tr><td>返回值</td><td>void</td><td><code>List&lt;Runnable&gt;</code>（没跑的任务）</td></tr>
+    <tr><td>适用</td><td>优雅下线</td><td>测试清理 / 紧急止血</td></tr>
+  </table>
+
+  <div class="trap"><b><code class="inl">interrupt()</code> 只对「可中断的阻塞点」有效</b>。如果任务正在跑一个死循环、或者在做不可中断的 IO（老式 socket 读写、某些 native 调用），<code class="inl">interrupt()</code> 只是把标志位设成 true，任务照样跑到底。<strong>所以「<code class="inl">shutdownNow</code> 会立刻停」是错的</strong>，它只是「请求你停」。正确说法：<code class="inl">shutdownNow</code> 尝试中断所有 worker，是否响应取决于任务代码里有没有检查中断状态或在可中断方法上阻塞。</div>
+
+  <h3>优雅关闭：顺序错了就是丢任务</h3>
+<pre><code>// ❌ 常见错误写法：三个方法顺序全错
+pool.shutdownNow();                              // 立刻中断 → 正在处理的订单被砍半
+pool.awaitTermination(30, TimeUnit.SECONDS);     // 再等（此时队列已经被清空了）
+
+// ✅ 正确顺序
+pool.shutdown();                                 // 1. 不再接新任务，队列继续消费
+try {
+    if (!pool.awaitTermination(30, TimeUnit.SECONDS)) {   // 2. 等最多 30 秒
+        List&lt;Runnable&gt; pending = pool.shutdownNow();      // 3. 还没完 → 强制中断
+        log.warn("force shutdown, {} tasks dropped", pending.size());  // 4. ★ 落盘补偿
+        if (!pool.awaitTermination(5, TimeUnit.SECONDS))
+            log.error("pool did not terminate");          // 5. 真没救了，告警
+    }
+} catch (InterruptedException e) {
+    pool.shutdownNow();
+    Thread.currentThread().interrupt();          // ★ 恢复中断标志，别吞
+}</code></pre>
+
+  <div class="warn"><b>Spring 里对应的两个开关，缺一个就等于没配</b>：<code class="inl">setWaitForTasksToCompleteOnShutdown(true)</code> 决定「等不等队列」，<code class="inl">setAwaitTerminationSeconds(30)</code> 决定「等多久」。只配第一个不配第二个，等价于无限等待——K8s 的 <code class="inl">terminationGracePeriodSeconds</code>（默认 30s）到点直接 <code class="inl">SIGKILL</code>，你等的那 30 秒白等，任务照样被砍。</div>
+
+  <h3>下线窗口里的第二波雪崩</h3>
+  <p>被 <code class="inl">shutdown()</code> 之后、进程还没退出之前，如果注册中心还没摘掉这个实例，流量仍在进来。此时 <code class="inl">execute()</code> 会走 <code class="inl">reject()</code>，而 <code class="inl">CallerRunsPolicy</code> 里有一句 <code class="inl">if (!e.isShutdown())</code>——<strong>已关闭时它直接丢弃，不跑也不抛</strong>。于是调用方看到的是「请求成功了但什么也没做」。</p>
+  <p>正确顺序是<strong>先摘流、再 sleep 一个心跳周期、最后才 shutdown</strong>。第 08 期讲过的优雅下线四步，在这里是唯一能救命的顺序。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L9</span><em>可观测</em></div>
+  <h2>监控：五个指标，一个骗人的方法和一个吞异常的地方</h2>
+  <p>线程池出问题从来不是「突然挂」，而是「队列一点点变长，直到某天越过了线」。所以监控的关键不是看 CPU，而是看<strong>队列</strong>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 320" role="img" aria-label="五个必看指标与队列积压的三阶段演化">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">左：五个必看指标　　右：队列长度的时间形态（这才是最早的信号）</text>
+
+      <rect x="24" y="34" width="376" height="40" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="42" y="52" font-size="10" fill="#0369a1" font-weight="700">getQueue().size() / 容量</text>
+      <text x="42" y="68" font-size="9.2" fill="#64748b">最灵敏。超过 50% 就该告警，不用等满</text>
+
+      <rect x="24" y="80" width="376" height="40" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="42" y="98" font-size="10" fill="#0369a1" font-weight="700">getActiveCount()</text>
+      <text x="42" y="114" font-size="9.2" fill="#64748b">★ 近似值：遍历 workers 数 isLocked()，O(n)</text>
+
+      <rect x="24" y="126" width="376" height="40" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="42" y="144" font-size="10" fill="#0369a1" font-weight="700">getPoolSize()</text>
+      <text x="42" y="160" font-size="9.2" fill="#64748b">当前线程数。长期等于 core 说明容量刚好，长期等于 max 说明已过载</text>
+
+      <rect x="24" y="172" width="376" height="40" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="42" y="190" font-size="10" fill="#0369a1" font-weight="700">getCompletedTaskCount() 的增量</text>
+      <text x="42" y="206" font-size="9.2" fill="#64748b">累计完成数，取 delta 得到吞吐。增量为 0 而队列在涨 = 全卡住</text>
+
+      <rect x="24" y="218" width="376" height="40" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="236" font-size="10" fill="#be123c" font-weight="700">reject 次数（自定义 handler 埋点）</text>
+      <text x="42" y="252" font-size="9.2" fill="#64748b">必须自己加。内置策略不打点，等于没有这个指标</text>
+
+      <rect x="24" y="270" width="376" height="36" rx="7" fill="#f8f9fc" stroke="#e3e7ef"/>
+      <text x="42" y="293" font-size="9.5" fill="#94a3b8">再加一个：任务耗时的 P99（在 afterExecute 里打点）</text>
+
+      <line x1="428" y1="34" x2="428" y2="300" stroke="#e2e8f0"/>
+
+      <line x1="456" y1="250" x2="866" y2="250" stroke="#cbd5e1"/>
+      <line x1="456" y1="34" x2="456" y2="250" stroke="#cbd5e1"/>
+      <text x="452" y="254" font-size="9" fill="#94a3b8" text-anchor="end">0</text>
+      <text x="452" y="54" font-size="9" fill="#94a3b8" text-anchor="end">150</text>
+      <text x="466" y="266" font-size="9" fill="#94a3b8">t0</text>
+      <text x="866" y="266" font-size="9" fill="#94a3b8" text-anchor="end">时间</text>
+
+      <rect x="456" y="34" width="216" height="216" fill="#f0fdf4"/>
+      <rect x="672" y="34" width="100" height="216" fill="#fefce8"/>
+      <rect x="772" y="34" width="94" height="216" fill="#fef2f2"/>
+
+      <polyline points="466,244 490,238 512,242 536,230 560,236 584,226 608,232 630,220 652,228 668,222"
+                fill="none" stroke="#0369a1" stroke-width="2"/>
+
+      <polyline points="672,222 690,200 708,178 726,152 744,120 760,92 770,72"
+                fill="none" stroke="#b45309" stroke-width="2" stroke-dasharray="5 3"/>
+
+      <polyline points="772,72 790,68 810,54 830,44 850,38 866,36"
+                fill="none" stroke="#be123c" stroke-width="2.2"/>
+
+      <text x="560" y="46" font-size="9.5" fill="#047857" font-weight="700">健康：锯齿状波动</text>
+      <text x="560" y="60" font-size="9" fill="#047857">在低位反复起落，正常</text>
+
+      <text x="686" y="196" font-size="9.5" fill="#b45309" font-weight="700">承压：单调抬升</text>
+      <text x="686" y="210" font-size="9" fill="#b45309">不再回落 = 消费能力 &lt; 生产</text>
+
+      <text x="800" y="120" font-size="9.5" fill="#be123c" font-weight="700">雪崩：贴顶</text>
+      <text x="800" y="134" font-size="9" fill="#be123c">队列满后全转拒绝</text>
+
+      <text x="440" y="292" font-size="9.5" fill="#64748b">判据：连续 3 个采样周期队列「只涨不回落」，就可以定性为消费能力不足</text>
+      <text x="440" y="310" font-size="9.5" fill="#94a3b8">此时加线程通常无效——先查下游 RT，90% 是下游慢了而不是池小了</text>
+    </svg>
+    <figcaption><b>图 12</b>　队列的形态比绝对值有用：锯齿是健康，单调抬升是承压，贴顶是已经雪崩。三个阶段的处置手段完全不同</figcaption>
+  </figure>
+
+  <h3><code class="inl">getActiveCount()</code> 为什么骗人</h3>
+<pre><code>// 源码：遍历所有 worker，数「持有锁」的个数
+public int getActiveCount() {
+    final ReentrantLock mainLock = this.mainLock;
+    mainLock.lock();
+    try {
+        int n = 0;
+        for (Worker w : workers)
+            if (w.isLocked()) ++n;
+        return n;
+    } finally { mainLock.unlock(); }
+}</code></pre>
+  <p>三个问题：① 它是<strong>瞬时的</strong>，采样间隔内的峰值完全看不到；② 它<strong>要拿 <code class="inl">mainLock</code></strong>，高并发下这个调用本身会拖慢线程池（别把它塞进高频埋点）；③ <code class="inl">isLocked()</code> 判的是「worker 是否在执行任务」，正在 <code class="inl">take()</code> 阻塞等待的线程算「不活跃」——所以<strong>活跃线程数 0 不代表池空闲，只代表没有任务正在执行</strong>。</p>
+
+  <h3><code class="inl">afterExecute</code> 拿不到异常，除非你主动去取</h3>
+<pre><code>// ❌ 以为能在这里抓到任务异常 —— 抓不到
+protected void afterExecute(Runnable r, Throwable t) {
+    if (t != null) log.error("task failed", t);   // submit 提交时 t 永远是 null
+}
+
+// ✅ 因为 submit 把任务包进了 FutureTask，异常被存在 outcome 字段里，只有 get() 才抛
+protected void afterExecute(Runnable r, Throwable t) {
+    super.afterExecute(r, t);
+    if (t == null &amp;&amp; r instanceof Future&lt;?&gt; f &amp;&amp; f.isDone()) {
+        try { f.get(); }                        // 借 get() 把异常「逼」出来
+        catch (CancellationException ignored) { }
+        catch (ExecutionException e) { log.error("task failed", e.getCause()); }
+        catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+    }
+}</code></pre>
+  <div class="trap"><b>这就是「<code class="inl">submit</code> 会吞异常」的完整机制</b>：<code class="inl">execute</code> 提交的裸 <code class="inl">Runnable</code> 抛异常会让 worker 线程死掉（由 <code class="inl">processWorkerExit</code> 补一个新线程），<code class="inl">UncaughtExceptionHandler</code> 能收到；而 <code class="inl">submit</code> 返回的 <code class="inl">FutureTask</code> 把异常吞进 <code class="inl">outcome</code>，线程安然无恙、异常无声无息。<strong>「线程池里任务失败了但日志里什么都没有」——99% 是用了 submit 却没 get。</strong></div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">L10</span><em>2026 年必须会</em></div>
+  <h2>虚拟线程来了，线程池该删吗</h2>
+  <p>先给结论，再给理由：<strong>「每任务一线程」的线程池该删；「限流与隔离」的那部分职责，要换成 <code class="inl">Semaphore</code> 保留下来。</strong></p>
+
+  <figure>
+    <svg viewBox="0 0 900 320" role="img" aria-label="虚拟线程的内存与调度结构">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">1 万个虚拟线程，跑在 8 个载体线程上；栈在堆里，不在 OS 里</text>
+
+      <text x="24" y="48" font-size="10.5" fill="#475569" font-weight="700">虚拟线程（堆对象，按需增长）</text>
+      <g fill="#ede9fe" stroke="#c4b5fd">
+        <rect x="24" y="58" width="46" height="22" rx="3"/><rect x="76" y="58" width="46" height="22" rx="3"/>
+        <rect x="128" y="58" width="46" height="22" rx="3"/><rect x="180" y="58" width="46" height="22" rx="3"/>
+        <rect x="232" y="58" width="46" height="22" rx="3"/><rect x="284" y="58" width="46" height="22" rx="3"/>
+        <rect x="336" y="58" width="46" height="22" rx="3"/><rect x="388" y="58" width="46" height="22" rx="3"/>
+        <rect x="440" y="58" width="46" height="22" rx="3"/><rect x="492" y="58" width="46" height="22" rx="3"/>
+        <rect x="544" y="58" width="46" height="22" rx="3"/><rect x="596" y="58" width="46" height="22" rx="3"/>
+        <rect x="648" y="58" width="46" height="22" rx="3"/><rect x="700" y="58" width="46" height="22" rx="3"/>
+      </g>
+      <text x="860" y="74" font-size="9.5" fill="#7c3aed" text-anchor="end">… × 10000</text>
+
+      <text x="24" y="112" font-size="10" fill="#64748b">每个初始只有几百字节，阻塞时把栈帧搬到堆上的 StackChunk；平台线程是 1 MB 预留 + 1 个内核调度实体</text>
+
+      <line x1="24" y1="132" x2="876" y2="132" stroke="#e2e8f0"/>
+
+      <text x="24" y="156" font-size="10.5" fill="#475569" font-weight="700">载体线程 carrier（= ForkJoinPool worker，数量 = CPU 核数）</text>
+
+      <rect x="24" y="168" width="196" height="64" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="122" y="192" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">carrier-1</text>
+      <text x="122" y="210" font-size="9.2" fill="#64748b" text-anchor="middle">同时只跑 1 个虚拟线程</text>
+
+      <rect x="236" y="168" width="196" height="64" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="334" y="192" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">carrier-2</text>
+      <text x="334" y="210" font-size="9.2" fill="#64748b" text-anchor="middle">遇到阻塞自动让出</text>
+
+      <rect x="448" y="168" width="196" height="64" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="546" y="192" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">carrier-3</text>
+      <text x="546" y="210" font-size="9.2" fill="#64748b" text-anchor="middle">…</text>
+
+      <rect x="660" y="168" width="216" height="64" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="768" y="192" font-size="10.5" fill="#0369a1" font-weight="700" text-anchor="middle">carrier-8</text>
+      <text x="768" y="210" font-size="9.2" fill="#64748b" text-anchor="middle">默认 parallelism = availableProcessors</text>
+
+      <text x="24" y="256" font-size="10" fill="#334155" font-weight="700">三个默认参数（JDK 21 VirtualThread.createDefaultScheduler）</text>
+      <text x="24" y="276" font-size="9.8" fill="#64748b">parallelism = availableProcessors（注意：不是 commonPool 的核数 - 1）</text>
+      <text x="24" y="294" font-size="9.8" fill="#64748b">maxPoolSize = max(parallelism, 256)，FIFO 模式（asyncMode = true）</text>
+      <text x="24" y="312" font-size="9.8" fill="#be123c">任何 pin 住 carrier 的操作，都会让这 8 个线程之一彻底停摆</text>
+    </svg>
+    <figcaption><b>图 13</b>　虚拟线程把「线程」从内核资源降级成堆对象，代价是调度权交给 JVM——所以「阻塞」必须是 JVM 能感知的那种</figcaption>
+  </figure>
+
+  <h3>为什么不能池化虚拟线程</h3>
+  <table>
+    <tr><th>维度</th><th>平台线程</th><th>虚拟线程</th><th>结论</th></tr>
+    <tr><td>创建成本</td><td>数十微秒（<code>clone</code> + 栈 + 内核结构）</td><td><strong>百纳秒级</strong>（堆上分配一个对象）</td><td>池化的收益消失了</td></tr>
+    <tr><td>内存</td><td>1 MB <strong>预留</strong>虚拟地址</td><td>几百字节起，按需增长</td><td>差 2~3 个数量级</td></tr>
+    <tr><td>上限</td><td>几千（受内核 / 内存限制）</td><td>百万级（受堆限制）</td><td>可以「一请求一线程」</td></tr>
+    <tr><td>复用</td><td>有意义（省创建成本）</td><td><strong>无意义</strong>（省不出一顿饭钱）</td><td>别池化</td></tr>
+  </table>
+
+  <p>所以「把 <code class="inl">newFixedThreadPool(200)</code> 换成 <code class="inl">Executors.newVirtualThreadPerTaskExecutor()</code>」在<strong>正确性上</strong>是可行的，但会立刻引出两个必须一起改的地方：</p>
+
+<pre><code>// ❌ 直接换掉：并发度失去控制，下游被打穿
+ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
+for (Order o : orders) pool.submit(() -&gt; callDownstream(o));
+// 10 万个任务 = 10 万个并发请求砸向下游（平台线程池时最多 200 个）
+
+// ✅ 正解：用 Semaphore 显式限流，把「池大小」的职责接过来
+private static final Semaphore PERMITS = new Semaphore(200);
+ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
+
+for (Order o : orders) {
+    pool.submit(() -&gt; {
+        PERMITS.acquire();
+        try { callDownstream(o); }
+        finally { PERMITS.release(); }
+    });
+}
+
+// ✅ 或者一行搞定（JDK 21 的 Semaphore 支持在虚拟线程上高效阻塞）
+static &lt;T&gt; T withLimit(Semaphore s, Callable&lt;T&gt; c) throws Exception {
+    s.acquire();
+    try { return c.call(); } finally { s.release(); }
+}</code></pre>
+
+  <div class="trap"><b>虚拟线程仍然「需要」线程池的三个理由</b>
+  <ol>
+    <li><strong>限流</strong>：虚拟线程不限并发，<code class="inl">Semaphore</code> / 连接池才是新的闸门。数据库连接只有 20 个，你开 10 万虚拟线程也还是 20 个能干活。</li>
+    <li><strong>隔离</strong>：不同下游用不同的 <code class="inl">Semaphore</code> 配额，否则慢下游会把共享的连接池吃光。</li>
+    <li><strong>资源池本身</strong>：连接池、<code class="inl">HttpClient</code> 的连接、文件句柄——这些昂贵资源依然要池化，虚拟线程只是让「等待」变便宜。</li>
+  </ol></div>
+
+  <div class="warn"><b>pinning 还没完全消失</b>：JDK 21~23 里，虚拟线程在 <code class="inl">synchronized</code> 块内阻塞会「钉住」载体线程（pin），让 8 个 carrier 之一停摆。JDK 24 的 <strong>JEP 491</strong> 已经解决了 <code class="inl">synchronized</code> 的 pinning，但仍有三类残留：native / FFM 调用、类加载与初始化过程、以及部分 Linux 文件 IO。<strong>所以「虚拟线程 + <code class="inl">synchronized</code> 老代码」在 JDK 21 上依然会出问题</strong>，迁到 24+ 才安全。</div>
+
+  <h3>ThreadLocal：虚拟线程下的隐性炸弹</h3>
+<pre><code>// 平台线程：200 个线程 × 1 个 ThreadLocal 对象 = 200 份
+// 虚拟线程：100 万个虚拟线程 × 1 份 = 100 万份 ← 每份哪怕只有 1KB 就是 1 GB
+static final ThreadLocal&lt;byte[]&gt; BUF = ThreadLocal.withInitial(() -&gt; new byte[1024]);
+
+// JDK 21+ 的替代：ScopedValue（不可变、有明确作用域、可被 JIT 优化）
+static final ScopedValue&lt;User&gt; CURRENT = ScopedValue.newInstance();
+ScopedValue.where(CURRENT, user).run(() -&gt; handle());   // 出了这个 lambda 就没了</code></pre>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L11</span><em>生产六坑</em></div>
+  <h2>六个真实炸点，按炸得响的程度排</h2>
+
+  <h3>坑 1：无界队列 —— <code class="inl">max</code> 是个摆设</h3>
+  <p><code class="inl">newFixedThreadPool</code> / <code class="inl">newSingleThreadExecutor</code> 都用 <code class="inl">LinkedBlockingQueue</code>（默认 <code class="inl">Integer.MAX_VALUE</code>）。队列装得下 21 亿个任务，<strong>你的堆装不下</strong>。图 5 已经算过账：1000 QPS 下 10 分钟积压 60 万任务。表现出来是 <code class="inl">OutOfMemoryError: Java heap space</code>，但 heap dump 里全是 <code class="inl">LinkedBlockingQueue$Node</code>——看到这个类名就该知道根因不在内存，在队列。</p>
+
+  <h3>坑 2：<code class="inl">newCachedThreadPool</code> 的线程爆炸</h3>
+  <p>它的参数是 <code class="inl">core=0, max=Integer.MAX_VALUE, queue=SynchronousQueue, keepAlive=60s</code>。SynchronousQueue 容量为 0（不存任务，直接把任务交给线程），所以<strong>每来一个任务、没有空闲线程，就新建一个</strong>。</p>
+  <p>账：单请求 100 ms，下游故障时变成 10 s，QPS 500 → 需要 500 × 10 = 5000 个线程同时存在。每个 1 MB 栈 → 5 GB。<code class="inl">unable to create native thread</code>，进程直接崩，连 OOM 日志都没有。</p>
+
+  <h3>坑 3：<code class="inl">submit</code> 吞异常</h3>
+  <p>L9 已讲透。<strong>一句话记住：<code class="inl">execute</code> 会死线程、<code class="inl">submit</code> 会死得无声无息。</strong></p>
+
+  <h3>坑 4：父子任务共用同一个池 → 死锁</h3>
+
+  <figure>
+    <svg viewBox="0 0 900 268" role="img" aria-label="父子任务共用线程池形成的环形等待">
+      <text x="24" y="20" font-size="12.5" fill="#334155" font-weight="700">父任务把子任务提交到「自己所在的池」，池满 → 环形成</text>
+
+      <rect x="24" y="44" width="256" height="120" rx="10" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="42" y="66" font-size="10.5" fill="#be123c" font-weight="700">池内 8 个线程：全部 WAITING</text>
+      <g fill="#fecdd3" stroke="#f5ccd4">
+        <rect x="42" y="78" width="26" height="20" rx="3"/><rect x="74" y="78" width="26" height="20" rx="3"/>
+        <rect x="106" y="78" width="26" height="20" rx="3"/><rect x="138" y="78" width="26" height="20" rx="3"/>
+        <rect x="170" y="78" width="26" height="20" rx="3"/><rect x="202" y="78" width="26" height="20" rx="3"/>
+        <rect x="234" y="78" width="26" height="20" rx="3"/><rect x="42" y="104" width="26" height="20" rx="3"/>
+      </g>
+      <text x="42" y="146" font-size="9.5" fill="#be123c">每个都在 future.get() 等自己的子任务</text>
+
+      <line x1="284" y1="104" x2="330" y2="104" stroke="#be123c" stroke-width="1.6"/>
+      <polygon points="330,104 322,100 322,108" fill="#be123c"/>
+
+      <rect x="334" y="68" width="196" height="72" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="432" y="92" font-size="10.5" fill="#b45309" font-weight="700" text-anchor="middle">队列 100 / 100 已满</text>
+      <text x="432" y="112" font-size="9.5" fill="#b45309" text-anchor="middle">子任务 offer 失败</text>
+      <text x="432" y="128" font-size="9.5" fill="#b45309" text-anchor="middle">扩到 max 也是满</text>
+
+      <line x1="534" y1="104" x2="580" y2="104" stroke="#be123c" stroke-width="1.6"/>
+      <polygon points="580,104 572,100 572,108" fill="#be123c"/>
+
+      <rect x="584" y="68" width="292" height="72" rx="8" fill="#fff" stroke="#f5ccd4"/>
+      <text x="602" y="92" font-size="10.5" fill="#be123c" font-weight="700">CallerRuns → 父线程跑子任务</text>
+      <text x="602" y="112" font-size="9.5" fill="#64748b">表面解了，但父线程被占住，8 个变 8 个</text>
+      <text x="602" y="128" font-size="9.5" fill="#64748b">Abort → 父任务抛异常，链路断在这里</text>
+
+      <path d="M584,44 L584,32 L152,32 L152,44" fill="none" stroke="#be123c" stroke-width="1.6" stroke-dasharray="5 3"/>
+      <polygon points="152,44 148,36 156,36" fill="#be123c"/>
+      <text x="474" y="28" font-size="9.5" fill="#be123c" text-anchor="middle" font-weight="700">环：父等子，子等线程，线程全被父占着</text>
+
+      <text x="24" y="192" font-size="10.5" fill="#334155" font-weight="700">三种解法，按推荐度</text>
+      <text x="24" y="212" font-size="10" fill="#047857">① 父子分池：父任务在 A 池，子任务提交到 B 池（A 等 B 不会自锁）</text>
+      <text x="24" y="230" font-size="10" fill="#b45309">② 改成串行：子任务本来能合并成一个批量调用（最优，但需要改业务）</text>
+      <text x="24" y="248" font-size="10" fill="#be123c">③ ForkJoinPool / 虚拟线程：能「帮助执行」或无限扩员，把环打破（治标）</text>
+      <text x="24" y="264" font-size="9.5" fill="#94a3b8">排查方法：jstack 里看到全部线程处于 WAITING (parking) 且栈顶是 CompletableFuture.waitingGet / FutureTask.get，基本就是它</text>
+    </svg>
+    <figcaption><b>图 14</b>　这是线程池唯一能把自己锁死的形态：所有 worker 都在等「只有 worker 才能产出」的结果</figcaption>
+  </figure>
+
+  <h3>坑 5：ThreadLocal 不复位</h3>
+  <p>池化线程的 <code class="inl">ThreadLocal</code> 是跨任务存活的。上一个任务 <code class="inl">set</code> 了 <code class="inl">UserContext</code> 没清，下一个任务读到别人的身份——这是<strong>数据越权的经典成因</strong>，而且测试环境用小流量很难复现。防御只有一条：所有 <code class="inl">set</code> 必须配 <code class="inl">finally { remove(); }</code>。</p>
+
+  <h3>坑 6：commonPool 被阻塞任务占满</h3>
+  <p><code class="inl">parallelStream()</code> 和 <code class="inl">thenApplyAsync</code> 都走 <code class="inl">ForkJoinPool.commonPool()</code>，并行度 = 核数 - 1。一段 <code class="inl">parallelStream().map(this::httpGet)</code> 就能把整个 JVM 的并行能力吃干净，而且<strong>症状是「别处的异步任务莫名变慢」，完全指不到这里</strong>——没有线程池监控，因为 commonPool 不受你管。</p>
+
+  <div class="good"><b>六坑的一句话总结</b>：队列要有界、拒绝要可见、<code class="inl">submit</code> 要 <code class="inl">get</code>、<code class="inl">ThreadLocal</code> 要 <code class="inl">remove</code>、父子别同池、<code class="inl">Async</code> 必传池。六条都是「加一行代码」的事，但每一条都能独立引发一次 P1。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L12</span><em>数字速查</em></div>
+  <h2>二十个数字，面试前扫一眼</h2>
+  <table>
+    <tr><th>数字</th><th>含义</th></tr>
+    <tr><td><strong>3 + 29</strong></td><td><code>ctl</code> 的位分配：高 3 位状态，低 29 位 workerCount</td></tr>
+    <tr><td><strong>536,870,911</strong></td><td><code>COUNT_MASK</code> = 2<sup>29</sup> − 1，线程数上限（JDK 18 前叫 <code>CAPACITY</code>）</td></tr>
+    <tr><td><strong>−536870912 / 0 / 536870912 / 1073741824 / 1610612736</strong></td><td>RUNNING / SHUTDOWN / STOP / TIDYING / TERMINATED 的十进制值，可直接比大小</td></tr>
+    <tr><td><strong>50~100 μs</strong></td><td>创建一个平台线程的耗时（<code>clone()</code> + 栈 + 内核结构）</td></tr>
+    <tr><td><strong>1 MB / 8~16 KB</strong></td><td>平台线程栈的预留量 / 实际提交量（<code>-Xss</code>）</td></tr>
+    <tr><td><strong>3~8 μs</strong></td><td>一次上下文切换的成本</td></tr>
+    <tr><td><strong>56</strong></td><td>8 核、70% 利用率、等待比 45:5 时的线程数：<code>8 × 0.7 × 10</code></td></tr>
+    <tr><td><strong>1120 QPS</strong></td><td>56 线程 / 50 ms 的吞吐（Little's Law 交叉验证）</td></tr>
+    <tr><td><strong>80 / 1600 QPS</strong></td><td>CPU 打满时的线程数与吞吐，超过它加线程无效</td></tr>
+    <tr><td><strong>150</strong></td><td>1000 QPS × 150 ms 容忍延迟 → 队列容量</td></tr>
+    <tr><td><strong>7</strong></td><td>8 核机器上 commonPool 的并行度（核数 − 1）</td></tr>
+    <tr><td><strong>8 / 256 / FIFO</strong></td><td>虚拟线程调度器：parallelism = 核数，maxPoolSize = max(p, 256)，asyncMode = true</td></tr>
+    <tr><td><strong>8192</strong></td><td><code>Arrays.parallelSort</code> 的最小切分粒度，小于它直接单线程</td></tr>
+    <tr><td><strong>1e9</strong></td><td>1 秒折算成的纳秒数；<code>keepAliveTime</code> 内部统一存纳秒</td></tr>
+    <tr><td><strong>Integer.MAX_VALUE</strong></td><td><code>LinkedBlockingQueue</code> 默认容量 / <code>newCachedThreadPool</code> 的 max，两个「无限」凑成了最危险的组合</td></tr>
+    <tr><td><strong>2 轮</strong></td><td><code>getTask()</code> 退出前要经过的循环次数（poll 超时只打标记）</td></tr>
+    <tr><td><strong>min(delta, queue.size())</strong></td><td><code>setCorePoolSize</code> 调大时能立刻补的线程数上限</td></tr>
+    <tr><td><strong>4 种</strong></td><td><code>thenApply</code> 的线程归属只有四种，只有传执行器那种是确定的</td></tr>
+    <tr><td><strong>LIFO</strong></td><td>Completion 栈的弹出顺序 → 同一 future 上的回调按注册逆序触发</td></tr>
+    <tr><td><strong>30 s</strong></td><td>优雅关闭的等待上限，也是 K8s <code>terminationGracePeriodSeconds</code> 的默认值</td></tr>
+  </table>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L13</span><em>十四问答</em></div>
+  <h2>面试官真正想听的那一句</h2>
+
+  <div class="qa"><div class="qq">线程池的七个参数分别解决什么问题？</div>
+  <p><code>corePoolSize</code> 是常驻编制，<code>maximumPoolSize</code> 是应急扩编上限，<code>keepAliveTime</code> 是临时工的合同期，<code>workQueue</code> 是等待区，<code>threadFactory</code> 决定线程名字与异常处理器（排查靠它），<code>handler</code> 是过载时谁承担成本，<code>unit</code> 只是个单位。<strong>七个参数里真正互相耦合的只有四个：core / max / queue / handler</strong>，其余三个是运维与排查用的。</p></div>
+
+  <div class="qa"><div class="qq">为什么状态和线程数要挤在一个 int 里？</div>
+  <p>为了让「状态校验」和「计数增减」能在一次 CAS 里原子完成。拆成两个字段后，<code>execute()</code> 里必然存在「检查是 RUNNING → 池被关闭 → 加线程」的窗口，而加 <code>mainLock</code> 会让提交路径串行化。代价是线程数上限被压到 2<sup>29</sup>（5.36 亿），这个代价可以忽略。</p></div>
+
+  <div class="qa"><div class="qq">execute() 里为什么入队之后还要 recheck 一次？</div>
+  <p>因为「入队」和「检查」之间世界会变：池可能被 <code>shutdown()</code>，原有线程可能全部超时退出。所以入队后必须重读 <code>ctl</code>——若已非 RUNNING 就 <code>remove</code> 回来再拒绝（<code>remove</code> 失败说明任务已被执行，不能拒）；若 worker 数为 0 就补一个空 worker 去消费队列。</p></div>
+
+  <div class="qa"><div class="qq">为什么用了无界队列，maximumPoolSize 就永远不生效？</div>
+  <p>看 <code>execute()</code> 的分支顺序：<strong>先尝试入队，入队失败才扩容</strong>。<code>LinkedBlockingQueue</code> 默认容量 21 亿，<code>offer</code> 永远成功，所以永远走不到 <code>addWorker(command, false)</code> 那一行。结果就是「线程数恒等于 core，队列无限长，拒绝策略永不触发」。</p></div>
+
+  <div class="qa"><div class="qq">核心线程能回收吗？</div>
+  <p>能，但要 <code>allowCoreThreadTimeOut(true)</code>，且 <code>keepAliveTime</code> 必须大于 0，否则构造时就抛 <code>IllegalArgumentException</code>——而 <code>newFixedThreadPool</code> 的 keepAlive 恰好是 0，得先改。回收逻辑在 <code>getTask()</code> 里：<code>timed = allowCoreThreadTimeOut || wc &gt; corePoolSize</code>。</p></div>
+
+  <div class="qa"><div class="qq">线程数设多少？</div>
+  <p><code>N = 核数 × 目标利用率 × (1 + 等待时间/计算时间)</code>。8 核、70%、45:5 → 56。然后用 Little's Law 交叉验证：56 / 0.05s = 1120 QPS，CPU 占用 1120 × 5ms = 5.6 核 = 70%，闭环。<strong>能说出「我要交叉验证」比说出 56 这个数更重要。</strong></p></div>
+
+  <div class="qa"><div class="qq">队列设多大？</div>
+  <p><code>队列 = 到达率 × 可容忍排队时间</code>，1000 QPS × 150ms = 150。设成 10000 的真实含义是「允许 1 万个请求干等 10 秒」——用户早走了，但这些任务还占着堆。</p></div>
+
+  <div class="qa"><div class="qq">submit 和 execute 有什么区别？</div>
+  <p><code>execute</code> 只收 <code>Runnable</code>、无返回值，任务抛异常会让 worker 线程死掉并被重建，<code>UncaughtExceptionHandler</code> 能收到。<code>submit</code> 收 <code>Runnable</code>/<code>Callable</code>、返回 <code>Future</code>，内部包成 <code>FutureTask</code>，<strong>异常被存进 outcome，只有 get() 才抛出</strong>——不 get 就静默丢失。这是「任务失败但没日志」的头号原因。</p></div>
+
+  <div class="qa"><div class="qq">四种拒绝策略怎么选？</div>
+  <p>核心判断是「过载时谁该难受」。后台批处理用 <code>CallerRuns</code>（背压到生产者，天然限流）；对外接口用 <code>Abort</code> + 上层统一转 503（过载必须可见）；<code>Discard</code> 系列只适合「可丢」的日志、埋点。<strong><code>CallerRuns</code> 绝对不能用在 Netty EventLoop、Tomcat 请求线程、定时任务调度线程上</strong>——它会把一次线程池过载升级成全站阻塞。</p></div>
+
+  <div class="qa"><div class="qq">shutdown 和 shutdownNow 的区别？</div>
+  <p><code>shutdown</code> = 停止接收 + 把队列跑完；<code>shutdownNow</code> = 停止接收 + 清空队列（返回未执行的任务）+ <code>interrupt</code> 所有 worker。但要强调：<strong><code>interrupt</code> 只是「请求停止」</strong>，任务若不在可中断的阻塞点上，照样跑完。</p></div>
+
+  <div class="qa"><div class="qq">thenApply 的回调在哪个线程执行？</div>
+  <p>四种情况：① 上游已完成 → 调用 <code>thenApply</code> 的当前线程同步执行；② 上游未完成 → <strong>完成上游的那个线程</strong>；③ <code>thenApplyAsync</code> → commonPool（并行度 ≤ 1 时每任务新建线程）；④ <code>thenApplyAsync(fn, pool)</code> → 指定池。<strong>只有第四种是你能控制的</strong>，所以生产代码只该用第四种。</p></div>
+
+  <div class="qa"><div class="qq">allOf 会传播异常吗？</div>
+  <p>会，但<strong>不是快速失败</strong>。源码里 <code>andTree</code> 建的是二叉树，每个 <code>BiRelay</code> 要等左右子树都完成才 fire，所以第一个任务失败了也要等全部跑完才拿到异常，而且多个异常只保留一个。要求「任一失败立刻返回」就得自己用 <code>anyOf</code> 或共享失败信号实现。</p></div>
+
+  <div class="qa"><div class="qq">ForkJoinPool 为什么比普通线程池快？</div>
+  <p>每个 worker 一个双端队列：主人从 <code>top</code> 端 push/pop（LIFO，数据在缓存里），闲着的线程从别人的 <code>base</code> 端偷（FIFO，取最老的，减少争抢）。两端由不同角色操作，<code>base</code> 和 <code>top</code> 分属不同字段，把竞争降到接近零。<strong>但它只适合可切分、CPU 密集、粒度 ≥ 8192 的任务</strong>；阻塞任务要配 <code>ManagedBlocker</code>，否则并行度被永久吃掉。</p></div>
+
+  <div class="qa"><div class="qq">有了虚拟线程，线程池还要不要？</div>
+  <p>「每任务一线程」形态的池该删（池化虚拟线程没有收益），但<strong>线程池的三个职责要换成别的东西保留</strong>：限流 → <code>Semaphore</code>；隔离 → 每个下游独立配额；昂贵资源复用 → 连接池仍然必须。另外 JDK 21~23 的 <code>synchronized</code> pinning 会让载体线程停摆，迁到 JDK 24+（JEP 491）才安全。</p></div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L14</span><em>模拟面试</em></div>
+  <h2>三道题，四个档位</h2>
+
+  <div class="q">
+    <h4><span>题 1</span>线上告警：某服务线程池队列持续积压，活跃线程数 100%，运维把 core 从 50 调到 200 后毫无改善。你怎么查？</h4>
+    <div class="lab g">及格</div>
+    <p>先看线程池指标：poolSize、queue.size()、completedTaskCount 增量。判断是「消费不足」还是「生产突增」。</p>
+    <div class="lab">良好</div>
+    <p>补上：加线程无效说明瓶颈不在线程数，在<strong>每个任务的执行时间</strong>。用 <code>jstack</code> 抓三次，看 worker 的栈顶停在哪个下游调用上；同时看下游 RT 的 P99 是否抬升。另外要检查 <code>setCorePoolSize</code> 的行为——如果队列已满，它确实会补线程；如果队列是满的但补了也没用，说明是下游慢了。</p>
+    <div class="lab">优秀</div>
+    <p>再补三层：① <strong>区分「慢」和「卡」</strong>——如果 activeCount 100% 但 CPU 低于 10%，全是 IO 等待，去看下游连接池是否耗尽（第 09 期的 Little's Law）；如果 CPU 也高，是本地计算或 GC。② <strong>检查僵尸任务</strong>：如果代码里用了 <code>orTimeout</code> 或 Feign 的 readTimeout，接口早就超时返回了，但线程还在跑——此时 poolSize 满、queue 涨、但吞吐（completedTaskCount 增量）是正常甚至偏高的，这个组合叫「超时后线程泄漏」，唯一解法是缩短下游客户端的读超时。③ <strong>反过来质疑队列设计</strong>：队列积压本身就是设计缺陷，正确做法是队列有界 + 快速拒绝 + 上游限流，而不是靠扩容硬扛。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题 2</span>设计下单页的并行查询：要拿库存、价格、优惠券、用户等级四个依赖，要求 P99 &lt; 200 ms，且任一依赖故障不能阻断下单。</h4>
+    <div class="lab g">及格</div>
+    <p>用 <code>CompletableFuture.supplyAsync</code> 并行发起四个请求，<code>allOf</code> 等全部完成后组装返回。</p>
+    <div class="lab">良好</div>
+    <p>补上：每个 future 加 <code>orTimeout</code> 设独立上限（库存 150 / 价格 180 / 优惠券 120），加 <code>exceptionally</code> 降级到默认值；<code>allOf().join()</code>；四个下游用各自独立的线程池做隔离。</p>
+    <div class="lab">优秀</div>
+    <p>再补四点：① <strong>显式传执行器</strong>，并说明原因——不传走 commonPool（并行度 7、全局共享），一段阻塞代码会拖死同 JVM 所有异步任务。② <strong>说清 <code>orTimeout</code> 的局限</strong>：它只让 future 提前异常完成，<strong>不会中断底层任务</strong>，所以下游线程仍在占资源；真正的取消要靠 HTTP client 的 readTimeout，且写操作超时后必须配幂等键。③ <strong>降级要有业务语义</strong>：库存未知 ≠ 库存为 0，前者允许下单后校验，后者直接拦死；优惠券拿不到应按「无券」计价但要标记，便于事后补发。④ <strong>加熔断</strong>：超时率达到阈值就跳过该依赖直接降级，不再每次都白等 120 ms——这一步才能把 P99 真正压进 200 ms。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题 3</span>秒杀活动中用线程池异步写订单，压测到 3000 QPS 后大量 RejectedExecutionException，但 CPU 只有 40%。给出定位思路和改造方案。</h4>
+    <div class="lab g">及格</div>
+    <p>是队列满了。调大队列或调大 max，或者换 <code>CallerRunsPolicy</code> 让调用方自己跑。</p>
+    <div class="lab">良好</div>
+    <p>先别急着调参：CPU 40% 而队列满，说明任务都在等 IO（写库）。查数据库连接池是否只有 20 个连接——线程池再大，连接池才是真闸门。改造方向是把线程数对齐连接数，而不是无限加。</p>
+    <div class="lab">优秀</div>
+    <p>分三层答：① <strong>先分清三种拒绝原因</strong>（池关闭 / 到 max / 创建线程失败），catch 时打印 <code>poolSize + queue.size() + isShutdown()</code> 才能定性；这里 CPU 40% + 队列满，几乎肯定是「下游连接池耗尽导致任务变慢」而不是「池太小」。② <strong>架构上不该用线程池扛削峰</strong>：秒杀的正确形态是 Redis 预扣减 + MQ 异步落单（第 10 期），线程池只是进程内的缓冲，容量只有几百，挡不住 3000 QPS 的洪峰。③ <strong>如果必须用，改造要点</strong>：队列有界（按「连接数 × 可容忍等待」算）、max 对齐连接池大小、<code>AbortPolicy</code> + 快速失败返回「排队中，请稍后查询」、接口层用令牌桶限流（第 08 期）、并考虑虚拟线程 + <code>Semaphore</code> 限流替代固定池——因为这里 100% 是 IO 等待，虚拟线程能把「等」的成本降两个数量级。</p>
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">小结</span><em>三句话带走</em></div>
+  <h2>如果只记三句</h2>
+  <ol>
+    <li><strong>线程池是限流器，不是对象池。</strong> 所有参数选择都是在「并发度」和「排队延迟」之间兑换，调优调的从来不是性能，是兑换比例。</li>
+    <li><strong>一个 int 撑起了整个并发控制。</strong> 3 位状态 + 29 位数量挤在一起，为的是让「状态没变」和「数量 +1」能在一次 CAS 里完成——这是无锁设计里最漂亮的一手。</li>
+    <li><strong>异步编排里，只有显式传执行器的那一种写法是你能控制的。</strong> <code>thenApply</code> 的线程归属有四种，commonPool 只有 7 个线程且全 JVM 共享，<code>orTimeout</code> 也不会真的中断下游——这三条漏掉任何一条，线上都会以「莫名变慢」的形式还给你。</li>
+  </ol>
+  <div class="oneline"><b>下期预告</b>下一期换个方向：<strong>Java 内存泄漏与对象生命周期取证</strong>——从 <code>jmap -histo</code> 的支配树到 MAT 的 GC Roots 路径，把「内存缓慢上涨但不 OOM」这类最难查的问题拆成可执行的五步；顺带讲清 <code>ThreadLocal</code>、<code>ClassLoader</code>、<code>DirectByteBuffer</code>、监听器未注销这四类经典泄漏各自的引用链长什么样。<strong>这期会给你一条能直接跑的取证命令序列。</strong></div>
+</section>
+
+<footer>
+  Java 面试深水区 · 第 20 期 · 线程池深水区与异步编排<br>
+  14 张手绘 SVG · 21 段源码与可跑代码 · 20 个速查数字 · 14 问答 · 3 道模拟面试
+</footer>
+
+</div>
+<script>
+(function () {
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  var KW = /^(public|private|protected|static|final|void|class|interface|extends|implements|new|return|if|else|for|while|try|catch|finally|throw|throws|import|package|this|super|int|long|byte|boolean|char|short|double|float|null|true|false|break|continue|switch|case|default|abstract|synchronized|volatile|transient|instanceof|enum|super|this)$/;
+
+  var blocks = document.querySelectorAll('pre > code');
+  for (var i = 0; i < blocks.length; i++) {
+    var raw = blocks[i].textContent;
+    var out = esc(raw);
+    out = out.replace(/(\/\/[^\n]*)|("(?:[^"\\]|\\.)*")|\b(\d[\d_.]*)\b|([A-Za-z_$][\w$]*)|/g,
+      function (m, cmt, str, num, id) {
+        if (cmt) return '<span class="c">' + cmt + '</span>';
+        if (str) return '<span class="s">' + str + '</span>';
+        if (num) return '<span class="n">' + num + '</span>';
+        if (id && KW.test(id)) return '<span class="k">' + id + '</span>';
+        return m;
+      });
+    blocks[i].innerHTML = out;
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深挖 23 · 泛型擦除、反射、注解与动态代理</title>
+<style>
+:root{
+  --ink:#16212b; --ink2:#3d4d5c; --muted:#6b7a88; --line:#e3e8ee;
+  --bg:#f7f8fa; --card:#fff; --blue:#1f6feb; --blue-bg:#eef4ff;
+  --orange:#c2410c; --orange-bg:#fff5ee; --green:#1a7f4b; --green-bg:#eefaf3;
+  --purple:#6b21a8; --purple-bg:#f8efff;
+  --kw:#a626a4; --str:#2f8a3e; --cmt:#9aa4ae; --num:#986801; --type:#b8860b;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15.5px;line-height:1.78;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1020px;margin:0 auto;padding:56px 30px 90px}
+code,pre,.mono{font-family:"JetBrains Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace}
+
+/* ---------- hero ---------- */
+.hero{border-bottom:1px solid var(--line);padding-bottom:30px;margin-bottom:14px}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--blue);font-weight:600;margin-bottom:16px;
+}
+.eyebrow::before{content:"";width:22px;height:2px;background:var(--blue);display:inline-block}
+h1{font-size:36px;line-height:1.28;margin:0 0 16px;letter-spacing:-.01em;font-weight:750}
+h1 em{font-style:normal;color:var(--blue)}
+.lede{font-size:16.5px;color:var(--ink2);margin:0 0 22px;max-width:820px}
+.lede strong{color:var(--ink);background:linear-gradient(transparent 62%,#ffe9a8 62%);padding:0 2px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{
+  font-size:12px;padding:4px 11px;border-radius:999px;background:#fff;
+  border:1px solid var(--line);color:var(--ink2);font-family:inherit;
+}
+.chip b{color:var(--blue);font-weight:600}
+
+/* ---------- toc ---------- */
+.toc{margin:26px 0 10px;display:flex;flex-wrap:wrap;gap:6px}
+.toc a{
+  font-size:12.5px;text-decoration:none;color:var(--ink2);padding:5px 11px;border-radius:6px;
+  border:1px solid var(--line);background:#fff;transition:.15s;
+}
+.toc a:hover{color:var(--blue);border-color:#b9d0f5;background:var(--blue-bg)}
+
+/* ---------- section ---------- */
+section{margin:52px 0 0;scroll-margin-top:24px}
+h2{
+  font-size:24px;line-height:1.4;margin:0 0 18px;font-weight:720;letter-spacing:-.005em;
+  display:flex;align-items:baseline;gap:12px;
+}
+h2 .idx{
+  font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:600;color:var(--blue);
+  background:var(--blue-bg);border:1px solid #cfe0fb;border-radius:5px;padding:2px 8px;
+  flex:none;position:relative;top:-2px;
+}
+h3{font-size:17.5px;margin:30px 0 12px;font-weight:680;color:var(--ink)}
+h3::before{content:"▍";color:#c9d4e0;margin-right:7px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-left:22px}
+li{margin:6px 0}
+strong{font-weight:670}
+a{color:var(--blue)}
+
+/* ---------- inline code ---------- */
+p code,li code,td code,th code,h3 code{
+  background:#f1f4f7;border:1px solid #e6ebf0;border-radius:4px;
+  padding:1px 5px;font-size:.88em;color:#9c2b6b;white-space:nowrap;
+}
+
+/* ---------- figure ---------- */
+figure{
+  margin:26px 0;background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:16px 16px 10px;box-shadow:0 1px 2px rgba(22,33,43,.03);
+}
+figure svg{display:block;width:100%;height:auto}
+figcaption{
+  font-size:12.5px;color:var(--muted);margin-top:12px;padding-top:9px;
+  border-top:1px dashed #e8edf2;line-height:1.65;
+}
+figcaption b{color:var(--ink2);font-weight:600}
+
+/* ---------- table ---------- */
+.tw{overflow-x:auto;margin:22px 0;border:1px solid var(--line);border-radius:10px;background:#fff}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{
+  text-align:left;padding:10px 13px;background:#f4f6f9;font-weight:650;color:var(--ink2);
+  border-bottom:1px solid var(--line);white-space:nowrap;
+}
+td{padding:9px 13px;border-bottom:1px solid #eef2f6;vertical-align:top;color:var(--ink2)}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:#fafbfd}
+td.num{font-family:"JetBrains Mono",monospace;color:var(--ink);white-space:nowrap}
+td code{white-space:nowrap}
+
+/* ---------- code block ---------- */
+.cb{position:relative;margin:20px 0;border:1px solid #e3e8ee;border-radius:10px;background:#fbfcfd;overflow:hidden}
+.cb .bar{
+  display:flex;align-items:center;justify-content:space-between;padding:7px 12px;
+  background:#f4f7fa;border-bottom:1px solid #e8edf2;font-size:11.5px;color:var(--muted);
+  font-family:"JetBrains Mono",monospace;letter-spacing:.02em;
+}
+.cb .bar .cp{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:5px;
+  padding:2px 8px;font-size:11px;color:var(--ink2);font-family:inherit}
+.cb .bar .cp:hover{color:var(--blue);border-color:#b9d0f5}
+.cb pre{margin:0;padding:14px 16px;overflow-x:auto;font-size:12.6px;line-height:1.72;color:#26333f}
+.cb pre code{background:none;border:0;padding:0;font-size:inherit;color:inherit;white-space:pre}
+.k{color:var(--kw)} .s{color:var(--str)} .c{color:var(--cmt);font-style:italic}
+.n{color:var(--num)} .t{color:var(--type)}
+
+/* ---------- callout ---------- */
+.box{margin:22px 0;padding:14px 18px;border-radius:9px;font-size:14.5px;border:1px solid;line-height:1.75}
+.box .lb{display:block;font-size:11.5px;letter-spacing:.1em;font-weight:700;margin-bottom:6px}
+.note{background:var(--blue-bg);border-color:#cfe0fb;color:#16324f}
+.note .lb{color:var(--blue)}
+.warn{background:var(--orange-bg);border-color:#f6cfb4;color:#5c2a08}
+.warn .lb{color:var(--orange)}
+.key{background:var(--green-bg);border-color:#b7e3c8;color:#123f2b}
+.key .lb{color:var(--green)}
+
+/* ---------- qa ---------- */
+.qa{border-top:1px solid var(--line);padding:16px 0 4px}
+.qa:last-of-type{border-bottom:1px solid var(--line)}
+.qa .q{display:flex;gap:10px;font-weight:670;font-size:15px;color:var(--ink)}
+.qa .q .qn{
+  flex:none;font-family:"JetBrains Mono",monospace;font-size:11.5px;font-weight:600;color:#fff;
+  background:var(--blue);border-radius:4px;height:19px;line-height:19px;padding:0 6px;margin-top:2px;
+}
+.qa .a{margin:8px 0 0 0;color:var(--ink2);font-size:14.6px}
+
+/* ---------- drill ---------- */
+.drill{margin:26px 0;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+.drill .hd{padding:13px 18px;background:linear-gradient(90deg,#f4f7fb,#fbfcfd);border-bottom:1px solid var(--line)}
+.drill .hd .t{font-size:11.5px;letter-spacing:.1em;color:var(--blue);font-weight:700}
+.drill .hd .s{font-size:16px;font-weight:680;margin-top:3px}
+.drill .bd{padding:16px 18px}
+.lv{display:grid;grid-template-columns:74px 1fr;gap:12px;padding:10px 0;border-top:1px dashed #e8edf2}
+.lv:first-child{border-top:0;padding-top:0}
+.lv .tag{font-size:11.5px;font-weight:700;border-radius:5px;text-align:center;height:22px;line-height:22px;letter-spacing:.04em}
+.t-fail{background:#fdecec;color:#a12626}
+.t-pass{background:#fff6e5;color:#8a5a00}
+.t-good{background:var(--blue-bg);color:var(--blue)}
+.t-best{background:var(--green-bg);color:var(--green)}
+.lv .tx{font-size:14.2px;color:var(--ink2)}
+.lv .tx b{color:var(--ink)}
+
+/* ---------- misc ---------- */
+.quote{
+  margin:30px 0;padding:18px 22px;background:#fff;border-left:3px solid var(--blue);
+  border-radius:0 8px 8px 0;font-size:15.5px;color:var(--ink2);line-height:1.85;
+}
+.quote strong{color:var(--ink)}
+.next{margin-top:34px;padding:16px 20px;background:#fff;border:1px dashed #cfd8e3;border-radius:10px;font-size:14px;color:var(--ink2)}
+.next b{color:var(--ink)}
+hr{border:0;border-top:1px solid var(--line);margin:34px 0}
+.foot{margin-top:40px;font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+@media (max-width:640px){
+  .wrap{padding:32px 16px 60px}
+  h1{font-size:26px} h2{font-size:20px} .lede{font-size:15px}
+  .lv{grid-template-columns:1fr}
+  .lv .tag{width:74px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <div class="eyebrow">Java 面试深挖 · 第 23 期</div>
+  <h1>泛型擦除、反射、注解与动态代理<br><em>运行期只有一个 Class</em></h1>
+  <p class="lede">
+    编译期给了你一套类型，运行期只留一个 <strong>Class</strong>。泛型被擦掉，注解被塞进 class 文件，
+    反射把 class 文件重新读出来，动态代理再照着读出来的东西生成一个新类。
+    这不是四个知识点，是同一根链条上的四个环 —— 会背"泛型擦除"的人很多，
+    能把"擦除 → 桥方法 → 反射 → 代理 → Spring AOP"讲成一条线的很少。
+  </p>
+  <div class="chips">
+    <span class="chip">实测环境 <b>JDK 21.0.7</b></span>
+    <span class="chip">反编译 <b>javap -c</b></span>
+    <span class="chip">13 张原理图</span>
+    <span class="chip">14 问答 · 3 模拟题</span>
+  </div>
+</div>
+
+<nav class="toc">
+  <a href="#l0">L0 class 文件解剖</a>
+  <a href="#l1">L1 泛型擦除</a>
+  <a href="#l2">L2 通配符与 PECS</a>
+  <a href="#l3">L3 反射</a>
+  <a href="#l4">L4 注解</a>
+  <a href="#l5">L5 动态代理</a>
+  <a href="#l6">L6 生产七坑</a>
+  <a href="#l7">L7 数字速查</a>
+  <a href="#l8">L8 十四问答</a>
+  <a href="#l9">L9 模拟面试</a>
+</nav>
+
+<section id="l0">
+  <h2><span class="idx">L0</span>一张 class 文件，解释四件事</h2>
+  <p>先把"编译后到底留下了什么"摆出来，后面四节都挂在这张图上。真正的因果链不在 API 上，在字节码里。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 452" role="img" aria-label="class 文件结构与被谁读取的对应关系">
+      <text x="30" y="30" font-size="13.5" font-weight="700" fill="#16212b">Order.class —— 编译后真正留下的东西</text>
+      <text x="470" y="30" font-size="11" fill="#6b7a88">谁在读它</text>
+
+      <!-- 常量池 -->
+      <rect x="30" y="46" width="390" height="86" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="46" y="66" font-size="12" font-weight="700" fill="#16212b">常量池 Constant Pool</text>
+      <text x="46" y="86" font-size="10" fill="#52616e">#2 Utf8 "(Ljava/lang/String;I)Ljava/lang/String;"</text>
+      <text x="46" y="104" font-size="10" fill="#a626a4">#4 Utf8 "&lt;T:Ljava/lang/Object;&gt;Ljava/util/List&lt;TT;&gt;;"</text>
+      <text x="46" y="122" font-size="10" fill="#c2410c">#5 Utf8 "RuntimeVisibleAnnotations"</text>
+
+      <rect x="470" y="46" width="400" height="86" rx="7" fill="#eef4ff" stroke="#b9d0f5"/>
+      <text x="486" y="68" font-size="12" font-weight="700" fill="#16324f">描述符里没有泛型</text>
+      <text x="486" y="88" font-size="10.5" fill="#2b4a6b">所以 List&lt;String&gt; 与 List&lt;Integer&gt;</text>
+      <text x="486" y="105" font-size="10.5" fill="#2b4a6b">在运行期是同一个 Class</text>
+      <text x="486" y="122" font-size="10" fill="#6b7a88">→ 不能按泛型实参重载 / 判断</text>
+
+      <!-- 字段表 -->
+      <rect x="30" y="146" width="390" height="58" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="46" y="167" font-size="12" font-weight="700" fill="#16212b">字段表 field_info</text>
+      <text x="46" y="188" font-size="10" fill="#52616e">descriptor 已擦除 · signature 保留泛型</text>
+
+      <rect x="470" y="146" width="400" height="58" rx="7" fill="#eefaf3" stroke="#b7e3c8"/>
+      <text x="486" y="168" font-size="12" font-weight="700" fill="#123f2b">Signature 属性</text>
+      <text x="486" y="188" font-size="10.5" fill="#1f5a3d">→ Field.getGenericType() 读的就是它</text>
+
+      <!-- 方法表 -->
+      <rect x="30" y="218" width="390" height="76" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="46" y="239" font-size="12" font-weight="700" fill="#16212b">方法表 method_info</text>
+      <text x="46" y="259" font-size="10" fill="#52616e">get()Ljava/lang/Object;  ← 业务方法被擦除</text>
+      <text x="46" y="277" font-size="10" fill="#1f6feb">get()Ljava/lang/Object;  [ACC_BRIDGE]  ← 编译器补的</text>
+
+      <rect x="470" y="218" width="400" height="76" rx="7" fill="#eefaf3" stroke="#b7e3c8"/>
+      <text x="486" y="240" font-size="12" font-weight="700" fill="#123f2b">ACC_BRIDGE | ACC_SYNTHETIC</text>
+      <text x="486" y="260" font-size="10.5" fill="#1f5a3d">一个 Java 方法在反射里变成两个</text>
+      <text x="486" y="277" font-size="10" fill="#6b7a88">→ 断言方法数、AOP 切点都会踩到</text>
+
+      <!-- 属性表 -->
+      <rect x="30" y="308" width="390" height="118" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="46" y="329" font-size="12" font-weight="700" fill="#16212b">属性表 attribute_info</text>
+      <text x="46" y="350" font-size="10" fill="#52616e">Signature</text>
+      <text x="46" y="368" font-size="10" fill="#2f8a3e">RuntimeVisibleAnnotations</text>
+      <text x="46" y="386" font-size="10" fill="#c2410c">RuntimeInvisibleAnnotations</text>
+      <text x="46" y="404" font-size="10" fill="#6b7a88">MethodParameters  ← 只有 -parameters 才有</text>
+
+      <rect x="470" y="308" width="400" height="118" rx="7" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="486" y="330" font-size="12" font-weight="700" fill="#5c2a08">注解写进哪个属性，决定谁能看见</text>
+      <text x="486" y="350" font-size="10.5" fill="#6b3a1a">RUNTIME → 反射 getAnnotation() 可读</text>
+      <text x="486" y="368" font-size="10.5" fill="#6b3a1a">CLASS   → 只有 ASM / Javassist 能读</text>
+      <text x="486" y="386" font-size="10.5" fill="#6b3a1a">SOURCE  → 连 class 文件都不进</text>
+      <text x="486" y="406" font-size="10" fill="#8a5a3a">忘了 @Retention 就是 CLASS，反射永远 null</text>
+
+      <!-- 连接短线 -->
+      <line x1="420" y1="89" x2="462" y2="89" stroke="#c3cdd8" stroke-width="1.2"/>
+      <polygon points="470,89 461,85 461,93" fill="#c3cdd8"/>
+      <line x1="420" y1="175" x2="462" y2="175" stroke="#c3cdd8" stroke-width="1.2"/>
+      <polygon points="470,175 461,171 461,179" fill="#c3cdd8"/>
+      <line x1="420" y1="256" x2="462" y2="256" stroke="#c3cdd8" stroke-width="1.2"/>
+      <polygon points="470,256 461,252 461,260" fill="#c3cdd8"/>
+      <line x1="420" y1="367" x2="462" y2="367" stroke="#c3cdd8" stroke-width="1.2"/>
+      <polygon points="470,367 461,363 461,371" fill="#c3cdd8"/>
+
+      <text x="30" y="444" font-size="10.5" fill="#6b7a88">※ 全部字段名与标志位来自 javap -v 的真实输出；本图只画与本篇四节相关的部分</text>
+    </svg>
+    <figcaption><b>图 1 · 一根链条的起点。</b>泛型实参进了 Signature，注解进了两个 Annotations 属性，桥方法进了方法表。后面四节讲的都是"谁在读这张表"。</figcaption>
+  </figure>
+
+  <p>四个结论直接落在这张表上：</p>
+  <ol>
+    <li><strong>描述符里没有泛型</strong>。所以 <code>List&lt;String&gt;</code> 和 <code>List&lt;Integer&gt;</code> 是同一个类，不能按实参重载、不能用 <code>instanceof</code> 判断。</li>
+    <li><strong>泛型信息没消失，只是搬了家</strong>。搬进 <code>Signature</code> 属性，编译器看得懂，字节码执行不认。所以"擦除"准确说是"运行期不参与类型检查"，不是"信息全丢"。</li>
+    <li><strong>注解能不能被框架读到，取决于它被写进哪个属性</strong>。<code>RUNTIME</code> 进 <code>RuntimeVisibleAnnotations</code>，<code>CLASS</code> 进 <code>RuntimeInvisibleAnnotations</code>。</li>
+    <li><strong>桥方法是编译器偷偷补的</strong>，标志位 <code>ACC_BRIDGE | ACC_SYNTHETIC</code>，存在的唯一理由是"擦除后父类方法签名变了，子类的重写对不上号"。</li>
+  </ol>
+</section>
+
+<section id="l1">
+  <h2><span class="idx">L1</span>泛型擦除：擦到哪、留下什么、炸在哪</h2>
+
+  <h3>1.1 擦除规则只有四行</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>声明</th><th>擦除后</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code>&lt;T&gt;</code></td><td class="num">Object</td><td>无界类型变量擦到上界</td></tr>
+      <tr><td><code>&lt;T extends Comparable&lt;T&gt;&gt;</code></td><td class="num">Comparable</td><td>有界擦到<strong>第一个</strong>上界</td></tr>
+      <tr><td><code>&lt;T extends A &amp; B&gt;</code></td><td class="num">A</td><td>第二个上界起只用于编译期检查</td></tr>
+      <tr><td><code>List&lt;T&gt;</code> / <code>T[]</code></td><td class="num">List / Object[]</td><td>容器与数组一起擦</td></tr>
+      <tr><td><code>List&lt;String&gt;</code></td><td class="num">List</td><td>实参直接丢弃</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>1.2 实验一：两个泛型实参，同一个 Class，炸在读取点</h3>
+  <div class="cb"><div class="bar"><span>Erasure.java</span><span class="cp">复制</span></div><pre><code>List&lt;String&gt; a = new ArrayList&lt;&gt;();
+List&lt;Integer&gt; b = new ArrayList&lt;&gt;();
+System.out.println(a.getClass() == b.getClass());   // true
+
+List raw = a;                                     // 裸类型，编译器放弃检查
+List&lt;Integer&gt; hack = (List&lt;Integer&gt;) (Object) a;  // 只有 unchecked 警告
+hack.add(1);                                      // 运行时畅通无阻
+
+String s = a.get(0);                              // ← CCE 在这里爆
+</code></pre></div>
+
+  <p>本机实测输出：</p>
+  <div class="cb"><div class="bar"><span>output</span><span class="cp">复制</span></div><pre><code>List&lt;String&gt;.class == List&lt;Integer&gt;.class ? true
+runtime class = java.util.ArrayList
+raw view element type = java.lang.Integer
+CCE at READ site: class java.lang.Integer cannot be cast to class java.lang.String
+</code></pre></div>
+
+  <p><strong>关键在最后一行。</strong>编译器在每个"取值点"插入 <code>checkcast</code>：</p>
+  <div class="cb"><div class="bar"><span>javap -c 片段</span><span class="cp">复制</span></div><pre><code>// 源码:  String s = a.get(0);
+aload_1
+iconst_0
+invokeinterface java/util/List.get:(I)Ljava/lang/Object;   // 返回 Object
+checkcast     java/lang/String                              // ← 编译器补的唯一保险
+astore_2
+</code></pre></div>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="泛型从源码到字节码到读取点的三段流水">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">擦除之后，类型检查被挪到了"读取点"</text>
+
+      <!-- stage 1 -->
+      <rect x="30" y="52" width="240" height="150" rx="8" fill="#fff" stroke="#cfd8e3"/>
+      <text x="46" y="74" font-size="11" font-weight="700" fill="#1f6feb">① 源码</text>
+      <text x="46" y="98" font-size="11" fill="#26333f" font-family="monospace">List&lt;String&gt; a = ...</text>
+      <text x="46" y="118" font-size="11" fill="#26333f" font-family="monospace">a.add("x")</text>
+      <text x="46" y="138" font-size="11" fill="#26333f" font-family="monospace">String s = a.get(0)</text>
+      <text x="46" y="168" font-size="10" fill="#6b7a88">实参 String 只在这一层存在</text>
+      <text x="46" y="186" font-size="10" fill="#6b7a88">它不写进描述符</text>
+
+      <!-- stage 2 -->
+      <rect x="330" y="52" width="240" height="150" rx="8" fill="#fff" stroke="#cfd8e3"/>
+      <text x="346" y="74" font-size="11" font-weight="700" fill="#a626a4">② 字节码</text>
+      <text x="346" y="98" font-size="11" fill="#26333f" font-family="monospace">add(Object)  ← 无校验</text>
+      <text x="346" y="118" font-size="11" fill="#26333f" font-family="monospace">get()Object</text>
+      <text x="346" y="138" font-size="11" fill="#2f8a3e" font-family="monospace">checkcast String</text>
+      <text x="346" y="168" font-size="10" fill="#6b7a88">写入没有关卡，读出才校验</text>
+      <text x="346" y="186" font-size="10" fill="#6b7a88">数组/容器都是 Object[]</text>
+
+      <!-- stage 3 -->
+      <rect x="630" y="52" width="240" height="150" rx="8" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="646" y="74" font-size="11" font-weight="700" fill="#c2410c">③ 爆点</text>
+      <text x="646" y="98" font-size="11" fill="#5c2a08" font-family="monospace">Integer cannot be</text>
+      <text x="646" y="116" font-size="11" fill="#5c2a08" font-family="monospace">cast to String</text>
+      <text x="646" y="144" font-size="10" fill="#8a5a3a">堆栈指向 Service 的取值行</text>
+      <text x="646" y="162" font-size="10" fill="#8a5a3a">写入方早已返回，无法追责</text>
+      <text x="646" y="186" font-size="10" fill="#c2410c" font-weight="600">这就是"莫名 CCE"的来源</text>
+
+      <!-- arrows -->
+      <line x1="272" y1="127" x2="320" y2="127" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="330,127 320,123 320,131" fill="#b6c2ce"/>
+      <line x1="572" y1="127" x2="620" y2="127" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="630,127 620,123 620,131" fill="#b6c2ce"/>
+
+      <!-- bottom note -->
+      <rect x="30" y="222" width="840" height="52" rx="7" fill="#eef4ff" stroke="#cfe0fb"/>
+      <text x="48" y="244" font-size="11" fill="#16324f" font-weight="600">面试点：泛型不是"运行期检查"，而是"编译期检查 + 编译期插入 checkcast"。</text>
+      <text x="48" y="262" font-size="10.5" fill="#2b4a6b">所以 @SuppressWarnings("unchecked") 关掉的不是"警告"，是唯一那道保险 —— 该按红线管理。</text>
+    </svg>
+    <figcaption><b>图 2 · 写入无关卡，读出才校验。</b>这条时序解释了 90% 的"莫名 CCE"工单：锅在写入方，日志在读取方。</figcaption>
+  </figure>
+
+  <h3>1.3 实验二：桥方法，编译器替你补的那一层</h3>
+  <div class="cb"><div class="bar"><span>Child / Parent</span><span class="cp">复制</span></div><pre><code>class Parent&lt;T&gt; {
+    T get() { return null; }
+    void set(T t) { }
+}
+class Child extends Parent&lt;String&gt; {
+    @Override String get() { return "child"; }
+    @Override void set(String s) { }
+}
+</code></pre></div>
+
+  <p><code>Child.class.getDeclaredMethods()</code> 实测返回 <strong>4 个</strong>方法，不是 2 个：</p>
+  <div class="cb"><div class="bar"><span>output</span><span class="cp">复制</span></div><pre><code>get[]                        ret=Object   bridge=true  synthetic=true
+get[]                        ret=String   bridge=false synthetic=false
+set[class java.lang.Object]  ret=void     bridge=true  synthetic=true
+set[class java.lang.String]  ret=void     bridge=false synthetic=false
+</code></pre></div>
+
+  <p>为什么必须补？父类 <code>Parent</code> 擦除后是 <code>Object get()</code>，子类写的是 <code>String get()</code>。<strong>返回值是方法签名的一部分</strong>，<code>String get()</code> 不构成对 <code>Object get()</code> 的重写，JVM 的多态就断了。<br>
+  编译器的解法是生成一个桥方法做转发。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="桥方法转发路径">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">桥方法：让"擦除后的父类签名"能调到"擦除前的子类实现"</text>
+
+      <!-- 调用点 -->
+      <rect x="30" y="58" width="210" height="72" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="44" y="80" font-size="10.5" font-weight="700" fill="#6b7a88">调用点</text>
+      <text x="44" y="100" font-size="10.5" fill="#26333f" font-family="monospace">Parent p = new Child();</text>
+      <text x="44" y="118" font-size="10.5" fill="#26333f" font-family="monospace">p.get();</text>
+
+      <!-- 编译后 -->
+      <rect x="288" y="58" width="270" height="72" rx="7" fill="#eef4ff" stroke="#b9d0f5"/>
+      <text x="302" y="80" font-size="10.5" font-weight="700" fill="#1f6feb">编译成（静态类型是 Parent）</text>
+      <text x="302" y="100" font-size="10" fill="#16324f" font-family="monospace">invokevirtual Parent.get()Object</text>
+      <text x="302" y="118" font-size="9.5" fill="#2b4a6b">描述符必须是 Object，编译器只知道擦除后的</text>
+
+      <!-- 桥 -->
+      <rect x="288" y="176" width="270" height="76" rx="7" fill="#eefaf3" stroke="#b7e3c8"/>
+      <text x="302" y="198" font-size="10.5" font-weight="700" fill="#1a7f4b">Child 桥方法（编译器生成）</text>
+      <text x="302" y="217" font-size="10" fill="#123f2b" font-family="monospace">Object get() { return get(); }</text>
+      <text x="302" y="236" font-size="9.5" fill="#1f5a3d">ACC_BRIDGE | ACC_SYNTHETIC</text>
+
+      <!-- 真实 -->
+      <rect x="606" y="176" width="264" height="76" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="620" y="198" font-size="10.5" font-weight="700" fill="#16212b">Child 真实实现</text>
+      <text x="620" y="217" font-size="10" fill="#26333f" font-family="monospace">String get() { return "child"; }</text>
+      <text x="620" y="236" font-size="9.5" fill="#6b7a88">你写的业务代码在这一层</text>
+
+      <!-- 箭头 -->
+      <line x1="242" y1="94" x2="278" y2="94" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="288,94 278,90 278,98" fill="#b6c2ce"/>
+      <line x1="423" y1="134" x2="423" y2="166" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="423,176 419,166 427,166" fill="#b6c2ce"/>
+      <line x1="560" y1="214" x2="596" y2="214" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="606,214 596,210 596,218" fill="#b6c2ce"/>
+
+      <text x="240" y="160" font-size="9.5" fill="#6b7a88">JVM 按 名字+描述符</text>
+      <text x="240" y="174" font-size="9.5" fill="#6b7a88">虚分派到桥方法</text>
+
+      <!-- 三个结论 -->
+      <rect x="30" y="268" width="270" height="48" rx="6" fill="#f4f7fa" stroke="#e3e8ee"/>
+      <text x="42" y="288" font-size="10" fill="#3d4d5c">反射方法数变多 → 断言会挂</text>
+      <text x="42" y="305" font-size="10" fill="#6b7a88">过滤 m.isBridge()</text>
+
+      <rect x="315" y="268" width="270" height="48" rx="6" fill="#f4f7fa" stroke="#e3e8ee"/>
+      <text x="327" y="288" font-size="10" fill="#3d4d5c">多层泛型继承可能撞名</text>
+      <text x="327" y="305" font-size="10" fill="#6b7a88">Duplicate method name&amp;signature</text>
+
+      <rect x="600" y="268" width="270" height="48" rx="6" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="612" y="288" font-size="10" fill="#5c2a08">AOP 切点匹配到桥方法</text>
+      <text x="612" y="305" font-size="10" fill="#8a5a3a">"注解加了却不生效"的冷门因</text>
+    </svg>
+    <figcaption><b>图 3 · 桥方法不是语法糖，是必需的多态补丁。</b>没有它，<code>Parent p = new Child(); p.get()</code> 会在父类方法表里找不到 <code>String get()</code>。</figcaption>
+  </figure>
+
+  <h3>1.4 实验三：相同的擦除 → 无法重载</h3>
+  <div class="cb"><div class="bar"><span>Bad.java</span><span class="cp">复制</span></div><pre><code>void m(List&lt;String&gt; a) {}
+void m(List&lt;Integer&gt; a) {}      // 编译直接失败
+</code></pre></div>
+  <div class="cb"><div class="bar"><span>javac 输出</span><span class="cp">复制</span></div><pre><code>错误: 名称冲突: m(List&lt;Integer&gt;) 与 m(List&lt;String&gt;) 具有相同擦除
+</code></pre></div>
+
+  <figure>
+    <svg viewBox="0 0 900 240" role="img" aria-label="两个泛型方法塌缩成同一个描述符">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">重载决议看的是擦除后的描述符，不是泛型实参</text>
+
+      <rect x="30" y="56" width="300" height="56" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="46" y="90" font-size="11.5" fill="#26333f" font-family="monospace">void m(List&lt;String&gt; a)</text>
+
+      <rect x="30" y="130" width="300" height="56" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="46" y="164" font-size="11.5" fill="#26333f" font-family="monospace">void m(List&lt;Integer&gt; a)</text>
+
+      <line x1="336" y1="84" x2="470" y2="120" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="480,123 470,116 472,127" fill="#b6c2ce"/>
+      <line x1="336" y1="158" x2="470" y2="134" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="480,132 470,140 472,128" fill="#b6c2ce"/>
+
+      <rect x="486" y="82" width="180" height="56" rx="7" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="500" y="106" font-size="10.5" font-weight="700" fill="#c2410c">擦除后</text>
+      <text x="500" y="126" font-size="11" fill="#5c2a08" font-family="monospace">m(Ljava/util/List;)V</text>
+
+      <line x1="672" y1="110" x2="706" y2="110" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="716,110 706,106 706,114" fill="#b6c2ce"/>
+
+      <rect x="722" y="82" width="148" height="56" rx="7" fill="#fdecec" stroke="#f0bcbc"/>
+      <text x="736" y="106" font-size="10.5" font-weight="700" fill="#a12626">同一个方法签名</text>
+      <text x="736" y="126" font-size="10.5" fill="#a12626">→ 不构成重载</text>
+
+      <text x="30" y="214" font-size="10.5" fill="#6b7a88">绕过办法：换方法名（推荐） / 加哑参数 m(List, String...) / 用 Object 接参后自己判 —— 后者把编译期检查也一起丢了。</text>
+    </svg>
+    <figcaption><b>图 4 · 两条路塌缩成一条。</b>"泛型不参与重载"的准确含义是：重载决议只读描述符，实参压根没进决策。</figcaption>
+  </figure>
+
+  <h3>1.5 实验四：泛型没丢干净，<code>Signature</code> 还在</h3>
+  <p>这是最容易被讲错的一点。<strong>泛型实参在运行期可以通过 <code>getGenericSuperclass()</code> 拿到</strong> —— 前提是这个类型出现在"类的签名"里，而不是"局部变量"里。</p>
+  <div class="cb"><div class="bar"><span>TypeRef.java</span><span class="cp">复制</span></div><pre><code>static class Ref&lt;T&gt; {
+    Type captured() {
+        return ((ParameterizedType) getClass().getGenericSuperclass())
+                .getActualTypeArguments()[0];
+    }
+}
+
+System.out.println(new Ref&lt;List&lt;String&gt;&gt;() {}.captured());
+System.out.println(new Ref&lt;Map&lt;String, Integer&gt;&gt;() {}.captured());
+System.out.println(new Ref&lt;List&lt;String&gt;&gt;().getClass().getGenericSuperclass());
+</code></pre></div>
+  <div class="cb"><div class="bar"><span>output</span><span class="cp">复制</span></div><pre><code>anonymous  = java.util.List&lt;java.lang.String&gt;
+anonymous2 = java.util.Map&lt;java.lang.String, java.lang.Integer&gt;
+plain      = class java.lang.Object
+</code></pre></div>
+
+  <figure>
+    <svg viewBox="0 0 900 316" role="img" aria-label="匿名子类保留泛型签名">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">为什么 TypeReference 必须带那对花括号</text>
+
+      <!-- lane 1 -->
+      <text x="30" y="62" font-size="11" font-weight="700" fill="#a12626">✗ 没有花括号</text>
+      <rect x="30" y="72" width="250" height="60" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="44" y="96" font-size="10.5" fill="#26333f" font-family="monospace">new Ref&lt;List&lt;String&gt;&gt;()</text>
+      <text x="44" y="116" font-size="9.5" fill="#6b7a88">实参写在"使用处"</text>
+      <line x1="284" y1="102" x2="318" y2="102" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="328,102 318,98 318,106" fill="#b6c2ce"/>
+      <rect x="332" y="72" width="238" height="60" rx="7" fill="#fff" stroke="#e3e8ee"/>
+      <text x="346" y="96" font-size="10" fill="#52616e" font-family="monospace">getGenericSuperclass()</text>
+      <text x="346" y="116" font-size="10" fill="#a12626" font-family="monospace">→ class java.lang.Object</text>
+      <line x1="574" y1="102" x2="608" y2="102" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="618,102 608,98 608,106" fill="#b6c2ce"/>
+      <text x="622" y="98" font-size="10.5" fill="#a12626" font-weight="600">拿不到实参</text>
+      <text x="622" y="116" font-size="9.5" fill="#8a5a3a">反序列化 → LinkedHashMap</text>
+
+      <!-- lane 2 -->
+      <text x="30" y="176" font-size="11" font-weight="700" fill="#1a7f4b">✓ 带花括号</text>
+      <rect x="30" y="186" width="250" height="72" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="44" y="208" font-size="10.5" fill="#26333f" font-family="monospace">new Ref&lt;List&lt;String&gt;&gt;() {}</text>
+      <text x="44" y="226" font-size="9.5" fill="#6b7a88">生成真实子类</text>
+      <text x="44" y="244" font-size="9.5" fill="#6b7a88">RefSub extends Ref&lt;List&lt;String&gt;&gt;</text>
+
+      <line x1="284" y1="222" x2="318" y2="222" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="328,222 318,218 318,226" fill="#b6c2ce"/>
+
+      <rect x="332" y="186" width="238" height="72" rx="7" fill="#eefaf3" stroke="#b7e3c8"/>
+      <text x="346" y="208" font-size="10" fill="#123f2b" font-family="monospace">Signature 属性里写着</text>
+      <text x="346" y="226" font-size="9.5" fill="#1f5a3d" font-family="monospace">RefSub : Ref&lt;List&lt;String&gt;&gt;</text>
+      <text x="346" y="244" font-size="9.5" fill="#1f5a3d">编译期信息被留在了 class 文件里</text>
+
+      <line x1="574" y1="222" x2="608" y2="222" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="618,222 608,218 608,226" fill="#b6c2ce"/>
+      <text x="622" y="218" font-size="10.5" fill="#1a7f4b" font-weight="600">拿到 List&lt;String&gt;</text>
+      <text x="622" y="236" font-size="9.5" fill="#1f5a3d">Jackson / Guava / Spring 全用这招</text>
+
+      <rect x="30" y="276" width="840" height="30" rx="6" fill="#f4f7fa" stroke="#e3e8ee"/>
+      <text x="44" y="296" font-size="10" fill="#3d4d5c">正确说法不是"泛型擦除了所以拿不到"，而是"只能从类/字段/方法声明的 Signature 里拿，拿不到局部变量和调用处的实参"。</text>
+    </svg>
+    <figcaption><b>图 5 · 擦除 ≠ 全丢。</b>那对花括号的作用，是把实参从"使用处"搬到"一个真实子类的父类签名里"—— 从擦除区搬到了非擦除区。</figcaption>
+  </figure>
+
+  <div class="box key"><span class="lb">面试加分点</span>
+    被问"泛型擦除后为什么 <code>TypeReference</code> 还能拿到类型"，能答出"因为实参落在了匿名子类的 <code>Signature</code> 属性里，<code>getGenericSuperclass()</code> 读的是它"，比背"泛型擦除"高一个档次。再补一句"局部变量和调用处的实参拿不到，所以必须匿名子类"，基本就满分了。
+  </div>
+</section>
+<section id="l2">
+  <h2><span class="idx">L2</span>通配符与 PECS：擦除决定了它们只能是"编译期幻觉"</h2>
+
+  <p><code>List&lt;? extends Number&gt;</code> 为什么不能 <code>add</code>？</p>
+  <p>因为它擦除后就是 <code>List</code>，JVM 层面 <code>add</code> 完全合法。编译器唯一能做的是<strong>在编译期假装它不合法</strong>，用一个叫 <code>capture#1 of ? extends Number</code> 的虚构类型拦住你。既然运行时没有类型可查，编译器就不敢让你写进去 —— 写进去也没人能校验。</p>
+
+  <div class="cb"><div class="bar"><span>Wildcard.java</span><span class="cp">复制</span></div><pre><code>List&lt;? extends Number&gt; src = new ArrayList&lt;Integer&gt;();
+Number n = src.get(0);      // 读出来一定是 Number 的子类，安全
+src.add(1);                 // 编译错误：capture#1 不接受 Integer
+src.add(null);              // 唯一合法，因为 null 是任何引用类型的值
+</code></pre></div>
+
+  <p>PECS（Producer Extends, Consumer Super）在这里不是口诀，是推论：</p>
+  <ul>
+    <li>你只<strong>读</strong>（生产者）→ 用 <code>? extends T</code>，上界保证读出来是 T。</li>
+    <li>你只<strong>写</strong>（消费者）→ 用 <code>? super T</code>，下界保证写进去的 T 一定被接受。</li>
+    <li>又读又写 → 别用通配符，直接用类型变量 <code>T</code>。</li>
+  </ul>
+
+  <p><code>Collections.copy(List&lt;? super T&gt; dest, List&lt;? extends T&gt; src)</code> 是 JDK 里最标准的 PECS 样例 —— 背它比背口诀有用，因为它能顺手解释"为什么 <code>Collections.sort(List&lt;T&gt;)</code> 不用通配符"（它既读又写）。</p>
+
+  <div class="box note"><span class="lb">一句话回答</span>
+    "通配符是给编译器的，不是给 JVM 的。擦除后它们全都变成原始类型，所以编译器只能用 capture 变量在编译期模拟类型约束；一旦运行时无法校验，它就禁止写入。"
+  </div>
+</section>
+
+<section id="l3">
+  <h2><span class="idx">L3</span>反射：慢在哪、快在哪、什么时候不能不用</h2>
+
+  <h3>3.1 三个入口，代价差两个数量级</h3>
+  <div class="cb"><div class="bar"><span>ClassLoader.java</span><span class="cp">复制</span></div><pre><code>Class&lt;?&gt; c1 = obj.getClass();                 // 最快，已有对象
+Class&lt;?&gt; c2 = Order.class;                    // 编译期常量，零成本
+Class&lt;?&gt; c3 = Class.forName("com.x.Order");   // 触发类加载 + 初始化，最慢
+Class&lt;?&gt; c4 = Class.forName("com.x.Order", false, loader);  // 只加载，不初始化
+</code></pre></div>
+  <p><code>Class.forName(name)</code> 默认 <code>initialize=true</code>，会跑 <code>&lt;clinit&gt;</code>。这一句能救活一批"初始化顺序敏感"的启动类 —— 常见于 SPI 探测、条件装配、按类名配置的插件加载。</p>
+
+  <h3>3.2 <code>Method.invoke</code> 的三个成本</h3>
+  <p>先看它到底经过了几层：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 320" role="img" aria-label="Method.invoke 到目标方法的调用链">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">Method.invoke 的三层壳：委托 → accessor → 目标</text>
+
+      <rect x="30" y="112" width="176" height="66" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="44" y="134" font-size="10.5" font-weight="700" fill="#6b7a88">调用方</text>
+      <text x="44" y="154" font-size="10.5" fill="#26333f" font-family="monospace">m.invoke(t, 7)</text>
+      <text x="44" y="170" font-size="9" fill="#6b7a88">参数装 Object[]</text>
+
+      <rect x="246" y="104" width="212" height="82" rx="7" fill="#eef4ff" stroke="#b9d0f5"/>
+      <text x="260" y="126" font-size="10.5" font-weight="700" fill="#1f6feb">DelegatingMethodAccessorImpl</text>
+      <text x="260" y="146" font-size="9.5" fill="#16324f">每层都做 quickCheckMemberAccess</text>
+      <text x="260" y="164" font-size="9.5" fill="#16324f">检查调用者是否有权访问</text>
+      <text x="260" y="180" font-size="9" fill="#6b7a88">成本 ②：权限检查</text>
+
+      <rect x="500" y="52" width="216" height="74" rx="7" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="514" y="74" font-size="10.5" font-weight="700" fill="#c2410c">NativeMethodAccessorImpl</text>
+      <text x="514" y="93" font-size="9.5" fill="#5c2a08">前 15 次走 JNI 进 native</text>
+      <text x="514" y="110" font-size="9.5" fill="#8a5a3a">单次 ≈ 1.5 μs</text>
+
+      <rect x="500" y="164" width="216" height="74" rx="7" fill="#eefaf3" stroke="#b7e3c8"/>
+      <text x="514" y="186" font-size="10.5" font-weight="700" fill="#1a7f4b">GeneratedMethodAccessor$1</text>
+      <text x="514" y="205" font-size="9.5" fill="#123f2b">第 16 次起动态生成的字节码</text>
+      <text x="514" y="222" font-size="9.5" fill="#1f5a3d">直接 invokevirtual，单次 ≈ 7.5 ns</text>
+
+      <rect x="760" y="112" width="110" height="66" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="774" y="134" font-size="10.5" font-weight="700" fill="#6b7a88">目标方法</text>
+      <text x="774" y="154" font-size="10" fill="#26333f" font-family="monospace">inc(7)</text>
+      <text x="774" y="170" font-size="9" fill="#6b7a88">1.1 ns</text>
+
+      <line x1="210" y1="145" x2="236" y2="145" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="246,145 236,141 236,149" fill="#b6c2ce"/>
+      <line x1="462" y1="130" x2="490" y2="98" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="500,92 489,94 494,102" fill="#b6c2ce"/>
+      <line x1="462" y1="160" x2="490" y2="192" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="500,198 489,196 494,188" fill="#b6c2ce"/>
+      <line x1="720" y1="89" x2="748" y2="125" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="756,133 745,131 750,123" fill="#b6c2ce"/>
+      <line x1="720" y1="201" x2="748" y2="165" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="756,157 745,159 750,167" fill="#b6c2ce"/>
+
+      <text x="470" y="74" font-size="9.5" fill="#c2410c">①-15</text>
+      <text x="470" y="212" font-size="9.5" fill="#1a7f4b">16+</text>
+
+      <rect x="30" y="256" width="840" height="46" rx="7" fill="#f4f7fa" stroke="#e3e8ee"/>
+      <text x="44" y="276" font-size="10.5" fill="#3d4d5c">成本 ①：每次调用分配 Object[2] 并把 int 装箱成 Integer　　（上图未画，在字节码里是 anewarray + valueOf）</text>
+      <text x="44" y="293" font-size="10.5" fill="#3d4d5c">成本 ③：调用点对 JIT 不透明 —— invoke 是一个 Method 对象的虚调用，多态性极差，很难内联</text>
+    </svg>
+    <figcaption><b>图 6 · 三层壳，每层都在收费。</b>注意 accessor 会在第 16 次调用后被换掉，这是"反射慢 100 倍"这类博客最大的数据陷阱 —— 它们大多没预热。</figcaption>
+  </figure>
+
+  <h3>3.3 实验：首次 3.6 毫秒，稳态 7.5 纳秒</h3>
+  <p>同一个 <code>int inc(int)</code>，逐次计时（本机 JDK 21，三次运行取一致趋势）：</p>
+  <div class="cb"><div class="bar"><span>output</span><span class="cp">复制</span></div><pre><code>第 1 次   3,564,100 ns   ≈ 3.6 ms   ← 加载 accessor 类 + 权限校验 + JNI 绑定
+第 2 次      46,800 ns   ≈ 47 μs
+第 3 次       7,500 ns
+第 5 次       2,900 ns
+第 12~22 次   1,500~2,600 ns        ← native accessor 的单次成本
+</code></pre></div>
+
+  <figure>
+    <svg viewBox="0 0 900 296" role="img" aria-label="反射调用的膨胀时间轴">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">inflation：第 15 次调用是把分水岭</text>
+
+      <!-- 前15次背景 -->
+      <rect x="60" y="128" width="574" height="46" rx="5" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="70" y="156" font-size="10.5" fill="#c2410c" font-weight="600">NativeMethodAccessorImpl（JNI）· 单次 ≈ 1.5 μs</text>
+
+      <!-- 16+ 背景 -->
+      <rect x="640" y="128" width="200" height="46" rx="5" fill="#eefaf3" stroke="#b7e3c8"/>
+      <text x="650" y="149" font-size="10" fill="#1a7f4b" font-weight="600">GeneratedMethodAccessor</text>
+      <text x="650" y="165" font-size="10" fill="#1f5a3d">字节码 · 单次 ≈ 7.5 ns</text>
+
+      <!-- 轴 -->
+      <line x1="60" y1="200" x2="840" y2="200" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="850,200 840,196 840,204" fill="#b6c2ce"/>
+
+      <!-- ticks 1..20, dx=41 -->
+      <g fill="#8a97a3" font-size="9">
+        <line x1="60" y1="200" x2="60" y2="208" stroke="#b6c2ce"/><text x="52" y="222">1</text>
+        <line x1="183" y1="200" x2="183" y2="208" stroke="#b6c2ce"/><text x="175" y="222">4</text>
+        <line x1="306" y1="200" x2="306" y2="208" stroke="#b6c2ce"/><text x="298" y="222">7</text>
+        <line x1="429" y1="200" x2="429" y2="208" stroke="#b6c2ce"/><text x="421" y="222">10</text>
+        <line x1="552" y1="200" x2="552" y2="208" stroke="#b6c2ce"/><text x="544" y="222">13</text>
+        <line x1="634" y1="200" x2="634" y2="208" stroke="#b6c2ce"/><text x="622" y="222">15</text>
+        <line x1="716" y1="200" x2="716" y2="208" stroke="#b6c2ce"/><text x="708" y="222">17</text>
+        <line x1="840" y1="200" x2="840" y2="208" stroke="#b6c2ce"/><text x="832" y="222">20</text>
+      </g>
+
+      <!-- 临界线 -->
+      <line x1="634" y1="106" x2="634" y2="196" stroke="#c2410c" stroke-width="1.6" stroke-dasharray="4 3"/>
+      <text x="628" y="100" font-size="10" fill="#c2410c" text-anchor="end">inflationThreshold = 15</text>
+
+      <!-- 首次标注 -->
+      <line x1="60" y1="128" x2="60" y2="86" stroke="#a626a4" stroke-width="1.2" stroke-dasharray="3 3"/>
+      <text x="66" y="82" font-size="10" fill="#a626a4" font-weight="600">第 1 次 3.6 ms（含 accessor 类加载）</text>
+
+      <!-- 结论 -->
+      <rect x="60" y="244" width="780" height="42" rx="6" fill="#f4f7fa" stroke="#e3e8ee"/>
+      <text x="74" y="270" font-size="10.5" fill="#3d4d5c">推论：① 启动期只调几次的反射，成本是"毫秒级"，缓存 Method 并不能救它，只有"不做反射"才行；</text>
+      <text x="74" y="284" font-size="10.5" fill="#6b7a88">　　　② 真正该优化的是"每次 getDeclaredMethod"（微秒级，比 invoke 本身贵两个数量级）。</text>
+    </svg>
+    <figcaption><b>图 7 · 前 15 次和后 5 次是两种东西。</b><code>-Dsun.reflect.noInflation=true</code> 可以让它一上来就用字节码版，代价是启动时多生成 N 个类。</figcaption>
+  </figure>
+
+  <h3>3.4 稳态四方对比</h3>
+  <p>预热 300 万次后，N=200 万，单位 ns/op：</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th>调用方式</th><th>三次实测</th><th>取值</th><th>相对直接调用</th></tr></thead>
+    <tbody>
+      <tr><td>直接 <code>t.inc(7)</code></td><td class="num">2.08 / 1.07 / 1.02</td><td class="num">1.1 ns</td><td class="num">1×</td></tr>
+      <tr><td><code>Method.invoke</code></td><td class="num">6.88 / 8.90 / 6.86</td><td class="num">7.5 ns</td><td class="num">≈ 7×</td></tr>
+      <tr><td><code>MethodHandle.invokeExact</code></td><td class="num">6.90 / 5.02 / 2.76</td><td class="num">≈ 5 ns</td><td class="num">≈ 4×</td></tr>
+      <tr><td><code>LambdaMetafactory</code> 生成接口</td><td class="num">1.21 / 1.93 / 1.88</td><td class="num">1.9 ns</td><td class="num">≈ 1.7×</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 900 392" role="img" aria-label="六种调用方式的单次开销条形对比">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">单次调用开销（ns，预热后稳态，越小越好）</text>
+
+      <!-- 网格基线 -->
+      <g stroke="#eef2f6" stroke-width="1">
+        <line x1="200" y1="52" x2="200" y2="344"/>
+        <line x1="359" y1="52" x2="359" y2="344"/>
+        <line x1="518" y1="52" x2="518" y2="344"/>
+        <line x1="677" y1="52" x2="677" y2="344"/>
+      </g>
+      <g fill="#a5b1bc" font-size="9">
+        <text x="196" y="42" text-anchor="end">0</text>
+        <text x="355" y="42" text-anchor="end">5</text>
+        <text x="514" y="42" text-anchor="end">10</text>
+        <text x="673" y="42" text-anchor="end">15</text>
+      </g>
+
+      <!-- rows: 31.8 px per ns -->
+      <g font-size="10.5">
+        <text x="186" y="76" text-anchor="end" fill="#16212b" font-weight="600">直接调用</text>
+        <rect x="200" y="62" width="35" height="24" rx="4" fill="#1a7f4b"/>
+        <text x="245" y="79" fill="#1a7f4b" font-weight="600">1.1</text>
+
+        <text x="186" y="126" text-anchor="end" fill="#16212b" font-weight="600">Lambda 接口</text>
+        <rect x="200" y="112" width="60" height="24" rx="4" fill="#2f8a3e"/>
+        <text x="270" y="129" fill="#2f8a3e" font-weight="600">1.9</text>
+
+        <text x="186" y="176" text-anchor="end" fill="#16212b">MethodHandle</text>
+        <rect x="200" y="162" width="159" height="24" rx="4" fill="#1f6feb"/>
+        <text x="369" y="179" fill="#1f6feb" font-weight="600">≈5</text>
+
+        <text x="186" y="226" text-anchor="end" fill="#16212b">Method.invoke</text>
+        <rect x="200" y="212" width="239" height="24" rx="4" fill="#c2410c"/>
+        <text x="449" y="229" fill="#c2410c" font-weight="600">7.5</text>
+
+        <text x="186" y="276" text-anchor="end" fill="#16212b">JDK 动态代理</text>
+        <rect x="200" y="262" width="264" height="24" rx="4" fill="#986801"/>
+        <text x="474" y="279" fill="#986801" font-weight="600">8.3</text>
+
+        <text x="186" y="326" text-anchor="end" fill="#16212b">CGLIB 代理</text>
+        <rect x="200" y="312" width="541" height="24" rx="4" fill="#a626a4"/>
+        <text x="751" y="329" fill="#a626a4" font-weight="600">17.1</text>
+      </g>
+
+      <rect x="30" y="352" width="840" height="32" rx="6" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="44" y="372" font-size="10.5" fill="#8a5a3a">注意：反射"首次"是 3.6 ms = 3,600,000 ns，是直接调用的 330 万倍 —— 这两件事不能放在同一根轴上比较，所以没画。</text>
+    </svg>
+    <figcaption><b>图 8 · 7 倍，不是 100 倍。</b>但注意 CGLIB 竟然比 JDK 代理还慢（本机 <code>invokeSuper</code> 路径），所以"CGLIB 更快"也是伪知识 —— 真实差异在<b>创建成本</b>和<b>能代理什么</b>上。</figcaption>
+  </figure>
+
+  <div class="box warn"><span class="lb">常见 falsy 结论</span>
+    "反射比直接调用慢 100 倍" —— 未预热。<br>
+    "MethodHandle 一定比反射快" —— 实测 5 vs 7.5，优势不大，`invokeExact` 的类型精确匹配还会带来使用成本。<br>
+    "CGLIB 一定比 JDK 代理快" —— 本机实测 17 vs 8.3，反而更慢。真实差异在创建成本与能力边界。
+  </div>
+
+  <h3>3.5 为什么 Lambda 版本能跑到 1.9ns</h3>
+  <p><code>LambdaMetafactory.metafactory</code> 在运行期生成一个实现类，它的方法体是<strong>直接 <code>invokevirtual</code></strong>，没有数组、没有装箱、没有权限检查：</p>
+  <div class="cb"><div class="bar"><span>LambdaLink.java</span><span class="cp">复制</span></div><pre><code>MethodHandle mh = MethodHandles.lookup()
+        .findVirtual(Target.class, "inc", MethodType.methodType(int.class, int.class));
+
+IntFn f = (IntFn) LambdaMetafactory.metafactory(
+        MethodHandles.lookup(), "apply",
+        MethodType.methodType(IntFn.class),                        // 接口
+        MethodType.methodType(int.class, Target.class, int.class), // SAM 精确签名
+        mh,
+        MethodType.methodType(int.class, Target.class, int.class)  // 实例化类型
+).getTarget().invoke();
+</code></pre></div>
+
+  <div class="box warn"><span class="lb">我踩过的坑</span>
+    <code>samMethodType</code> 必须是接口方法的<strong>精确描述符</strong>。我第一版按"擦除后"写成 <code>(Object,int)int</code>，运行期直接 <code>AbstractMethodError: does not define or inherit 'int apply(Target,int)'</code>。原因：生成的 <code>apply(Object,int)</code> 参数类型和接口的 <code>apply(Target,int)</code> 不匹配，<strong>参数类型不同不构成覆写</strong>，等于没实现。这个报错信息极其反直觉，值得记一辈子。
+  </div>
+
+  <p>这也是 MyBatis-Plus、MapStruct、Spring 6 一类"把反射转成直接调用"的底层手段：<strong>反射只用来找方法，真正的调用交给方法句柄或字节码。</strong></p>
+
+  <h3>3.6 <code>setAccessible</code> 在 JDK 17+ 已经是"要许可"的操作</h3>
+  <p>JDK 9 引入模块系统，JDK 16 起强封装默认开启（JEP 396），JDK 17 彻底关掉 <code>--illegal-access=permit</code>。本机 JDK 21 实测：</p>
+  <div class="cb"><div class="bar"><span>output</span><span class="cp">复制</span></div><pre><code>Integer.value           -&gt; java.lang.reflect.InaccessibleObjectException
+ArrayList.elementData   -&gt; java.lang.reflect.InaccessibleObjectException
+自己的类 setAccessible   -&gt; true（同一模块内，无需 open）
+</code></pre></div>
+
+  <figure>
+    <svg viewBox="0 0 900 300" role="img" aria-label="强封装下 setAccessible 的三种结果">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">同一个 API，三种结果：看模块有没有 open</text>
+
+      <!-- module box -->
+      <rect x="30" y="56" width="360" height="196" rx="9" fill="#f8fafc" stroke="#cfd8e3" stroke-dasharray="5 4"/>
+      <text x="46" y="80" font-size="11.5" font-weight="700" fill="#3d4d5c">module java.base</text>
+      <rect x="46" y="92" width="150" height="34" rx="5" fill="#fff" stroke="#cfd8e3"/>
+      <text x="58" y="114" font-size="10" fill="#26333f" font-family="monospace">java.lang</text>
+      <rect x="210" y="92" width="164" height="34" rx="5" fill="#fff" stroke="#cfd8e3"/>
+      <text x="222" y="114" font-size="10" fill="#26333f" font-family="monospace">java.util</text>
+      <text x="46" y="150" font-size="9.5" fill="#6b7a88">默认 exports 了公开包，但没 opens</text>
+      <text x="46" y="168" font-size="9.5" fill="#6b7a88">→ 私有成员在反射面前是关闭的</text>
+      <rect x="46" y="182" width="328" height="52" rx="5" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="58" y="202" font-size="9.5" fill="#8a5a3a">只有 --add-opens java.base/java.lang=ALL-UNNAMED</text>
+      <text x="58" y="220" font-size="9.5" fill="#8a5a3a">才能把 opens 打开（--add-exports 不够）</text>
+
+      <!-- results -->
+      <rect x="470" y="60" width="400" height="54" rx="7" fill="#eefaf3" stroke="#b7e3c8"/>
+      <text x="484" y="82" font-size="10.5" font-weight="700" fill="#1a7f4b">自己的类（同一模块）</text>
+      <text x="484" y="101" font-size="9.5" fill="#1f5a3d">trySetAccessible() → true，正常可用</text>
+
+      <rect x="470" y="126" width="400" height="54" rx="7" fill="#fdecec" stroke="#f0bcbc"/>
+      <text x="484" y="148" font-size="10.5" font-weight="700" fill="#a12626">Integer.value（java.base，无 open）</text>
+      <text x="484" y="167" font-size="9.5" fill="#8a2b2b">InaccessibleObjectException，JDK 17+ 默认如此</text>
+
+      <rect x="470" y="192" width="400" height="54" rx="7" fill="#eef4ff" stroke="#b9d0f5"/>
+      <text x="484" y="214" font-size="10.5" font-weight="700" fill="#1f6feb">加了 --add-opens 之后</text>
+      <text x="484" y="233" font-size="9.5" fill="#16324f">可写，但这属于"授权越界"，不是"修复"</text>
+
+      <line x1="396" y1="87" x2="460" y2="87" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="470,87 460,83 460,91" fill="#b6c2ce"/>
+      <line x1="396" y1="153" x2="460" y2="153" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="470,153 460,149 460,157" fill="#b6c2ce"/>
+      <line x1="396" y1="219" x2="460" y2="219" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="470,219 460,215 460,223" fill="#b6c2ce"/>
+
+      <text x="30" y="282" font-size="10.5" fill="#6b7a88">一批老框架（fastjson 1.x、早期 cglib、部分序列化库）在 JDK 17 启动即崩，根因就是这个，不是"兼容性玄学"。</text>
+    </svg>
+    <figcaption><b>图 9 · 强封装不是 bug，是账单。</b>应急用 <code>--add-opens</code>，正解是升框架版本 —— 因为这条路每年都在收窄。</figcaption>
+  </figure>
+</section>
+<section id="l4">
+  <h2><span class="idx">L4</span>注解：三档保留策略决定了"谁能看见它"</h2>
+
+  <p>注解本身不干活。它只是一段写进 class 文件的元数据，<strong>价值全部来自"谁在读它"</strong>。而"谁能读"由一个属性决定：<code>@Retention</code>。</p>
+
+  <h3>4.1 三档 retention，三个不同的读者</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>Retention</th><th>写进哪</th><th>谁能读</th><th>典型注解</th></tr></thead>
+    <tbody>
+      <tr><td class="num">SOURCE</td><td>不写进 class</td><td>只有编译器 / 注解处理器</td><td><code>@Override</code>、<code>@SuppressWarnings</code>、Lombok 全套</td></tr>
+      <tr><td class="num">CLASS（默认）</td><td><code>RuntimeInvisibleAnnotations</code></td><td>字节码工具（ASM/Javassist）、编译期 APT</td><td>部分 AOP 库的自定义标记</td></tr>
+      <tr><td class="num">RUNTIME</td><td><code>RuntimeVisibleAnnotations</code></td><td><strong>反射</strong></td><td><code>@Transactional</code>、<code>@Autowired</code>、<code>@RequestMapping</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 900 344" role="img" aria-label="注解三档保留策略与读取者">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">三档 retention = 三道门，门后站着不同的人</text>
+
+      <!-- col 1 -->
+      <rect x="30" y="52" width="270" height="182" rx="8" fill="#fff" stroke="#cfd8e3"/>
+      <rect x="30" y="52" width="270" height="34" rx="8" fill="#f4f7fa"/>
+      <text x="46" y="75" font-size="11.5" font-weight="700" fill="#3d4d5c" font-family="monospace">SOURCE</text>
+      <text x="46" y="108" font-size="10" fill="#52616e">写进 class 文件？</text>
+      <text x="46" y="126" font-size="10.5" fill="#a12626" font-weight="600">否，编译完就没了</text>
+      <text x="46" y="152" font-size="10" fill="#52616e">谁能读：</text>
+      <text x="46" y="170" font-size="10.5" fill="#26333f">编译器 / 注解处理器（APT）</text>
+      <text x="46" y="196" font-size="10" fill="#52616e">例子：</text>
+      <text x="46" y="214" font-size="10" fill="#26333f" font-family="monospace">@Override @Data</text>
+
+      <!-- col 2 -->
+      <rect x="315" y="52" width="270" height="182" rx="8" fill="#fff" stroke="#cfd8e3"/>
+      <rect x="315" y="52" width="270" height="34" rx="8" fill="#fff5ee"/>
+      <text x="331" y="75" font-size="11.5" font-weight="700" fill="#c2410c" font-family="monospace">CLASS（默认）</text>
+      <text x="331" y="108" font-size="10" fill="#52616e">写进 class 文件？</text>
+      <text x="331" y="126" font-size="10.5" fill="#5c2a08" font-weight="600">是，但标记为 Invisible</text>
+      <text x="331" y="152" font-size="10" fill="#52616e">谁能读：</text>
+      <text x="331" y="170" font-size="10.5" fill="#26333f">ASM / Javassist / 编译期工具</text>
+      <text x="331" y="196" font-size="10" fill="#52616e">反射：</text>
+      <text x="331" y="214" font-size="10" fill="#a12626" font-family="monospace">getAnnotation() → null</text>
+
+      <!-- col 3 -->
+      <rect x="600" y="52" width="270" height="182" rx="8" fill="#eefaf3" stroke="#b7e3c8"/>
+      <rect x="600" y="52" width="270" height="34" rx="8" fill="#d9f2e3"/>
+      <text x="616" y="75" font-size="11.5" font-weight="700" fill="#1a7f4b" font-family="monospace">RUNTIME</text>
+      <text x="616" y="108" font-size="10" fill="#1f5a3d">写进 class 文件？</text>
+      <text x="616" y="126" font-size="10.5" fill="#123f2b" font-weight="600">是，标记为 Visible</text>
+      <text x="616" y="152" font-size="10" fill="#1f5a3d">谁能读：</text>
+      <text x="616" y="170" font-size="10.5" fill="#123f2b">反射 —— 框架的全部入口</text>
+      <text x="616" y="196" font-size="10" fill="#1f5a3d">例子：</text>
+      <text x="616" y="214" font-size="10" fill="#123f2b" font-family="monospace">@Transactional @Autowired</text>
+
+      <!-- 时间轴 -->
+      <line x1="60" y1="262" x2="840" y2="262" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="850,262 840,258 840,266" fill="#b6c2ce"/>
+      <text x="60" y="286" font-size="9.5" fill="#8a97a3">javac</text>
+      <text x="380" y="286" font-size="9.5" fill="#8a97a3">class 文件</text>
+      <text x="760" y="286" font-size="9.5" fill="#8a97a3">运行时</text>
+
+      <rect x="30" y="302" width="840" height="34" rx="6" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="44" y="324" font-size="10.5" fill="#8a5a3a">最常见的失效原因：自定义注解忘了写 @Retention(RUNTIME) —— 默认是 CLASS，反射永远返回 null，本地手动 new 反而测不出来。</text>
+    </svg>
+    <figcaption><b>图 10 · 注解不生效，先查 retention。</b>顺序是：retention 对不对 → 读的人是否真的读了（有些框架只扫类级别、不扫方法级别）→ 代理是否把注解读丢了。</figcaption>
+  </figure>
+
+  <h3>4.2 三个冷门但高频的坑</h3>
+
+  <p><strong>坑一：<code>@Inherited</code> 只对类生效，且不跨接口。</strong></p>
+  <div class="cb"><div class="bar"><span>InheritedDemo.java</span><span class="cp">复制</span></div><pre><code>@Inherited @Retention(RUNTIME) @interface Marker {}
+
+@Marker class A {}
+class B extends A {}                 // B.getAnnotation(Marker) 能拿到（沿父类查）
+
+@Marker interface I {}
+class C implements I {}              // C.getAnnotation(Marker) 拿不到！接口注解不继承
+</code></pre></div>
+  <p>Spring 的 <code>@Transactional</code> 就没标 <code>@Inherited</code>，但它靠 <code>AnnotationUtils.findAnnotation</code> 自己做父类/接口递归查找 —— <strong>"注解继承"是框架行为，不是 Java 语言行为</strong>，这句话必须分清，否则被追问"接口上的注解能继承吗"就会答错。</p>
+
+  <p><strong>坑二：<code>getAnnotations()</code> 与 <code>getDeclaredAnnotations()</code> 语义不同。</strong>前者含继承来的，后者只有本类声明的。写框架代码时选错，会得到"父类上有注解但子类查不到"或反之的诡异结果。</p>
+
+  <p><strong>坑三：重复注解是"容器"伪装出来的。</strong></p>
+  <div class="cb"><div class="bar"><span>Repeatable.java</span><span class="cp">复制</span></div><pre><code>@Repeatable(Schedules.class) @interface Schedule { String cron(); }
+@interface Schedules { Schedule[] value(); }
+
+// 编译后实际存的是：
+@Schedules({@Schedule(cron="0 0 1 * *"), @Schedule(cron="0 0 2 * *")})
+
+// 所以：
+ann.getAnnotation(Schedule.class);        // null
+ann.getAnnotationsByType(Schedule.class); // 长度 2 ✓
+</code></pre></div>
+
+  <h3>4.3 Spring 为什么不用反射读注解（至少不全用）</h3>
+  <p><code>@ConditionalOnClass</code> 的语义是"<strong>类不存在时也不能报错</strong>"。如果先 <code>Class.forName</code> 再反射读注解，类不存在就直接 <code>ClassNotFoundException</code> 了。Spring 的做法是<strong>用 ASM 直接读 class 文件的字节，不加载类</strong>：</p>
+
+  <div class="cb"><div class="bar"><span>ConfigurationClassParser 的真实路径</span><span class="cp">复制</span></div><pre><code>ConfigurationClassParser
+  └─ MetadataReader（ASM 实现）
+       └─ getAnnotationMetadata()      // 解析 RuntimeVisibleAnnotations，不触发类加载
+            └─ 判断 @Conditional 是否匹配
+                 └─ 匹配通过，才 Class.forName 加载
+</code></pre></div>
+
+  <p>这解释了三件实践中的事：</p>
+  <ol>
+    <li><strong><code>@ConditionalOnClass</code> 里写的类名必须真实存在</strong>（或用 <code>name</code> 属性写字符串），否则 ASM 能过、加载时炸。</li>
+    <li><strong><code>@Conditional</code> 的实现类不能依赖"注解所在类"</strong>，因为它可能在 ASM 阶段就被求值，那时类还没加载。</li>
+    <li><strong>扫描大量 class 时，ASM 比反射快一个量级</strong>，因为省掉了类加载 + 链接 + 初始化。Spring Boot 扫几千个类还能 3 秒起来，靠的就是这个。</li>
+  </ol>
+
+  <div class="box key"><span class="lb">串联点</span>
+    这里能看出四节的链条了：<strong>注解（元数据）→ 存在 class 文件的属性里（L0）→ 反射或 ASM 读出来（L3）→ 读出来之后决定要不要生成代理（L5）</strong>。Spring 的启动流程就是把这条链条跑一遍。
+  </div>
+</section>
+
+<section id="l5">
+  <h2><span class="idx">L5</span>动态代理：两种生成方式，两套字节码</h2>
+
+  <p>面试里"JDK 动态代理和 CGLIB 的区别"几乎是必考。但 90% 的人只能答出"一个基于接口、一个基于继承"。真正的区分度在于：<strong>它们生成出来的字节码长什么样，钱花在哪。</strong></p>
+
+  <h3>5.1 JDK 动态代理：另起一个类，所以只能靠接口</h3>
+  <div class="cb"><div class="bar"><span>ProxyDump.java</span><span class="cp">复制</span></div><pre><code>OrderService real = (sku, qty) -&gt; "order-" + sku;
+OrderService proxy = (OrderService) Proxy.newProxyInstance(
+        loader, new Class[]{OrderService.class},
+        (p, m, a) -&gt; {                          // InvocationHandler
+            System.out.println("h.invoke -&gt; " + m.getName());
+            return m.invoke(real, a);
+        });
+</code></pre></div>
+
+  <p>加上 <code>-Djdk.proxy.ProxyGenerator.saveGeneratedFiles=true</code> 把生成的类 dump 出来，实测结构：</p>
+  <div class="cb"><div class="bar"><span>output</span><span class="cp">复制</span></div><pre><code>proxy class = jdk.proxy1.$Proxy0        // JDK 9+ 在 jdk.proxy1 包，之前是 com.sun.proxy
+superclass  = java.lang.reflect.Proxy   // 已经继承了 Proxy，不能再继承你的类
+interfaces  = [interface OrderService]
+declaredMethods = 5
+    private static MethodHandles$Lookup $Proxy0.proxyClassLookup(Lookup)
+    public final boolean equals(Object)
+    public final String toString()
+    public final int hashCode()
+    public final String create(String, int)
+</code></pre></div>
+
+  <p>其中业务方法的字节码（<code>javap -c</code>）值得逐行读一遍 —— 十行里藏了四种开销：</p>
+  <div class="cb"><div class="bar"><span>javap -c $Proxy0</span><span class="cp">复制</span></div><pre><code>public final java.lang.String create(java.lang.String, int);
+   0: aload_0
+   1: getfield      #24   // Field java/lang/reflect/Proxy.h:Ljava/lang/reflect/InvocationHandler;
+   4: aload_0
+   5: getstatic     #67   // Field m3:Ljava/lang/reflect/Method;      ← 静态缓存，不是每次 getMethod
+   8: iconst_2
+   9: anewarray     #49   // class java/lang/Object                  ← 每次调用都分配数组
+  12: dup
+  13: iconst_0
+  14: aload_1
+  15: aastore
+  16: dup
+  17: iconst_1
+  18: iload_2
+  19: invokestatic  #71   // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;  ← 装箱
+  22: aastore
+  23: invokeinterface #32, 4  // InvocationHandler.invoke:(Object,Method,[Object)Object
+  28: checkcast     #62   // class java/lang/String                  ← 返回值强转
+  31: areturn
+</code></pre></div>
+
+  <figure>
+    <svg viewBox="0 0 900 392" role="img" aria-label="JDK 代理生成类的转发六步与开销">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">$Proxy0.create() 的六步：每一步都能标上价格</text>
+
+      <rect x="30" y="44" width="840" height="34" rx="6" fill="#f4f7fa" stroke="#e3e8ee"/>
+      <text x="46" y="66" font-size="10.5" fill="#3d4d5c" font-family="monospace">final class $Proxy0 extends java.lang.reflect.Proxy implements OrderService</text>
+
+      <g font-size="10.5">
+        <circle cx="62" cy="108" r="11" fill="#eef4ff" stroke="#b9d0f5"/>
+        <text x="58" y="112" font-size="10" fill="#1f6feb" font-weight="700">1</text>
+        <text x="86" y="106" fill="#26333f" font-family="monospace">getfield Proxy.h</text>
+        <text x="86" y="122" font-size="9.5" fill="#6b7a88">取 InvocationHandler</text>
+
+        <circle cx="62" cy="152" r="11" fill="#eef4ff" stroke="#b9d0f5"/>
+        <text x="58" y="156" font-size="10" fill="#1f6feb" font-weight="700">2</text>
+        <text x="86" y="150" fill="#26333f" font-family="monospace">getstatic m3 : Method</text>
+        <text x="86" y="166" font-size="9.5" fill="#6b7a88">静态缓存，类初始化时就建好</text>
+
+        <circle cx="62" cy="196" r="11" fill="#eef4ff" stroke="#b9d0f5"/>
+        <text x="58" y="200" font-size="10" fill="#1f6feb" font-weight="700">3</text>
+        <text x="86" y="194" fill="#26333f" font-family="monospace">anewarray Object[2]</text>
+        <text x="86" y="210" font-size="9.5" fill="#6b7a88">每次调用都分配一个新数组</text>
+
+        <circle cx="62" cy="240" r="11" fill="#eef4ff" stroke="#b9d0f5"/>
+        <text x="58" y="244" font-size="10" fill="#1f6feb" font-weight="700">4</text>
+        <text x="86" y="238" fill="#26333f" font-family="monospace">invokestatic Integer.valueOf(2)</text>
+        <text x="86" y="254" font-size="9.5" fill="#6b7a88">基本类型装箱（-128~127 之外会 new）</text>
+
+        <circle cx="62" cy="284" r="11" fill="#eef4ff" stroke="#b9d0f5"/>
+        <text x="58" y="288" font-size="10" fill="#1f6feb" font-weight="700">5</text>
+        <text x="86" y="282" fill="#26333f" font-family="monospace">invokeinterface h.invoke(obj, m, args)</text>
+        <text x="86" y="298" font-size="9.5" fill="#6b7a88">跳进你的拦截器，虚调用</text>
+
+        <circle cx="62" cy="328" r="11" fill="#eef4ff" stroke="#b9d0f5"/>
+        <text x="58" y="332" font-size="10" fill="#1f6feb" font-weight="700">6</text>
+        <text x="86" y="326" fill="#26333f" font-family="monospace">checkcast String</text>
+        <text x="86" y="342" font-size="9.5" fill="#6b7a88">返回值强转回声明类型</text>
+      </g>
+
+      <!-- 成本标注 -->
+      <rect x="600" y="182" width="270" height="52" rx="6" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="614" y="202" font-size="10" fill="#c2410c" font-weight="600">第 3、4 步是 JDK 代理的命门</text>
+      <text x="614" y="220" font-size="9.5" fill="#8a5a3a">10 万 QPS × 2 个对象 = 每秒 20 万个短命对象</text>
+
+      <rect x="600" y="248" width="270" height="52" rx="6" fill="#eefaf3" stroke="#b7e3c8"/>
+      <text x="614" y="268" font-size="10" fill="#1a7f4b" font-weight="600">第 2 步澄清一个误解</text>
+      <text x="614" y="286" font-size="9.5" fill="#1f5a3d">Method 是缓存的，不是每次反射查找</text>
+
+      <text x="30" y="376" font-size="10" fill="#6b7a88">实测：8.3 / 9.0 ns/op（3 次运行），直接调用 0.6 ns —— 慢的不是"反射查找"，是数组分配 + 装箱 + 虚调用。</text>
+    </svg>
+    <figcaption><b>图 11 · 十行字节码，四种开销。</b>"JDK 代理每次都要反射找方法"是错的 —— 它缓存了 <code>Method</code>；真正的成本在参数打包上。</figcaption>
+  </figure>
+
+  <h3>5.2 CGLIB：继承你，所以能代理类，但吃 final</h3>
+  <div class="cb"><div class="bar"><span>CglibDump.java</span><span class="cp">复制</span></div><pre><code>Enhancer e = new Enhancer();
+e.setSuperclass(OrderService.class);
+e.setCallback((MethodInterceptor) (obj, m, a, proxy) -&gt; {
+    System.out.println("intercept -&gt; " + m.getName());
+    return proxy.invokeSuper(obj, a);
+});
+OrderService p = (OrderService) e.create();
+</code></pre></div>
+
+  <p>本机用 <code>-Dcglib.debugLocation=out</code> 导出后，一次 <code>create()</code> 生成 <strong>3 个 class</strong>，代理类的字段是这样的：</p>
+  <div class="cb"><div class="bar"><span>javap -p</span><span class="cp">复制</span></div><pre><code>public class OrderService$$EnhancerByCGLIB$$beaa34fd
+        extends OrderService implements Factory {
+  private boolean CGLIB$BOUND;
+  private MethodInterceptor CGLIB$CALLBACK_0;
+  private static final Method      CGLIB$create$0$Method;
+  private static final MethodProxy CGLIB$create$0$Proxy;   // FastClass 的入口
+}
+</code></pre></div>
+
+  <p><code>create</code> 方法有<strong>三级分支</strong>，这是它对 JDK 代理最大的结构性优势：</p>
+  <div class="cb"><div class="bar"><span>javap -c · 真实输出</span><span class="cp">复制</span></div><pre><code>public final String create(String, int);
+   0: getfield  CGLIB$CALLBACK_0        // ① 拦截器已绑定？
+   5: ifnonnull 17
+   9: invokestatic CGLIB$BIND_CALLBACKS  //    没绑，先绑（ThreadLocal → 实例）
+  17: ifnull 57                           // ② 确实没有拦截器？
+  21..48: 装箱 + MethodProxy → intercept(...)   //    有：走拦截
+  57: aload_0; aload_1; iload_2
+  60: invokespecial OrderService.create   // ③ 没有：直接调父类，零开销
+</code></pre></div>
+
+  <figure>
+    <svg viewBox="0 0 900 424" role="img" aria-label="CGLIB 类结构与三级分支">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">CGLIB：继承 + 三级分支 + FastClass 索引</text>
+
+      <!-- 左：结构 -->
+      <rect x="30" y="48" width="310" height="52" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="44" y="70" font-size="10.5" font-weight="700" fill="#3d4d5c">OrderService（你的类）</text>
+      <text x="44" y="88" font-size="9.5" fill="#6b7a88" font-family="monospace">public String create(String,int)</text>
+
+      <line x1="185" y1="104" x2="185" y2="128" stroke="#b6c2ce" stroke-width="1.4"/>
+      <polygon points="185,136 181,126 189,126" fill="#b6c2ce"/>
+      <text x="196" y="122" font-size="9" fill="#8a97a3">extends</text>
+
+      <rect x="30" y="138" width="310" height="96" rx="7" fill="#f8efff" stroke="#dcc4f0"/>
+      <text x="44" y="160" font-size="10.5" font-weight="700" fill="#6b21a8">$$EnhancerByCGLIB$$beaa34fd</text>
+      <text x="44" y="180" font-size="9.5" fill="#4a2a6b" font-family="monospace">CGLIB$CALLBACK_0</text>
+      <text x="44" y="197" font-size="9.5" fill="#4a2a6b" font-family="monospace">CGLIB$create$0$Method</text>
+      <text x="44" y="214" font-size="9.5" fill="#4a2a6b" font-family="monospace">CGLIB$create$0$Proxy → FastClass</text>
+
+      <rect x="30" y="250" width="310" height="76" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="44" y="272" font-size="10" font-weight="700" fill="#3d4d5c">FastClass 用 int 下标 + switch</text>
+      <text x="44" y="291" font-size="9.5" fill="#52616e">invoke(index, target, args)</text>
+      <text x="44" y="309" font-size="9.5" fill="#52616e">代替反射的 Method.invoke</text>
+
+      <rect x="30" y="344" width="310" height="58" rx="7" fill="#fdecec" stroke="#f0bcbc"/>
+      <text x="44" y="366" font-size="10" font-weight="700" fill="#a12626">能力边界</text>
+      <text x="44" y="386" font-size="9.5" fill="#8a2b2b">final 类 / final、private、static 方法代理不了</text>
+
+      <!-- 右：三级分支 -->
+      <text x="380" y="62" font-size="11" font-weight="700" fill="#3d4d5c">生成的 create() 里的三级判断</text>
+
+      <rect x="380" y="76" width="240" height="46" rx="6" fill="#fff" stroke="#cfd8e3"/>
+      <text x="394" y="104" font-size="10" fill="#26333f" font-family="monospace">CGLIB$CALLBACK_0 == null ?</text>
+
+      <line x1="500" y1="126" x2="500" y2="146" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="500,154 496,144 504,144" fill="#b6c2ce"/>
+      <text x="508" y="142" font-size="9" fill="#8a97a3">是</text>
+
+      <rect x="380" y="158" width="240" height="42" rx="6" fill="#eef4ff" stroke="#b9d0f5"/>
+      <text x="394" y="184" font-size="10" fill="#16324f" font-family="monospace">CGLIB$BIND_CALLBACKS(this)</text>
+
+      <line x1="500" y1="204" x2="500" y2="224" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="500,232 496,222 504,222" fill="#b6c2ce"/>
+
+      <rect x="380" y="236" width="240" height="44" rx="6" fill="#fff" stroke="#cfd8e3"/>
+      <text x="394" y="263" font-size="10" fill="#26333f" font-family="monospace">callback 仍为 null ?</text>
+
+      <line x1="624" y1="258" x2="640" y2="258" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="650,258 640,254 640,262" fill="#b6c2ce"/>
+      <text x="616" y="248" font-size="9" fill="#8a97a3" text-anchor="end">否</text>
+
+      <line x1="500" y1="284" x2="500" y2="300" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="500,308 496,298 504,298" fill="#b6c2ce"/>
+      <text x="508" y="298" font-size="9" fill="#8a97a3">是</text>
+
+      <rect x="380" y="312" width="240" height="52" rx="6" fill="#eefaf3" stroke="#b7e3c8"/>
+      <text x="394" y="334" font-size="10" fill="#123f2b" font-family="monospace">invokespecial 父类实现</text>
+      <text x="394" y="352" font-size="9.5" fill="#1f5a3d">零反射、零装箱 —— JDK 代理没有这条路</text>
+
+      <rect x="650" y="236" width="220" height="52" rx="6" fill="#fff5ee" stroke="#f6cfb4"/>
+      <text x="664" y="258" font-size="10" fill="#c2410c" font-family="monospace">intercept(obj,m,args,proxy)</text>
+      <text x="664" y="276" font-size="9.5" fill="#8a5a3a">装箱 + MethodProxy（FastClass）</text>
+
+      <rect x="650" y="312" width="220" height="90" rx="6" fill="#f4f7fa" stroke="#e3e8ee"/>
+      <text x="664" y="334" font-size="10" font-weight="700" fill="#3d4d5c">为什么要有 ③</text>
+      <text x="664" y="353" font-size="9.5" fill="#52616e">Proxy 的构造器强制要求</text>
+      <text x="664" y="370" font-size="9.5" fill="#52616e">非 null 的 handler，永远有</text>
+      <text x="664" y="387" font-size="9.5" fill="#52616e">一层壳，无法短路</text>
+    </svg>
+    <figcaption><b>图 12 · CGLIB 的杀手锏是第三级分支。</b>没绑拦截器时直接 <code>invokespecial</code> 父类，这是 JDK 代理结构上做不到的。</figcaption>
+  </figure>
+
+  <h3>5.3 实测与选型</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>方式</th><th>三次实测 ns/op</th><th>相对直接调用</th><th>单次创建成本</th></tr></thead>
+    <tbody>
+      <tr><td>直接调用</td><td class="num">0.59 / 0.63</td><td class="num">1×</td><td class="num">0</td></tr>
+      <tr><td>JDK 动态代理</td><td class="num">8.27 / 9.04</td><td class="num">≈ 14×</td><td>低（<code>Proxy</code> 按接口缓存类，同接口只生成一次）</td></tr>
+      <tr><td>CGLIB</td><td class="num">17.12 / 18.51</td><td class="num">≈ 28×</td><td><strong>高</strong>（ASM 生成 3 个类 + defineClass，毫秒级）</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>注意这里的反常识：<strong>本机测出 CGLIB 单次调用比 JDK 代理还慢</strong>，因为 <code>invokeSuper</code> 要走 <code>MethodProxy</code> → FastClass <code>switch</code> → 仍然装箱。所以"CGLIB 一定更快"是伪知识。真正该记的是<strong>成本结构</strong>：</p>
+  <ul>
+    <li><strong>创建成本</strong>：CGLIB ≫ JDK 代理。高频动态创建代理（每请求造一个）用 CGLIB 是灾难。</li>
+    <li><strong>调用成本</strong>：同一量级（10ns 级），都远小于一次 RPC 或一次 SQL。</li>
+    <li><strong>能力差异</strong>：CGLIB 能代理类（无接口场景），JDK 只能代理接口；CGLIB 吃不了 <code>final</code>。</li>
+  </ul>
+
+  <figure>
+    <svg viewBox="0 0 900 336" role="img" aria-label="Spring 代理选型决策树">
+      <text x="30" y="28" font-size="13.5" font-weight="700" fill="#16212b">Spring 的决策路径：三层判断</text>
+
+      <rect x="330" y="50" width="240" height="48" rx="7" fill="#eef4ff" stroke="#b9d0f5"/>
+      <text x="344" y="72" font-size="10.5" fill="#16324f" font-weight="600">目标类实现了接口吗？</text>
+      <text x="344" y="89" font-size="9.5" fill="#2b4a6b">（ProxyFactory 的第一层判断）</text>
+
+      <line x1="330" y1="74" x2="200" y2="74" stroke="#b6c2ce" stroke-width="1.3"/>
+      <line x1="200" y1="74" x2="200" y2="112" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="200,122 196,112 204,112" fill="#b6c2ce"/>
+      <text x="240" y="66" font-size="9.5" fill="#8a97a3">否</text>
+
+      <line x1="570" y1="74" x2="700" y2="74" stroke="#b6c2ce" stroke-width="1.3"/>
+      <line x1="700" y1="74" x2="700" y2="112" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="700,122 696,112 704,112" fill="#b6c2ce"/>
+      <text x="630" y="66" font-size="9.5" fill="#8a97a3">是</text>
+
+      <rect x="60" y="124" width="280" height="46" rx="7" fill="#f8efff" stroke="#dcc4f0"/>
+      <text x="74" y="152" font-size="10.5" fill="#6b21a8" font-weight="600">强制 CGLIB（没得选）</text>
+
+      <rect x="560" y="124" width="280" height="46" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="574" y="152" font-size="10.5" fill="#3d4d5c" font-weight="600">再看 proxyTargetClass</text>
+
+      <line x1="700" y1="170" x2="700" y2="198" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="700,208 696,198 704,198" fill="#b6c2ce"/>
+
+      <rect x="470" y="210" width="130" height="56" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="484" y="232" font-size="10" fill="#3d4d5c" font-family="monospace">true</text>
+      <text x="484" y="252" font-size="9.5" fill="#6b7a88">Boot 2.0+ 默认</text>
+
+      <rect x="700" y="210" width="130" height="56" rx="7" fill="#fff" stroke="#cfd8e3"/>
+      <text x="714" y="232" font-size="10" fill="#3d4d5c" font-family="monospace">false</text>
+      <text x="714" y="252" font-size="9.5" fill="#6b7a88">Framework 默认</text>
+
+      <line x1="535" y1="266" x2="535" y2="286" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="535,294 531,284 539,284" fill="#b6c2ce"/>
+      <line x1="765" y1="266" x2="765" y2="286" stroke="#b6c2ce" stroke-width="1.3"/>
+      <polygon points="765,294 761,284 769,284" fill="#b6c2ce"/>
+
+      <rect x="450" y="296" width="170" height="34" rx="6" fill="#f8efff" stroke="#dcc4f0"/>
+      <text x="464" y="318" font-size="10" fill="#6b21a8" font-weight="600">CGLIB（能注入实现类）</text>
+
+      <rect x="680" y="296" width="170" height="34" rx="6" fill="#eefaf3" stroke="#b7e3c8"/>
+      <text x="694" y="318" font-size="10" fill="#1a7f4b" font-weight="600">JDK 代理（只能注入接口）</text>
+
+      <text x="30" y="316" font-size="9.5" fill="#8a97a3">↑ 这一行是 Boot 设默认值的真正动机：</text>
+      <text x="30" y="331" font-size="9.5" fill="#8a97a3">消除「注入接口成功、注入实现类失败」的不一致</text>
+    </svg>
+    <figcaption><b>图 13 · 默认值不是随手定的。</b>JDK 代理下容器里只有一个 <code>$Proxy0</code>，它不 <code>instanceof UserServiceImpl</code>，按具体类注入必然失败；CGLIB 继承原类，两种注入都成立。</figcaption>
+  </figure>
+
+  <h3>5.4 三个结构性限制（必背）</h3>
+  <ol>
+    <li><strong><code>this</code> 调用不走代理。</strong><code>this.method()</code> 编译成 <code>invokevirtual</code> 直接打到本对象，根本不经过代理实例，所以 <code>@Transactional</code>、<code>@Async</code>、<code>@Cacheable</code> 全部失效。三种解法：注入自己（<code>@Lazy</code> 破循环）、<code>AopContext.currentProxy()</code>（需 <code>exposeProxy=true</code>）、拆到另一个 Bean。</li>
+    <li><strong><code>private</code> / <code>static</code> / <code>final</code> 方法代理不了。</strong>JDK 代理靠接口，接口里没有 <code>private</code>；CGLIB 靠重写，<code>final</code> 不能被重写。</li>
+    <li><strong>代理对象的 <code>getClass()</code> 不是你的类。</strong><code>obj.getClass() == Order.class</code> 永远 false；同理 <code>obj.getClass().getAnnotation(...)</code> 也拿不到标在原类上的注解 —— 要 <code>AopUtils.getTargetClass(obj)</code>。这一条是"注解明明加了却读不到"的第三个原因。</li>
+  </ol>
+</section>
+<section id="l6">
+  <h2><span class="idx">L6</span>生产七坑（都是真踩过的）</h2>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>现象</th><th>根因</th><th>正确做法</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>@PathVariable</code> 报 "Name for argument not specified"</td>
+        <td>编译没加 <code>-parameters</code>，参数名是 <code>arg0</code></td>
+        <td>Spring Framework 6.1 起强制要求；Boot 3.2 的 parent 已默认加。老项目手动配 <code>maven-compiler-plugin</code></td>
+      </tr>
+      <tr>
+        <td>自定义注解在容器里永远 null</td>
+        <td>没写 <code>@Retention(RUNTIME)</code>，默认 <code>CLASS</code></td>
+        <td>加注解；单测要覆盖"通过容器取 Bean"，别只手动 new</td>
+      </tr>
+      <tr>
+        <td>用 <code>getDeclaredMethods()[0]</code> 取方法，换 JDK 就错乱</td>
+        <td>声明顺序无规范保证</td>
+        <td>按名字+参数类型显式匹配，或排序后取</td>
+      </tr>
+      <tr>
+        <td>反射缓存命中率低，Metaspace 还涨</td>
+        <td>用 <code>Method</code> 当 Map key，不同 ClassLoader 的同名类不 equals</td>
+        <td>key 用 <code>类名#方法名#描述符</code>，或用 <code>ClassValue</code></td>
+      </tr>
+      <tr>
+        <td>升级 JDK 17/21 后启动 <code>InaccessibleObjectException</code></td>
+        <td>老框架反射改 JDK 私有字段（fastjson 1.x、早期 cglib）</td>
+        <td>应急 <code>--add-opens</code>；正解升框架版本</td>
+      </tr>
+      <tr>
+        <td>Kotlin 项目加 <code>@Transactional</code> 启动失败：<code>Cannot subclass final class</code></td>
+        <td>Kotlin 类默认 <code>final</code>，CGLIB 无法继承</td>
+        <td>加 <code>all-open</code> 插件 / <code>spring</code> 预设，或类上写 <code>open</code></td>
+      </tr>
+      <tr>
+        <td><code>$Proxy0 cannot be cast to X</code></td>
+        <td><code>newProxyInstance</code> 传了错误的 ClassLoader</td>
+        <td>用<strong>接口的</strong> ClassLoader，不是当前线程的</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="l7">
+  <h2><span class="idx">L7</span>数字速查</h2>
+  <div class="tw">
+  <table>
+    <thead><tr><th>数字</th><th>含义</th></tr></thead>
+    <tbody>
+      <tr><td class="num">15</td><td><code>sun.reflect.inflationThreshold</code>，超过后 native accessor 换字节码版</td></tr>
+      <tr><td class="num">3.6 ms</td><td>反射首次调用的实测耗时（含 accessor 类加载 + 权限校验 + JNI 绑定）</td></tr>
+      <tr><td class="num">1.5 μs</td><td>native accessor 的稳态单次成本（第 5~15 次）</td></tr>
+      <tr><td class="num">7.5 ns</td><td>反射稳态单次；直接调用 1.1 ns → <strong>7 倍</strong></td></tr>
+      <tr><td class="num">1.9 ns</td><td><code>LambdaMetafactory</code> 生成接口的调用成本（≈1.7 倍）</td></tr>
+      <tr><td class="num">8.3 ns</td><td>JDK 动态代理单次调用（含数组分配 + 装箱）</td></tr>
+      <tr><td class="num">17 ns</td><td>CGLIB 单次调用（本机 <code>invokeSuper</code> 路径）</td></tr>
+      <tr><td class="num">5</td><td><code>$Proxy0</code> 的方法数 = 1 业务 + equals/toString/hashCode + 1 个 lookup 辅助</td></tr>
+      <tr><td class="num">3</td><td>CGLIB 一次 <code>Enhancer.create()</code> 生成的 class 数（代理类 + 2 个 FastClass）</td></tr>
+      <tr><td class="num">4 / 2</td><td><code>Child</code> 的声明方法数 / 真实方法数（多出的 2 个是桥方法）</td></tr>
+      <tr><td class="num">1</td><td>擦除后 <code>List&lt;String&gt;</code> 与 <code>List&lt;Integer&gt;</code> 的 Class 个数</td></tr>
+      <tr><td class="num">0</td><td><code>List&lt;? extends T&gt;</code> 能 <code>add</code> 的元素个数（除 null）</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="l8">
+  <h2><span class="idx">L8</span>十四个高频问答</h2>
+
+  <div class="qa"><div class="q"><span class="qn">Q1</span><span>泛型擦除是什么？为什么要擦？</span></div>
+  <p class="a">擦除是 javac 生成字节码时把类型实参丢掉，只保留原始类型和上界。两个原因：① 兼容 JDK 5 之前的字节码和已有库（<code>List</code> 与 <code>List&lt;String&gt;</code> 必须能互相赋值）；② 避免 JVM 为每个实参生成新类（<code>List&lt;String&gt;</code> 一个、<code>List&lt;Integer&gt;</code> 又一个），那就是 C++ 模板式的代码膨胀。代价是运行期拿不到实参、不能 <code>new T[]</code>、不能 <code>instanceof List&lt;String&gt;</code>、不能按泛型重载。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q2</span><span>那框架怎么拿到泛型？</span></div>
+  <p class="a">从 <code>Signature</code> 属性拿。<code>Field.getGenericType()</code>、<code>Method.getGenericParameterTypes()</code>、<code>Class.getGenericSuperclass()</code> 读的都是它。前提是泛型出现在<strong>声明处</strong>（类、字段、方法签名），而不是方法体里的局部变量。所以 <code>TypeReference</code> 必须用匿名子类，把实参"落到一个真实类的父类签名里"。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q3</span><span>桥方法是什么，什么时候会出现？</span></div>
+  <p class="a">当子类重写泛型父类方法、且擦除后签名不一致时（典型是返回值协变、参数是类型变量），编译器生成一个 <code>ACC_BRIDGE | ACC_SYNTHETIC</code> 的转发方法，签名对齐父类，内部 <code>invokevirtual</code> 到真实方法。出现场景：泛型父类的子类、泛型接口的实现类、协变返回值。副作用是反射方法数变多、AOP 切点可能匹配错。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q4</span><span>为什么不能 <code>new T[]</code>？</span></div>
+  <p class="a">数组是<strong>协变且运行期带类型</strong>的（<code>String[]</code> 的 <code>getClass()</code> 是 <code>[Ljava.lang.String;</code>）。擦除后 <code>new T[]</code> 只能编译成 <code>new Object[]</code>，但你要的是 <code>String[]</code>，两者运行期类型不同，赋值或读取时 <code>ArrayStoreException</code>/CCE 就会在别处炸。所以编译器直接禁止。替代方案：<code>(T[]) new Object[n]</code>（带 unchecked，危险）、<code>Array.newInstance(clazz, n)</code>（传 Class，安全）。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q5</span><span>反射为什么慢？慢多少？</span></div>
+  <p class="a">三个成本：参数装 <code>Object[]</code> + 基本类型装箱、每次调用的访问权限检查、调用点对 JIT 不透明导致难以内联。但"慢 100 倍"是没预热的结论，实测预热后约 7 倍（7.5ns vs 1.1ns）。真正贵的是<strong>每次 <code>getDeclaredMethod</code></strong>（微秒级，遍历方法表），所以框架都缓存 <code>Method</code>。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q6</span><span>inflation 是什么？</span></div>
+  <p class="a"><code>sun.reflect.inflationThreshold=15</code>。前 15 次走 <code>NativeMethodAccessorImpl</code>（JNI），第 16 次起动态生成 <code>GeneratedMethodAccessor</code> 字节码类替换委托对象。设计动机：反射大多只调几次，生成字节码不值；少数热点才值得。<code>-Dsun.reflect.noInflation=true</code> 跳过判断，直接用字节码版。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q7</span><span>MethodHandle 和反射的区别？</span></div>
+  <p class="a">反射是"运行期查找 + 每次检查"的 API，面向"我不知道要调什么"；MethodHandle 是"类型在链接时就确定、运行期只做一次链接"的句柄，面向"我要反复调同一个"。<code>invokeExact</code> 要求类型精确匹配（否则 <code>WrongMethodTypeException</code>），能被 JIT 内联，接近直接调用；<code>invoke</code> 会自动 <code>asType</code>，慢一些。延伸两条：<code>VarHandle</code> 替代 <code>Unsafe</code> 做字段原子访问；<code>LambdaMetafactory</code> 把句柄变成接口实现。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q8</span><span>注解的三种 Retention 区别？</span></div>
+  <p class="a"><code>SOURCE</code> 不进 class（编译器/APT 用，如 <code>@Override</code>、Lombok）；<code>CLASS</code> 进 <code>RuntimeInvisibleAnnotations</code>，反射看不见，字节码工具（ASM/Javassist）能读；<code>RUNTIME</code> 进 <code>RuntimeVisibleAnnotations</code>，反射可读（Spring 的注解全是这个）。默认是 <code>CLASS</code> —— 这是最常见的"注解不生效"根因。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q9</span><span>Spring 怎么读注解？为什么不用反射？</span></div>
+  <p class="a"><code>@ConditionalOnClass</code> 要求"类不存在也不能报错"，反射做不到（<code>Class.forName</code> 直接抛）。Spring 用 ASM 的 <code>MetadataReader</code> 直接解析 class 文件的注解属性，不加载类；条件通过后才 <code>Class.forName</code>。好处是省掉类加载/链接/初始化，扫几千个类也就百毫秒级。副作用：<code>@Conditional</code> 的实现类不能依赖"注解所在类"，因为求值时它可能还没加载。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q10</span><span>JDK 动态代理为什么只能代理接口？</span></div>
+  <p class="a">生成的是 <code>$Proxy0 extends java.lang.reflect.Proxy implements 你的接口</code>。Java 单继承，既然已经继承了 <code>Proxy</code>，就不能再继承目标类，只能通过实现接口来"变成"目标类型。这也是"注入实现类而非接口会失败"的根因。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q11</span><span>CGLIB 怎么实现的？有什么限制？</span></div>
+  <p class="a">用 ASM 生成目标类的<strong>子类</strong>，覆写所有非 <code>final</code> 的 public/protected 方法。方法体里先判是否绑定了 <code>MethodInterceptor</code>：绑了就装箱参数、调 <code>intercept(...)</code>；没绑就直接 <code>invokespecial</code> 调父类（实测反编译确认了这条"零开销快路"）。<code>invokeSuper</code> 走 <code>MethodProxy</code> + FastClass（int 下标 + switch），避免反射。限制：不能代理 <code>final</code> 类与 <code>final</code>/<code>private</code>/<code>static</code> 方法；因为是子类，构造器必须能调到父类构造器（没有无参构造时要 <code>Objenesis</code> 绕过，Spring 就带了这个依赖）；每次 <code>create()</code> 生成 3 个 class，Metaspace 有成本。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q12</span><span>Spring Boot 为什么默认 CGLIB？</span></div>
+  <p class="a"><code>spring.aop.proxy-target-class=true</code>。核心动机是消除"注入接口能拿到代理、注入实现类拿不到"的不一致：JDK 代理下容器里是 <code>$Proxy0</code>，它不 <code>instanceof UserServiceImpl</code>，按具体类注入直接失败；CGLIB 继承原类，两种注入都成立。代价是多生成一个类（启动慢一点）、<code>final</code> 类/方法失效。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q13</span><span><code>this</code> 调用为什么绕过代理？</span></div>
+  <p class="a"><code>this</code> 是原始对象的引用，<code>this.method()</code> 编译成 <code>invokevirtual</code> 直接打到本对象，不经过代理实例。代理只在"外部通过引用调用"时生效。这是 <code>@Transactional</code>、<code>@Async</code>、<code>@Cacheable</code> 自调用失效的统一原因。解法：自注入、<code>AopContext.currentProxy()</code>、拆类。</p></div>
+
+  <div class="qa"><div class="q"><span class="qn">Q14</span><span>怎么判断一个对象是不是代理？</span></div>
+  <p class="a"><code>AopUtils.isAopProxy(obj)</code> / <code>isJdkDynamicProxy</code> / <code>isCglibProxy</code>（Spring 工具类）；纯 JDK 层面用 <code>Proxy.isProxyClass(obj.getClass())</code> 判 JDK 代理，类名含 <code>$$</code> 判 CGLIB（不可靠）。注意 <code>obj.getClass()</code> 拿到的是代理类，要拿原类注解必须 <code>AopUtils.getTargetClass(obj)</code>。</p></div>
+</section>
+
+<section id="l9">
+  <h2><span class="idx">L9</span>三道模拟面试题（四档对照）</h2>
+
+  <div class="drill">
+    <div class="hd"><div class="t">题 1 · 基础偏上</div><div class="s">我的 <code>@Cacheable</code> 在同一个类里调用不生效，为什么？</div></div>
+    <div class="bd">
+      <div class="lv"><div class="tag t-fail">不及格</div><div class="tx">缓存没配好 / 注解没加对 / 重启试试。</div></div>
+      <div class="lv"><div class="tag t-pass">及格</div><div class="tx">Spring 缓存是 AOP 实现的，AOP 靠代理。<b><code>this.method()</code> 不经过代理</b>，所以拦截器不执行。</div></div>
+      <div class="lv"><div class="tag t-good">良好</div><div class="tx">补机制：JDK 代理时容器里的 Bean 是 <code>$Proxy0</code>，调用顺序是 <code>Proxy.method → InvocationHandler → 拦截器链 → 目标方法</code>。而 <code>this</code> 是目标对象本身的引用，<code>invokevirtual</code> 直接打到目标方法，代理这一层被跳过。这个限制对 <code>@Transactional</code>、<code>@Async</code>、<code>@Cacheable</code> 全部成立，因为它们共用同一套 AOP 基础设施。</div></div>
+      <div class="lv"><div class="tag t-best">优秀</div><div class="tx">再补三件事 —— ① <b>Spring 为什么不自动修复</b>：要修就得让目标方法知道自己被代理（注入 self 引用），会破坏代理透明性并可能造成循环依赖；② <b>三种解法及代价</b>：自注入（最干净，注意 <code>@Lazy</code>）、<code>AopContext.currentProxy()</code>（侵入代码、依赖 ThreadLocal、需 <code>exposeProxy=true</code>）、拆成独立 Bean（架构最优但改动大）；③ <b>边界</b>：CGLIB 下 <code>private</code> 方法也不生效，<code>final</code> 方法被跳过 —— 判定标准是"这个方法是否可被覆写、调用是否经过代理实例"。</div></div>
+    </div>
+  </div>
+
+  <div class="drill">
+    <div class="hd"><div class="t">题 2 · 进阶</div><div class="s">反序列化 <code>List&lt;User&gt;</code> 拿到的全是 <code>LinkedHashMap</code>，为什么？</div></div>
+    <div class="bd">
+      <div class="lv"><div class="tag t-fail">不及格</div><div class="tx">Jackson 有 bug / 换个库试试。</div></div>
+      <div class="lv"><div class="tag t-pass">及格</div><div class="tx">泛型被擦除了，Jackson 不知道元素类型，只能按默认 <code>Object</code> 反序列化成 <code>LinkedHashMap</code>。</div></div>
+      <div class="lv"><div class="tag t-good">良好</div><div class="tx">补上"擦除不等于全丢"：实参保留在 class 文件的 <code>Signature</code> 属性里，反射可通过 <code>getGenericSuperclass()</code> / <code>getGenericParameterTypes()</code> 读到。所以解法是让实参出现在某个类的签名里 —— 这就是 <code>new TypeReference&lt;List&lt;User&gt;&gt;() {}</code> 那对花括号的作用：生成匿名子类，父类签名被写成 <code>TypeReference&lt;List&lt;User&gt;&gt;</code>。</div></div>
+      <div class="lv"><div class="tag t-best">优秀</div><div class="tx">往下讲三层 —— ① <b>为什么不能省花括号</b>：实参在使用处，擦完即消失，<code>getGenericSuperclass()</code> 只能看到 <code>Object</code>（实测输出 <code>plain = class java.lang.Object</code>）；② <b>更通用的写法</b>：<code>mapper.getTypeFactory().constructCollectionType(List.class, User.class)</code>，不依赖签名，适合运行期才决定类型的场景；③ <b>同族机制</b>：Guava <code>TypeToken</code>、Spring <code>ParameterizedTypeReference</code>、<code>@RequestBody List&lt;User&gt;</code>（从 <code>MethodParameter.getGenericParameterTypes()</code> 取，同一条路）。最后补 trade-off：签名方案优雅但只在"编译期已知类型"时可用，RPC 泛化调用只能用 <code>constructXxxType</code> 手工构造。</div></div>
+    </div>
+  </div>
+
+  <div class="drill">
+    <div class="hd"><div class="t">题 3 · 架构</div><div class="s">让你设计一个 RPC 框架的方法调用层，用反射还是字节码？</div></div>
+    <div class="bd">
+      <div class="lv"><div class="tag t-fail">不及格</div><div class="tx">用反射，简单。</div></div>
+      <div class="lv"><div class="tag t-pass">及格</div><div class="tx">反射简单通用，字节码快但复杂；先反射，性能不够再优化。</div></div>
+      <div class="lv"><div class="tag t-good">良好</div><div class="tx">分层：启动期用反射采集元数据并缓存 <code>Method</code>；运行期如果成了热点，换成方法句柄或生成 <code>Invoker</code>。给个量级：反射 7.5ns，直接调用 1.1ns，一次 RPC 总开销在微秒级，所以<b>反射不是瓶颈</b>，但它带来的对象分配会影响 GC。</div></div>
+      <div class="lv"><div class="tag t-best">优秀</div><div class="tx">分三段给方案 + 数据 —— ① <b>启动期用反射做元数据采集</b>：缓存 <code>Method</code> 到 <code>Map&lt;String, Method&gt;</code>，key 用 <code>interfaceName#methodName#desc</code>（不要用 <code>Method</code> 对象，跨 ClassLoader 不 equals）；② <b>运行期不用 <code>Method.invoke</code></b>：单次 7.5ns 不高，但它每次分配 <code>Object[]</code> + 装箱，10 万 QPS 就是每秒 10 万个短命对象，抬高 YGC 频率。用 <code>LambdaMetafactory</code> 转成函数式接口（1.9ns、零分配），或用 ByteBuddy/ASM 生成静态转发类 —— 这是 Dubbo <code>JavassistProxyFactory</code>、gRPC、Spring 6 的共同做法；③ <b>兜底与可观测</b>：<code>invokeExact</code> 抛 <code>WrongMethodTypeException</code> 时降级到反射并打点；<code>final</code> 类、<code>private</code> 方法、JDK 内部类（<code>InaccessibleObjectException</code>）都要有明确降级路径，否则升 JDK 就是事故。<b>加分项</b>：生成类占 Metaspace（每类 1~3KB），接口上千的网关要评估预算并让类可卸载。</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="quote">
+  <strong>一句话收尾：</strong>泛型是给编译器的契约，注解是给框架的便签，反射是把便签读出来的手，动态代理是照着便签伪造一个替身。<br><br>
+  四者共同的底座只有一句：<strong>运行期只有一个 <code>Class</code> 对象，所有类型信息都要么被擦掉，要么被塞进 class 文件的属性里。</strong>
+  想清楚这一点，"为什么 TypeReference 要花括号""为什么 CGLIB 代理不了 final""为什么 JDK 17 上老框架崩"就不再是三个孤立的知识点。
+</div>
+
+<div class="next">
+  <b>下期预告 · 第 24 期：Java 模块化与工程化边界</b><br>
+  <code>module-info</code> 的 <code>requires / exports / opens</code> 三件套、JPMS 与 classpath hell 的真实代价、<code>jdeps</code> 查循环依赖、Multi-Release JAR 与 shade 冲突、为什么大厂内部更愿意用"包约定 + ArchUnit"而不是 JPMS。会顺手做一次 <code>jdeps</code> 实测，把"依赖泥球"画出来。
+</div>
+
+<div class="foot">
+  <span>Java 面试深挖 · 第 23 期 / 共 24 期</span>
+  <span>实测环境 JDK 21.0.7 · javap 反编译 · 三次重复取中位</span>
+</div>
+
+</div>
+<script>
+(function(){
+  var kw = 'public|private|protected|static|final|void|class|interface|extends|implements|new|return|if|else|for|while|try|catch|throw|throws|import|package|int|boolean|long|byte|char|double|float|short|null|true|false|this|super|abstract|synchronized|volatile|transient|instanceof|enum|record|var|default|switch|case|break|continue|String|Object|List|Map|Type|Method|MethodHandle|Integer';
+  var re = new RegExp('(\\/\\/[^\\n]*)|("[^"\\n]*")|\\b(?:' + kw + ')\\b|\\b\\d[\\d_\\.]*\\b', 'g');
+
+  document.querySelectorAll('.cb pre code').forEach(function(el){
+    var t = el.textContent
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    el.innerHTML = t.replace(re, function(m, cmt, str){
+      if (cmt) return '<span class="c">' + m + '</span>';
+      if (str) return '<span class="s">' + m + '</span>';
+      if (/^\d/.test(m)) return '<span class="n">' + m + '</span>';
+      return '<span class="k">' + m + '</span>';
+    });
+  });
+
+  document.querySelectorAll('.cb .cp').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.closest('.cb').querySelector('code').textContent;
+      var done = function(){ btn.textContent = '已复制'; setTimeout(function(){ btn.textContent = '复制'; }, 1400); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(done, done);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = code; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch(e){}
+        document.body.removeChild(ta); done();
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

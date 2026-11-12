@@ -221,3 +221,103 @@
   4. 图 13（LengthField 五参数）第一版把 `lengthFieldOffset` 标签放在 x=48 + anchor=end，直接算到 -58 被脚本抓出 → 改为左留白 + 帧整体右移到 x=180 起，同时把右侧注释面板压到 280 宽。**含「左侧标签」的图要先给标签留 150px  gutter，再排主体。**
   5. 高亮脚本这次改成「单次 alternation + 末尾空分支」的写法，`node --check` 通过、spans 配平（6/6）。注意 heredoc 写含正则的 node 脚本仍会被 bash 吃反斜杠（本次踩了一次），**必须用 Write 落盘**——第 7 期教训依然有效。
 - 下期建议主题：Java 线程池深水区与异步编排（ctl 32 位拆解 / execute 三次 CAS 与 addWorker 回滚 / allowCoreThreadTimeOut 的 1e9 技巧 / CompletableFuture 依赖栈与 thenApply 四种线程归属 / ForkJoinPool 工作窃取 / 虚拟线程下线程池要不要重写），已在文末做预告。
+
+## 2026-11-11 09:47（第 20 次执行）
+- 主题：第 20 期 线程池深水区与异步编排（L0 三笔账/池化只解决创建贵 / L1 ctl 3+29 位与五状态有序编码 / L2 execute 四分支+addWorker 回滚 / L3 8×0.7×10=56 线程与 Little's Law 交叉验证+无界队列使 max 失效 / L4 getTask 两轮退出+三个参数陷阱 / L5 依赖栈 LIFO 回调逆序+四种线程归属+allOf 非快速失败 / L6 双端队列 base/top / L7 甘特图+orTimeout 不中断 / L8 四策略谁承担过载+优雅关闭 / L9 五指标+submit 吞异常 / L10 虚拟线程+Semaphore / L11 生产六坑+父子同池死锁环 / L12 20 数字 / L13 14 问答 / L14 3 模拟题四档）
+- 产出：`java_interview_20_threadpool_async.html`（134KB，14 图 + 23 代码块 + 16 section + 14 问答 + 3 模拟题，校验 0 issue）、`.md`（41.6k 字符 / 69KB，1 H1 / 16 H2 / 33 H3 / 37 代码块）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（92KB）一次成功，file_id `PphYqMSoMnKL`，url https://docs.qq.com/doc/DUHBoWXFNU29NbktM，回读 1/16/33 与本地完全一致
+- 关键经验：
+  1. base64 通道第 16 次验证稳定（41.6k 字符 / 92KB 无 WAF 拦截）。
+  2. **本期换了事实来源：直接解 `jdk-21.0.7/lib/src.zip`**（`unzip -o -q ... java.base/java/util/concurrent/*.java`）逐行核对 `execute/addWorker/getTask/setCorePoolSize/allowCoreThreadTimeOut/andTree/ASYNC_POOL/VirtualThread.createDefaultScheduler`。抓出两个凭记忆一定会写错的点：① JDK 19+ 起 `CAPACITY` 已改名 `COUNT_MASK`；② JDK 21 的 `setKeepAliveTime` 把校验从 `time <= 0` 放宽成 `time < 0`（`allowCoreThreadTimeOut` 的 0 值检查挪到了另一处）。**涉及 JDK 内部实现与版本差异的稿子，本地 src.zip 是最便宜的真相来源，不要靠记忆。**
+  3. 校验脚本沿用七项，一次跑完 14 图只报 1 处（`polyline` 自闭合造成的假阳性）→ 已确认无需修。**新增第八项「文本包围盒两两重叠检测」（overlap.py，按 CJK 1.0em/ASCII 0.55em 算宽 + anchor 方向 + 基线 0.78/0.22 上下界），抓出 2 处真压字**（图 9 左侧两个标签 y 差 6px、图 14 环形注释压标题）→ 这项价值很高，能补上「文本估宽」查不出的盲区，后续固定纳入。
+  4. 另发现「文本压在 rect 上」的盲区：图 13 的 `… × 10000` 与最后一个 chip 重叠 41px。原因是 chips 从 x=24 每 52 步排到 804，而标签放在 860 anchor=end（809 起）。**教训：一排等距方块右侧再放标签时，先算 `末块右边界 + 标签宽 < viewBox 宽`，否则砍块数。** 已改为 14 个 chip。
+  5. 「1 万线程 10GB / 池化 200 线程 200MB / 虚拟线程 16MB」这组数字做成**对数轴条形**（每格 10 倍），是本期性价比最高的一张图——把「池化只省创建、不省装不下」这个抽象定性变成三条可比的长度。
+  6. 与第 03 期（并发编程，含线程池七参数与拒绝策略）去重：开头明示「03 讲的是会背就能过的一层」，本期只深挖 ctl 位运算、execute 分支、getTask 两轮、依赖栈、工作窃取、虚拟线程，不重复七参数定义。
+- 下期建议主题：Java 内存泄漏与对象生命周期取证（`jmap -histo` 支配树、MAT 的 GC Roots 路径、「内存缓慢上涨但不 OOM」五步法、ThreadLocal / ClassLoader / DirectByteBuffer / 监听器未注销四类引用链），已在文末做预告。
+
+## 2026-11-11 11:58（第 21 次执行）
+- 主题：第 21 期 内存泄漏取证与对象生命周期（L0 三种"涨" / L1 Shallow·Retained·支配树 / L2 四种引用+ReferenceQueue 探针 / L3 取证四步+速率换算 93 天 / L4 ThreadLocal 七跳链 200MB / L5 ClassLoader 14 次撑爆 Metaspace / L6 堆外四本账 / L7 RSS 12G 拆账 / L8 五步决策树 / L9 工具矩阵+JFR OldObjectSample / L10 20 数字 / L11 14 问答 / L12 3 模拟题四档）
+- 产出：`java_interview_21_memory_leak.html`（104KB，12 图 + 21 代码/命令块 + 14 H2/13 H3，校验 0 issue）、`.md`（64KB / 35.1k 字符，1 H1 / 14 H2 / 13 H3）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（47KB）一次成功，file_id `PnuBexUvSNtB`，url https://docs.qq.com/doc/DUG51QmV4VXZTTnRC，回读 1/14/13 与本地完全一致
+- 关键经验：
+  1. base64 通道第 17 次验证稳定（35.1k 字符 / 47KB 无 WAF 拦截）。
+  2. **五片 HTML 分块写入（p1~p6）比一期一块更稳**，本次 104KB/6 块，单块 12~20KB，合并后一次校验通过。
+  3. 校验脚本七项沿用，首次跑出 2 个真问题：① 图 8 底部单行 70 字越界 → 拆两行；② 图 2 两条并列注释 y 相同横向重叠 → 改上下两行。**"并列两条居左注释"是固定雷区，凡同 y 多段注释必须先算宽度。**
+  4. 事实一致性必须自查数字链：初稿写"17 次 redeploy 撞 512M"，但 base 120M + 每次 30M 实际是第 14 次；已统一改 14，并把 30MB 来源写成"5000 类 × 6KB"。**凡出现"次数 = 上限 / 单次增量"，必须把 base 算进去。**
+  5. 图 3（RSS 堆叠条）里最窄段仅 16px，无法放文字 → 全部改为下方两行色块图例，视觉反而更清楚。**堆叠条里 < 30px 的段一律不写字，交给图例。**
+  6. 图 5（93 天时间轴）的注释框初版压在折线上（折线穿过框右下角），按折线方程算交点后上移 24px 解决。**折线图上的浮层注释，先解 y=f(x) 再定框位，不能靠目测。**
+- 下期建议主题：JIT 编译与基准测试（分层编译五层 / 内联阈值与"太大不优化" / 逃逸分析与标量替换 / deopt 让压测数据变脸 / JMH 三个必设参数与 -Xcomp 陷阱），已在文末做预告。
+
+## 2026-11-11 13:59（第 22 次执行）
+- 主题：第 22 期 JIT 编译与基准测试（L0 三级台阶 12.5× / L1 五层 0→3→4 / L2 三信号+OSR / L3 内联 35·325 两道门 / L4 逃逸三档与标量替换 / L5 deopt 时序+巨态 4.7× / L6 代码缓存三段 / L7 JMH 七坑 / L8 三层答法四档 / L9 速查 / L10 14 问答 / L11 3 模拟题）
+- 产出：`java_interview_22_jit_benchmark.html`（116KB，12 图 + 10 代码 + 8 表 + 12 section，校验 0 issue）、`.md`（50.9KB / 27973 字符，1 H1 / 13 H2 / 31 H3 / 27 代码块）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（67.9KB）一次成功，file_id `PjYXfiIToLXP`，url https://docs.qq.com/doc/DUGpZWGZpSVRvTFhQ，回读 1/13/31 与本地完全一致
+- 关键经验：
+  1. **本期换了生产范式：先做实验再写稿**。用本机 JDK 21.0.7 跑 5 组真实验（分配计数 / PrintCompilation / PrintInlining / PrintCodeCache / 预热曲线），全文数字全部实测，比查资料可信且无法反驳。
+  2. 两个反直觉实测：① EA 是字段级的——一个字段写进 volatile，分配量仍为 0（0/0/228.88MB 矩阵）；② 74B 方法被判两次（`callee is too large` → `inline (hot)`），是 35/325 两道门的硬证据。
+  3. 阈值实验必须先确认实际字节码大小：large 首版 284B 未超 325 仍被放行，加长到 825B 才拿到 `hot method too big`。
+  4. 校验脚本七项 0 issue，但人工查出 2 处**折线穿标注框**。已新增第 8 项 `geom.py`（Liang-Barsky 线段-矩形求交）补齐该盲区。
+  5. **`cat >> f << 'EOF'` 遇长中文内容会被 bash 报未闭合引号并整段丢失**（前 21 期未遇到）。改用 Write 分块 + cat 合并。
+  6. base64 通道第 18 次稳定。
+- 下期建议主题：Java 模块化与工程化边界（module-info / 类路径 hell / jdeps 循环依赖 / 多版本 jar 与 shading / 禁跨模块用 internal 包），已在文末做预告。
+
+## 2026-11-11 16:20（第 23 次执行）
+- 主题调整：上期预告的 JPMS 面试频率偏低 → 改为「泛型擦除·反射·注解·动态代理」（本系列最后一个未覆盖的 Java 语言底层大块），JPMS 顺延第 24 期。
+- 主题：第 23 期（L0 class 文件四层解剖 / L1 擦除四规则·桥方法·重载冲突·Signature 保留 / L2 通配符 capture / L3 反射三入口·inflation 15·稳态四方对比·LambdaMetafactory·强封装 / L4 注解三档·@Inherited 三坑·Spring ASM / L5 JDK 代理 $Proxy0 六步·CGLIB 三级分支·选型 / L6 七坑 / L7 12 数字 / L8 14 问答 / L9 3 模拟题四档）
+- 产出：`java_interview_23_generics_reflect_proxy.html`（104KB，13 图 + 23 代码块 + 10 section，校验 0 issue）、`.md`（25.5k 字符 / 39.8KB，1 H1 / 11 H2 / 20 H3）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（53KB）一次成功，file_id `PzVeRLXdVXch`，url https://docs.qq.com/doc/DUHpWZVJMWGRWWGNo，回读 1/11/20 与本地完全一致
+- 关键经验：
+  1. base64 通道第 19 次验证稳定（25.5k 字符 / 53KB 无 WAF 拦截）。
+  2. 本期仍"先做实验再写稿"（JDK 21 六组实测）。**两个实测直接推翻流行结论**：反射稳态只慢 7 倍（非 100 倍）；CGLIB 单次调用 17ns 反而慢于 JDK 代理 8.3ns —— 差异在创建成本与能力边界。这类"打脸式实测"是说服力最高的素材。
+  3. **反编译取证法可复用**：`-Djdk.proxy.ProxyGenerator.saveGeneratedFiles=true` 导出 `$Proxy0`、`-Dcglib.debugLocation=out` 导出 CGLIB 三件套，再用 `javap -c` 读。拿到"anewarray + 装箱 + invokeinterface + checkcast"四笔开销与 CGLIB 三级分支（`ifnull → invokespecial` 零开销快路），比文字描述强一个量级。
+  4. 坑：`LambdaMetafactory` 的 `samMethodType` 必须是接口方法**精确描述符**（按擦除写 `(Object,int)int` → 运行期 `AbstractMethodError`）；`org.springframework.cglib.proxy.*` 与 `java.lang.reflect.Proxy` 名冲突需全限定。
+  5. 校验七项 13 图 0 issue，但人工查出 fig12 分支箭头语义指错（"否"指向 FastClass 面板）→ **坐标校验查不出"指向对但含义错"，流程图分支必须逐条读语义**。
+- 下期建议主题：Java 模块化与工程化边界（`module-info` / classpath hell / `jdeps` 循环依赖 / Multi-Release JAR 与 shade 冲突 / ArchUnit 替代 JPMS），已在文末做预告。
+
+## 2026-11-12 09:25（第 24 次执行）
+- 主题调整：原预告的「Java 模块化 / JPMS」国内面试频率偏低，改为「MyBatis 与持久层原理」——本系列最后一个未覆盖的高频大块（前 23 期只零星提过 ORM）。
+- 主题：第 24 期 MyBatis 与持久层（L0 九站执行链 / L1 MapperProxy·SqlCommand·ParamNameResolver / L2 四层执行器与装饰 / L3 一级缓存六失效+Spring 两条泳道 / L4 二级缓存 deferred clear 旧值 / L5 CacheKey 四闸门与位置权重 / L6 插件白名单+套娃顺序 / L7 #{} vs ${} / L8 N+1 往返账 / L9 三种 SqlSource / L10 HikariCP 实测参数 / L11 七坑 / L12 20 数字 / L13 14 问答 / L14 3 模拟题四档 / L15 全 24 期知识地图）
+- 产出：`java_interview_24_mybatis.html`（94.7KB，11 图 + 8 代码块 + 15 表 + 16 H2/16 H3，校验 0 issue）、`.md`（26435 字符 / 44KB，1 H1 / 16 H2 / 16 H3 / 18 代码块）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（58.7KB）一次成功，file_id `PGMxMHmsXerF`，url https://docs.qq.com/doc/DUEdNeE1IbXNYZXJG，回读 1/16/16 与本地完全一致
+- 关键经验：
+  1. base64 通道第 20 次验证稳定（26.4k 字符 / 58.7KB 无 WAF 拦截）。
+  2. **本期把「实验先行」用到了 jar 内部**：解 `mybatis-3.5.19.jar` 跑 `javap -p -c` 读常量池与静态初始化，再写 3 个独立 Java 实验（Exp/Ck/Hk）实测，抓到三处凭记忆必错的点：
+     ① `Invocation` 构造里有白名单，只允许 Executor/ParameterHandler/ResultSetHandler/StatementHandler 四类，拦自定义接口直接抛 IllegalArgumentException（3.5.16 起收紧，老博客说的「任意接口可代理」已失效）；
+     ② `CacheKey.update` 的乘法是 `hash = 37*hash + hash(obj)*count`，**count 才是位置权重来源**——实测 id 1→2 差 2738=1×2×37²，offset 0→1 差 111=1×3×37，limit 10→11 差 4=1×4×37⁰，三个数量级差正好暴露这行；
+     ③ `HikariConfig` 的 maximumPoolSize/minimumIdle 构造后是 -1，validate() 才解析成 10，文档写「默认 10」是对的但源码读数不是 10。
+  3. `CacheKey.equals` 顺序敏感（乱序同元素返回 false），实测确认，可写进正文当区分度细节。
+  4. 校验脚本七项沿用，本期 11 图一次通过 0 issue；但人工复核仍抓出 2 处机器盲区：图 8 的「1 次」标签被放在轴右端而绿柱只有 6px（语义错位）→ 改为上下两行横向对比柱；图 11 两条半透明区域画在曲线之后把折线压淡 → 调整绘制顺序（先底色后曲线）。**「图层遮挡」和「标签与图元语义错位」是坐标校验的固定盲区，每期都要人工过一遍。**
+  5. 叙事上新增有效手法：L15 把 24 期收束成一张「板块 × 期号 × 一句话抓手」的地图，并在结尾点明「05 讲数据库怎么想、24 讲框架怎么问」的接缝，把系列从单篇变成了成套。后续若继续，可按此结构做年度回顾篇。
+- 下期建议主题：第 25 期 Java 模块化与工程化边界（module-info / classpath hell / jdeps 循环依赖 / Multi-Release JAR 与 shade 冲突 / ArchUnit 替代 JPMS），已在文末做预告。
+
+
+## 2026-11-12 11:42（第 25 次执行）
+- 主题调整：原预告的「Java 模块化 / JPMS」连续第 3 次被推迟（面试频率低），改为「Elasticsearch 与搜索原理」——前 24 期唯一没覆盖的存储大类（关系库/缓存/MQ 都有，搜索引擎缺）。
+- 主题：第 25 期 ES 与搜索（L0 LIKE 为何必然全表扫 / L1 三层倒排 FST·term dict·posting 跳表 / L2 analyzer 与索引期=查询期 / L3 段·refresh·flush·merge / L4 routing 与 ack / L5 两阶段查询与深分页堆账 / L6 BM25 饱和曲线 / L7 分片扇出账 / L8 三色与 unassigned / L9 内存 mapping nested 三处静默错误 / L10 十坑 / L11 binlog 单一写入口 / L12 22 数字 / L13 14 问答 / L14 3 模拟题四档 / L15 全 25 期地图）
+- 产出：`java_interview_25_elasticsearch.html`（145KB，13 图 + 19 代码块 + 12 表 + 16 H2）、`.md`（28854 字符 / 53KB，1 H1 / 16 H2 / 6 H3 / 19 代码块，零 HTML 标签）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（70.8KB）一次成功，file_id `PDAnscmaFfzg`，url https://docs.qq.com/doc/DUERBbnNjbWFGZnpn，回读 1/16/6 与本地完全一致
+- 关键经验：
+  1. base64 通道第 21 次验证稳定（28.9k 字符 / 70.8KB 无 WAF 拦截）。
+  2. 校验脚本这次整合成单文件 `validate.py` 七项（标签配平 / SVG 禁 HTML 标签 / url(#id) 有定义 / 文本估宽 / text y 越界 / rect 越界 / 文本包围盒重叠），13 图**首跑即 0 issue**。合并成一个脚本后不用再记多个文件名。
+  3. 本期新增发现两类「机器查不出」的缺陷，都是**退化图形**：① 第 5 期式的箭头多边形写成多点串（`598,78 616,78 616,57 ...`），渲染成细条 sliver，坐标全在界内所以不报警；② `fill="none"` 的多边形纯占位无语义。**复核时要专门 grep 点数 > 5 的 polygon 和 fill="none" 的 polygon。**
+  4. 箭头端点与盒子留 6~8px 空隙是隐性问题（视觉上像断开），本期修了 5 处；**凡 path/polygon 箭头，终点必须落在 box 边框坐标上（或正好差 0），不能目测。**
+  5. 内容上最有效的两处数形结合：① BM25 饱和曲线（tf 1→1000 得分 1.000→2.197，上界 2.2，标注 45%/89%/99% 三个参考点）——把「堆关键词无效」从经验变成数学；② 深分页用**对数刻度条形**（100→10 万条，4 档），并在同一图里叠一条「search_after 恒定 100 条」的对照线，1000 倍差距一眼可见。
+  6. 事实核对方式：ES 默认值查官方 index modules 文档（主分片 7.0+ 才是 1，5.x/6.x 是 5），BM25 与 IDF 全部按公式逐行手算并列表，标注「估算」的体积给了完整乘法过程。**版本敏感型中间件的稿子，默认值必须查文档，不能凭记忆。**
+  7. 与第 05/16/17 期去重：开头明示「05 讲数据库怎么想、25 讲检索怎么想」，把重点放在倒排三层、段不可变、扇出账、BM25 手算，不重复 B+ 树与缓存一致性。
+- 下期建议主题：第 26 期 字节码增强与 Java Agent（ASM 树/访问者 API / premain 与 agentmain 加载时机 / APM 探针无侵入埋点 / Arthas watch 改谁的字节码 / Lombok 与 MapStruct 编译期把戏 / 热部署的边界），已在文末做预告。
+
+## 2026-11-12 13:59（第 26 次执行）
+
+- 主题：第 26 期 字节码增强与 Java Agent（L0 四种增强时机时间轴 / L1 class 文件三段体积账 常量池 43%~76% + 间接引用链 / L2 finally 双份字节码与 return 暂存 / L3 Instrumentation 五能力 + transformer 链 / L4 premain vs agentmain + JEP 451 / L5 ASM 访问者链 + COMPUTE_MAXS 的 VerifyError + ASM 版本墙 / L6 APM·Arthas·热部署三范式 / L7 探针成本账 42.8ns / L8 启动账 / L9 Lombok 改 AST / L10 redefine 七条红线 + retransform 幂等 / L11 七坑 / L12 22 数字 / L13 14 问答 / L14 3 模拟题四档 / L15 26 期地图）
+- 产出：`java_interview_26_bytecode_agent.html`（95.2KB，12 图 + 20 代码块 + 9 表 + 16 H2/8 H3，校验 0 issue）、`.md`（29765 字符 / 49KB，1 H1 / 16 H2 / 8 H3，零 HTML 标签）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（64.5KB）一次成功，file_id `PWzCUWhuVNDc`，url https://docs.qq.com/doc/DUFd6Q1VXaHVWTkRj，回读 1/16/8 与本地完全一致
+- 关键经验：
+  1. base64 通道第 22 次验证稳定（29.8k 字符 / 64.5KB 无 WAF 拦截）。
+  2. **本期是"实验先行"的极致版：写了一个真实可运行的 agent**（premain + MANIFEST + ASM 插桩 + redefineClasses + retransformClasses + 空 transformer 对照组），8 组实测。所有报错文案原样复制进正文，这是本系列说服力最高的一期素材。
+  3. 实测推翻/坐实四个点：① `COMPUTE_MAXS` 不扩 `maxLocals`，插槽 10 直接 `VerifyError: get long/double overflows locals / Local index 10 is invalid`；② 空 transformer（return null）也让启动 +96ms/+22ms（两组，**非线性**，固定开销占大头）；③ AtomicLong 探针 44.1ns vs ThreadLocal 探针 50.9ns，**优化无效**——成本 90% 是两次 `nanoTime`；④ 改方法签名报的是 `attempted to delete a method`（JVM 按 name+descriptor 识别方法），不是"改签名"。
+  4. **ASM 版本表靠二分探测而非查文档**：手工改写 class 的 major 字段，逐版本 try 构造 `ClassReader`。实测 9.4→major 64(Java 20)、9.6→66(22)、9.7.1→68(24)、9.9.1→70(26)。另发现 `Opcodes.class.getPackage().getImplementationVersion()` 在 9.4/9.6 都返回 589824，**不能用来判版本**。
+  5. `retransform` 幂等实测：连续两次 retransform 后 1000 次调用只记 1000 次（每次从 initial classfileBuffer 重来），且 `Class` identity 不变、静态字段保留。配套坑：`addTransformer(t)` 默认 `canRetransform=false`，会导致 retransform 把增强**撤销**。
+  6. 校验脚本七项一次跑完 12 图 **0 issue**（含标签配平 / SVG 内禁 HTML / url(#) 定义 / CJK1.0em·ASCII0.55em 估宽 / text y 越界 / rect 越界 / polygon 点数），本轮首次做到"零人工返工"。
+  7. Windows/Git Bash 下 javac 的 `-cp "out;asm-9.6.jar"` 必须用引号包住分号；agent jar 的 `Class-Path` 是相对 **agent jar 所在目录**，放错目录直接 `NoClassDefFoundError`。
+  8. 内容组织上最有效的两处数形结合：① 探针成本堆叠条（16.0 / 12.6 / 30.2，红色那段比蓝色还长）；② ASM 版本台阶图 + JDK 21 major 65 落在 9.4 与 9.6 的空档里。**"版本空档"这种空间化表达比表格更容易被记住。**
+- 下期建议主题：第 27 期 Java 模块化与工程化边界（module-info / classpath hell 四形态 / jdeps 循环依赖 / Multi-Release JAR 与 shade 冲突 / ArchUnit 替代 JPMS），已在文末做预告（这是本系列挂了五期的话题）。

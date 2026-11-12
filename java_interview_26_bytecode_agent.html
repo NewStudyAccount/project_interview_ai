@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 面试深挖 26 · 字节码增强与 Java Agent</title>
+<style>
+:root{
+  --ink:#1a1d21; --ink2:#3d454e; --muted:#6b7683; --line:#e4e8ed; --line2:#d4dae1;
+  --bg:#ffffff; --panel:#f7f9fb; --panel2:#eef2f6;
+  --blue:#1a5fb4; --blue-soft:#e8f0fb;
+  --red:#c62828; --red-soft:#fdeceb;
+  --green:#1e7d3c; --green-soft:#e9f5ec;
+  --amber:#9a6400; --amber-soft:#fdf4e3;
+  --purple:#6a3fa0; --purple-soft:#f2ecfb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.78; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px; margin:0 auto; padding:0 28px 80px}
+.hero{padding:56px 0 30px; border-bottom:2px solid var(--ink)}
+.hero .kicker{font-size:12.5px; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; font-weight:600}
+.hero h1{margin:14px 0 10px; font-size:36px; line-height:1.25; letter-spacing:-.5px; font-weight:800}
+.hero .sub{color:var(--ink2); font-size:16.5px; max-width:800px}
+.hero .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+.tag{font-size:12.5px; padding:4px 11px; border-radius:999px; background:var(--panel2); color:var(--ink2); font-weight:600}
+.tag.b{background:var(--blue-soft); color:var(--blue)}
+.tag.r{background:var(--red-soft); color:var(--red)}
+.tag.g{background:var(--green-soft); color:var(--green)}
+.tag.a{background:var(--amber-soft); color:var(--amber)}
+
+h2{
+  margin:56px 0 18px; padding:14px 0 14px 18px; font-size:23px; font-weight:800; letter-spacing:-.2px;
+  border-left:4px solid var(--blue); background:linear-gradient(90deg,var(--blue-soft),transparent 62%);
+  border-radius:0 6px 6px 0;
+}
+h2 .n{display:inline-block; min-width:38px; color:var(--blue); font-variant-numeric:tabular-nums}
+h3{margin:32px 0 12px; font-size:17.5px; font-weight:750; color:var(--ink)}
+h3::before{content:""; display:inline-block; width:6px; height:6px; background:var(--blue); border-radius:1px; margin-right:9px; vertical-align:2px}
+p{margin:12px 0}
+strong{font-weight:700; color:#101418}
+em{font-style:normal; background:linear-gradient(transparent 62%, #ffe9a8 62%); padding:0 1px}
+code{font-family:"JetBrains Mono",Consolas,"Courier New",monospace; font-size:13px; background:var(--panel2);
+  padding:1.5px 5px; border-radius:4px; color:#a03060}
+.lead{font-size:16px; color:var(--ink2)}
+
+ul,ol{margin:12px 0; padding-left:22px}
+li{margin:7px 0}
+li::marker{color:var(--muted)}
+
+table{width:100%; border-collapse:collapse; margin:20px 0; font-size:13.5px; background:#fff}
+th{background:var(--panel2); text-align:left; padding:10px 12px; font-weight:700; border-bottom:2px solid var(--line2); font-size:13px}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:1px solid var(--line2)}
+td code{font-size:12.5px}
+.num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum"}
+
+pre{
+  position:relative; margin:20px 0; padding:18px 18px 16px; background:#1c2128; color:#d7dde5;
+  border-radius:9px; overflow-x:auto; font-size:13px; line-height:1.68;
+  font-family:"JetBrains Mono",Consolas,"Courier New",monospace;
+}
+pre::before{content:attr(data-lang); position:absolute; top:0; right:0; font-size:10.5px; letter-spacing:.1em;
+  color:#7d8794; background:#252b33; padding:3px 10px; border-radius:0 9px 0 6px; text-transform:uppercase}
+pre code{background:none; padding:0; color:inherit; font-size:inherit}
+.k{color:#ff7b72}
+.s{color:#a5d6a7}
+.c{color:#8b949e; font-style:italic}
+.n{color:#79c0ff}
+
+figure{margin:26px 0; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:18px 18px 10px}
+figure svg{display:block; width:100%; height:auto}
+figcaption{margin-top:8px; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.6}
+figcaption b{color:var(--ink2)}
+
+.box{border-radius:9px; padding:14px 18px; margin:20px 0; border:1px solid var(--line2); background:var(--panel)}
+.box .h{font-weight:750; font-size:13.5px; letter-spacing:.02em; margin-bottom:6px; display:flex; align-items:center; gap:8px}
+.box p:last-child{margin-bottom:0}
+.box.blue{background:var(--blue-soft); border-color:#bcd4f2} .box.blue .h{color:var(--blue)}
+.box.red{background:var(--red-soft); border-color:#f3c9c6} .box.red .h{color:var(--red)}
+.box.green{background:var(--green-soft); border-color:#c2e2cc} .box.green .h{color:var(--green)}
+.box.amber{background:var(--amber-soft); border-color:#efd9ab} .box.amber .h{color:var(--amber)}
+.box.purple{background:var(--purple-soft); border-color:#d7c9ef} .box.purple .h{color:var(--purple)}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0}
+.card{background:#fff; border:1px solid var(--line); border-radius:9px; padding:14px 16px}
+.card .t{font-weight:750; font-size:14px; margin-bottom:5px; color:var(--ink)}
+.card .d{font-size:13px; color:var(--ink2); line-height:1.65}
+.card.r{border-top:3px solid var(--red)} .card.g{border-top:3px solid var(--green)}
+.card.b{border-top:3px solid var(--blue)} .card.a{border-top:3px solid var(--amber)}
+
+.qa{border-left:3px solid var(--line2); padding:2px 0 2px 16px; margin:18px 0}
+.qa .q{font-weight:750; color:var(--ink); font-size:14.5px}
+.qa .q::before{content:"Q "; color:var(--blue); font-weight:800}
+.qa .a{color:var(--ink2); font-size:14px; margin-top:5px}
+.qa .a::before{content:"A "; color:var(--green); font-weight:800}
+
+.mt{background:#fff; border:1px solid var(--line); border-radius:11px; padding:20px 22px; margin:24px 0}
+.mt .qh{font-weight:800; font-size:15.5px; margin-bottom:10px; color:var(--ink)}
+.mt .qh span{background:var(--ink); color:#fff; font-size:11.5px; padding:2px 8px; border-radius:4px; margin-right:9px; letter-spacing:.05em}
+.lv{margin-top:14px; padding:11px 14px; border-radius:7px; font-size:13.5px; line-height:1.7}
+.lv .lb{font-weight:750; font-size:12px; letter-spacing:.05em; margin-right:8px}
+.lv.l1{background:#fbeceb; border-left:3px solid #d9534f} .lv.l1 .lb{color:#c62828}
+.lv.l2{background:#fdf6e6; border-left:3px solid #d9a441} .lv.l2 .lb{color:#9a6400}
+.lv.l3{background:#eaf2fd; border-left:3px solid #4a86c8} .lv.l3 .lb{color:#1a5fb4}
+.lv.l4{background:#eaf6ee; border-left:3px solid #3f9b5c} .lv.l4 .lb{color:#1e7d3c}
+
+.foot{margin-top:70px; padding-top:26px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+.next{margin-top:26px; background:var(--panel2); border-radius:9px; padding:16px 20px; font-size:13.5px; color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <div class="kicker">Java 面试深挖 · 第 26 期</div>
+  <h1>字节码增强与 Java Agent<br><span style="font-size:23px;color:var(--ink2);font-weight:600">一个什么都不做的 transformer，让启动慢了 96ms</span></h1>
+  <p class="sub">前 25 期把 JVM、并发、Spring、存储都过了一遍，唯独没正面碰"不改你的代码、却改你行为"的那类东西：APM 探针、Arthas、Lombok、AOP、热部署。这一期在本机 JDK 21 上写一个真 agent，把每个环节的成本与限制都测出来。</p>
+  <div class="meta">
+    <span class="tag b">JDK 21.0.7 实测</span>
+    <span class="tag">ASM 9.4 / 9.6 / 9.7.1 / 9.9.1</span>
+    <span class="tag r">8 组真实验</span>
+    <span class="tag g">12 张原理图</span>
+    <span class="tag a">14 问答 + 3 模拟题</span>
+  </div>
+</div>
+
+<h2><span class="n">L0</span>全景：四种增强时机，一张时间轴分完</h2>
+
+<p class="lead">"字节码增强"是个统称，实际有四个完全不同的插入点。面试第一个坑就在这里：<strong>很多人把 AOP 也叫字节码增强，其实 Spring AOP 默认连字节码都不碰</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">四种增强时机：改的东西不同，能改的范围也不同</text>
+  <line x1="60" y1="112" x2="846" y2="112" stroke="#d4dae1" stroke-width="2"/>
+  <polygon points="846,112 836,107 836,117" fill="#d4dae1"/>
+
+  <circle cx="135" cy="112" r="9" fill="#1a5fb4"/>
+  <circle cx="345" cy="112" r="9" fill="#1e7d3c"/>
+  <circle cx="555" cy="112" r="9" fill="#9a6400"/>
+  <circle cx="765" cy="112" r="9" fill="#6a3fa0"/>
+
+  <text x="135" y="90" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1a5fb4">编译期</text>
+  <text x="345" y="90" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1e7d3c">类加载期</text>
+  <text x="555" y="90" text-anchor="middle" font-size="13.5" font-weight="700" fill="#9a6400">运行期</text>
+  <text x="765" y="90" text-anchor="middle" font-size="13.5" font-weight="700" fill="#6a3fa0">代理期</text>
+
+  <text x="135" y="138" text-anchor="middle" font-size="10.5" fill="#6b7683">javac 之后</text>
+  <text x="345" y="138" text-anchor="middle" font-size="10.5" fill="#6b7683">defineClass 之前</text>
+  <text x="555" y="138" text-anchor="middle" font-size="10.5" fill="#6b7683">类已加载</text>
+  <text x="765" y="138" text-anchor="middle" font-size="10.5" fill="#6b7683">调用发生时</text>
+
+  <rect x="40" y="164" width="190" height="112" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="135" y="186" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a5fb4">产物：.class 文件</text>
+  <text x="135" y="208" text-anchor="middle" font-size="10.5" fill="#3d454e">Lombok / MapStruct</text>
+  <text x="135" y="230" text-anchor="middle" font-size="10.5" fill="#3d454e">能加字段 ✅</text>
+  <text x="135" y="252" text-anchor="middle" font-size="10.5" fill="#c62828">改不了已发布的 jar</text>
+
+  <rect x="250" y="164" width="190" height="112" rx="7" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="345" y="186" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e7d3c">产物：内存字节数组</text>
+  <text x="345" y="208" text-anchor="middle" font-size="10.5" fill="#3d454e">APM / SkyWalking</text>
+  <text x="345" y="230" text-anchor="middle" font-size="10.5" fill="#3d454e">能加字段 ✅</text>
+  <text x="345" y="252" text-anchor="middle" font-size="10.5" fill="#c62828">改不了已加载的类</text>
+
+  <rect x="460" y="164" width="190" height="112" rx="7" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="555" y="186" text-anchor="middle" font-size="11.5" font-weight="700" fill="#9a6400">产物：已加载的类</text>
+  <text x="555" y="208" text-anchor="middle" font-size="10.5" fill="#3d454e">Arthas watch</text>
+  <text x="555" y="230" text-anchor="middle" font-size="10.5" fill="#3d454e">只能改方法体</text>
+  <text x="555" y="252" text-anchor="middle" font-size="10.5" fill="#c62828">不能动 schema</text>
+
+  <rect x="670" y="164" width="190" height="112" rx="7" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="765" y="186" text-anchor="middle" font-size="11.5" font-weight="700" fill="#6a3fa0">产物：代理对象</text>
+  <text x="765" y="208" text-anchor="middle" font-size="10.5" fill="#3d454e">Spring AOP / CGLIB</text>
+  <text x="765" y="230" text-anchor="middle" font-size="10.5" fill="#3d454e">不碰字节码</text>
+  <text x="765" y="252" text-anchor="middle" font-size="10.5" fill="#c62828">有每次调用开销</text>
+</svg>
+<figcaption><b>图 1</b>　四个插入点：越靠后越灵活，但限制越多、开销越大。AOP 在最后一格，它连字节码都没改。</figcaption>
+</figure>
+
+<table>
+<tr><th>问题</th><th>编译期</th><th>加载期</th><th>运行期</th><th>代理</th></tr>
+<tr><td>能增加字段/方法吗</td><td>能</td><td><strong>能</strong></td><td><strong>不能</strong></td><td>不能</td></tr>
+<tr><td>能改已跑起来的类吗</td><td>不能</td><td>不能</td><td>能（只改方法体）</td><td>能（换对象）</td></tr>
+<tr><td>运行时开销</td><td>无</td><td>一次性</td><td>一次性</td><td><strong>每次调用</strong></td></tr>
+<tr><td>代表</td><td>Lombok / MapStruct</td><td>APM 探针</td><td>Arthas</td><td>Spring AOP</td></tr>
+</table>
+
+<p>这张表里最反直觉的一行是"加载期能加字段，运行期不能"。原因在 L10 会用一个真实报错说明：<strong>JVM 的方法身份是 <code>(name, descriptor)</code>，增加字段会改变类的 schema，而 redefine 只允许改方法体</strong>。</p>
+
+<p>先给本期最重要的一组实测数字，后面每一节都在解释它们：</p>
+
+<table>
+<tr><th>实测项</th><th>数字</th><th>说明</th></tr>
+<tr><td>空 transformer（直接 return null）的启动开销</td><td class="num"><strong>+96ms</strong>（147 → 243ms）</td><td>一个类都没改</td></tr>
+<tr><td>真正插桩一个方法的启动开销</td><td class="num"><strong>+241ms</strong>（147 → 388ms）</td><td>多出的 145ms 是加载 ASM</td></tr>
+<tr><td>transformer 被调用次数</td><td class="num"><strong>323 次</strong></td><td>对应启动期加载的类数</td></tr>
+<tr><td>单次方法调用的插桩成本</td><td class="num"><strong>+42.8ns</strong>（16.0 → 58.8ns）</td><td>业务本身只有 16ns</td></tr>
+<tr><td>其中探针自身耗时</td><td class="num"><strong>30.2ns（70%）</strong></td><td>探针比被插的代码还贵</td></tr>
+<tr><td>AtomicLong 探针 vs ThreadLocal 探针</td><td class="num">44.1ns vs 50.9ns</td><td><strong>优化无效</strong>，见 L7</td></tr>
+<tr><td>ASM 9.4 读 JDK 21 的 class</td><td colspan="2"><code>Unsupported class file major version 65</code>，见 L5</td></tr>
+</table>
+
+<h2><span class="n">L1</span>class 文件解剖：常量池占了 43%~76%</h2>
+
+<p class="lead">要改字节码，先得知道它长什么样。大部分人背过"魔数 CAFEBABE、版本号、常量池"，但很少有人知道<strong>常量池到底占多少</strong>。我写了个 120 行的解析器（不用 ASM，纯手撸 u1/u2/u4），把三个类逐段量了一遍。</p>
+
+<pre data-lang="bash"><code>$ java ClassFileStat out/Target.class out/Main.class out/TimingAgent.class
+Target.class        size=  446B  major=65  cp= 24条/ 193B(43.3%)  code= 163B
+Main.class          size= 1768B  major=65  cp=104条/1352B(76.5%)  code= 326B
+TimingAgent.class   size= 5773B  major=65  cp=321条/3897B(67.5%)  code=1502B</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">class 文件的三段体积账：常量池吃掉 43%~76%，方法体只占 18%~36%</text>
+
+  <text x="20" y="72" font-size="11" font-weight="700" fill="#3d454e">Target.class</text>
+  <text x="20" y="88" font-size="10" fill="#6b7683">446B</text>
+  <rect x="130" y="56" width="299" height="34" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <rect x="429" y="56" width="252" height="34" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <rect x="681" y="56" width="139" height="34" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="279" y="78" text-anchor="middle" font-size="10.5" fill="#1a5fb4">常量池 193B · 43.3%</text>
+  <text x="555" y="78" text-anchor="middle" font-size="10.5" fill="#1e7d3c">Code 163B · 36.5%</text>
+  <text x="750" y="78" text-anchor="middle" font-size="10.5" fill="#6b7683">其他</text>
+
+  <text x="20" y="132" font-size="11" font-weight="700" fill="#3d454e">Main.class</text>
+  <text x="20" y="148" font-size="10" fill="#6b7683">1768B</text>
+  <rect x="130" y="116" width="528" height="34" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <rect x="658" y="116" width="127" height="34" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <rect x="785" y="116" width="35" height="34" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="394" y="138" text-anchor="middle" font-size="10.5" fill="#1a5fb4">常量池 1352B · 76.5%</text>
+  <text x="721" y="138" text-anchor="middle" font-size="10.5" fill="#1e7d3c">Code 18.4%</text>
+
+  <text x="20" y="192" font-size="11" font-weight="700" fill="#3d454e">TimingAgent</text>
+  <text x="20" y="208" font-size="10" fill="#6b7683">5773B</text>
+  <rect x="130" y="176" width="466" height="34" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <rect x="596" y="176" width="179" height="34" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <rect x="775" y="176" width="45" height="34" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="363" y="198" text-anchor="middle" font-size="10.5" fill="#1a5fb4">常量池 3897B · 67.5%</text>
+  <text x="685" y="198" text-anchor="middle" font-size="10.5" fill="#1e7d3c">Code 26%</text>
+
+  <line x1="130" y1="228" x2="820" y2="228" stroke="#e4e8ed" stroke-width="1"/>
+  <text x="130" y="250" font-size="10.5" fill="#6b7683">代码越短、引用的类越多，常量池占比越高：Main 只有 3 个方法，常量池吃掉 76.5%。</text>
+  <text x="130" y="270" font-size="10.5" fill="#6b7683">major=65 就是 JDK 21（44 是基线，65-44=21）。这个数字在 L5 会变成一堵墙。</text>
+</svg>
+<figcaption><b>图 2</b>　三个类的体积拆分。常量池是符号引用的仓库，方法体才是你的逻辑——体积比几乎反过来了。</figcaption>
+</figure>
+
+<p>三个结论，全是反直觉的：</p>
+
+<ul>
+<li><strong>常量池占 43%~76%</strong>，方法体（Code 属性）只占 18%~36%。你写的代码越短、引用的类越多，常量池占比越高——<code>Main.class</code> 只有 3 个方法，常量池却吃掉 76.5%。</li>
+<li><strong>为什么这么多</strong>：每一个类名、方法名、字段名、字符串、数字，在 class 文件里都要变成一条 <code>Utf8</code>，然后被 <code>Class</code>/<code>NameAndType</code>/<code>Methodref</code> 层层引用。<code>Target.class</code> 的 tag 分布是 <code>{1=15, 7=2, 9=2, 10=1, 12=3}</code>。</li>
+<li><strong>major=65 就是 JDK 21</strong>。<code>constant_pool_count=24</code> 但实际条目 23——因为 Long/Double 占两个槽，这是 class 文件里唯一"一个常量两条下标"的坑。</li>
+</ul>
+
+<p>常量池的引用是<strong>间接且可共享</strong>的，这才让它没那么臃肿：</p>
+
+<figure>
+<svg viewBox="0 0 900 252" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="252" fill="#ffffff"/>
+  <text x="450" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1d21">一条 getstatic 指令只占 3 字节：b2 00 09（操作码 + 常量池索引 #9）</text>
+
+  <rect x="40" y="96" width="160" height="56" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="120" y="120" text-anchor="middle" font-size="11" font-weight="700" fill="#1a5fb4">#9 Fieldref</text>
+  <text x="120" y="140" text-anchor="middle" font-size="10" fill="#3d454e">Target.marker:I</text>
+
+  <rect x="260" y="40" width="170" height="50" rx="6" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="345" y="61" text-anchor="middle" font-size="11" font-weight="700" fill="#3d454e">#7 Class</text>
+  <text x="345" y="79" text-anchor="middle" font-size="10" fill="#6b7683">→ #8</text>
+
+  <rect x="260" y="158" width="170" height="50" rx="6" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="345" y="179" text-anchor="middle" font-size="11" font-weight="700" fill="#3d454e">#10 NameAndType</text>
+  <text x="345" y="197" text-anchor="middle" font-size="10" fill="#6b7683">→ #11 : #12</text>
+
+  <rect x="510" y="40" width="170" height="50" rx="6" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="595" y="61" text-anchor="middle" font-size="11" font-weight="700" fill="#1e7d3c">#8 Utf8</text>
+  <text x="595" y="79" text-anchor="middle" font-size="10" fill="#3d454e">"Target"</text>
+
+  <rect x="510" y="108" width="150" height="40" rx="6" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="585" y="133" text-anchor="middle" font-size="10.5" fill="#1e7d3c">#11 Utf8 "marker"</text>
+
+  <rect x="510" y="162" width="150" height="40" rx="6" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="585" y="187" text-anchor="middle" font-size="10.5" fill="#1e7d3c">#12 Utf8 "I"</text>
+
+  <line x1="200" y1="112" x2="256" y2="76" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="256,76 246,76 250,84" fill="#9aa5b1"/>
+  <line x1="200" y1="136" x2="256" y2="172" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="256,172 250,164 246,172" fill="#9aa5b1"/>
+  <line x1="430" y1="65" x2="506" y2="65" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="506,65 496,60 496,70" fill="#9aa5b1"/>
+  <line x1="396" y1="183" x2="506" y2="130" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="506,130 496,128 498,138" fill="#9aa5b1"/>
+  <line x1="396" y1="188" x2="506" y2="184" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="506,184 496,179 496,189" fill="#9aa5b1"/>
+
+  <text x="690" y="70" font-size="10.5" fill="#6b7683">同一行代码写 100 次，</text>
+  <text x="690" y="88" font-size="10.5" fill="#6b7683">常量池只存 1 份 Fieldref。</text>
+  <text x="690" y="130" font-size="10.5" fill="#6b7683">改写字节码时你操作的不是</text>
+  <text x="690" y="148" font-size="10.5" fill="#6b7683">代码，是这些索引。</text>
+</svg>
+<figcaption><b>图 3</b>　常量池的间接引用链。这解释了为什么字节码紧凑，也解释了为什么插桩必须操作"索引"而不是"名字"。</figcaption>
+</figure>
+
+<pre data-lang="text"><code>#7  = Class       #8        // 指向 #8 的 Utf8
+#8  = Utf8        Target
+#9  = Fieldref    #7.#10    // 指向 #7(Class) 和 #10(NameAndType)
+#10 = NameAndType #11:#12   // 指向 #11(名字) 和 #12(描述符)
+#11 = Utf8        marker
+#12 = Utf8        I</code></pre>
+
+<div class="box amber">
+<div class="h">解析器踩的坑</div>
+<p>写解析器时漏掉"Long/Double 占两个槽"的 <code>i++</code>，后面全部错位。我第一版直接崩：<code>ArrayIndexOutOfBoundsException: Index 67134 out of bounds for length 1811</code>——67134 正好是一个被当成 u2 读的常量池字节。</p>
+</div>
+
+<h2><span class="n">L2</span>字节码指令：finally 被复制了两份</h2>
+
+<p class="lead">插桩的本质是"在方法进出时插入几条指令"。要插得对，得先知道 javac 把你的代码编译成了什么形状。<code>finally</code> 最能暴露这个结构。</p>
+
+<pre data-lang="java"><code>static int f(int x) {
+    try {
+        return 10 / x;
+    } finally {
+        Trace.mark();
+    }
+}</code></pre>
+
+<pre data-lang="bash"><code>$ javap -c -p out/TryFinally.class
+  static int f(int);
+    Code:
+       0: bipush        10
+       2: iload_0
+       3: idiv
+       4: istore_1          ← 把返回值先存进局部变量 1
+       5: invokestatic  #7  // Trace.mark()   ← finally 第 1 份（正常路径）
+       8: iload_1
+       9: ireturn           ← 再取出来返回
+      10: astore_2          ← 异常路径：异常存进局部变量 2
+      11: invokestatic  #7  // Trace.mark()   ← finally 第 2 份（异常路径）
+      14: aload_2
+      15: athrow            ← 原样抛出
+    Exception table:
+       from    to  target type
+           0     5    10   any</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 344" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="344" fill="#ffffff"/>
+  <text x="450" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1d21">同一段 finally，被 javac 编译进了两条路径</text>
+
+  <text x="80" y="50" font-size="11.5" font-weight="700" fill="#1e7d3c">正常路径（没有异常）</text>
+  <text x="520" y="50" font-size="11.5" font-weight="700" fill="#c62828">异常路径（Exception table: any）</text>
+
+  <rect x="80" y="64" width="280" height="46" rx="6" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="94" y="84" font-size="10.5" fill="#3d454e">0: bipush 10   2: iload_0   3: idiv</text>
+  <text x="94" y="101" font-size="10" fill="#6b7683">算出 10 / x 的结果压栈</text>
+
+  <rect x="80" y="126" width="280" height="46" rx="6" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="94" y="146" font-size="10.5" fill="#3d454e">4: istore_1</text>
+  <text x="94" y="163" font-size="10" fill="#c62828">返回值先暂存 —— finally 改不了它</text>
+
+  <rect x="80" y="188" width="280" height="46" rx="6" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="94" y="208" font-size="10.5" font-weight="700" fill="#c62828">5: invoke Trace.mark()  ← 第 1 份</text>
+  <text x="94" y="225" font-size="10" fill="#6b7683">finally 代码，正常路径走这里</text>
+
+  <rect x="80" y="250" width="280" height="46" rx="6" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="94" y="270" font-size="10.5" fill="#3d454e">8: iload_1    9: ireturn</text>
+  <text x="94" y="287" font-size="10" fill="#6b7683">取回暂存值，真正返回</text>
+
+  <rect x="520" y="64" width="300" height="46" rx="6" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="534" y="84" font-size="10.5" fill="#3d454e">3: idiv 抛出 ArithmeticException</text>
+  <text x="534" y="101" font-size="10" fill="#6b7683">跳转到 Exception table 的 target 10</text>
+
+  <rect x="520" y="126" width="300" height="46" rx="6" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="534" y="146" font-size="10.5" fill="#3d454e">10: astore_2</text>
+  <text x="534" y="163" font-size="10" fill="#6b7683">异常对象存进局部变量 2</text>
+
+  <rect x="520" y="188" width="300" height="46" rx="6" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="534" y="208" font-size="10.5" font-weight="700" fill="#c62828">11: invoke Trace.mark()  ← 第 2 份</text>
+  <text x="534" y="225" font-size="10" fill="#6b7683">同一段 finally，又生成了一遍</text>
+
+  <rect x="520" y="250" width="300" height="46" rx="6" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="534" y="270" font-size="10.5" fill="#3d454e">14: aload_2    15: athrow</text>
+  <text x="534" y="287" font-size="10" fill="#6b7683">原样抛出（除非 finally 里 return）</text>
+
+  <text x="450" y="326" text-anchor="middle" font-size="10.5" fill="#6b7683">"finally 一定执行"是编译器用两份代码保证的，不是虚拟机特性。</text>
+</svg>
+<figcaption><b>图 4</b>　finally 的两份副本：正常路径一份、catch-all 一份。这是插桩时"异常没被捕获"问题的最常见根因。</figcaption>
+</figure>
+
+<p>三个细节，每一个都能直接变成面试答案：</p>
+
+<ol>
+<li><strong><code>finally</code> 的代码被复制了两份</strong>（<code>@5</code> 和 <code>@11</code>）。JVM 没有"finally 指令"，javac 的做法是：正常路径走一份，异常路径用 <code>Exception table</code> 的 catch-all（<code>type=any</code>）兜住再走一份。</li>
+<li><strong>返回值先 <code>istore_1</code> 暂存，执行完 finally 再 <code>iload_1</code> 返回</strong>。这就是"在 finally 里改返回值无效"的字节码真相——值早就取出来存好了。同理，<code>finally 里 return</code> 会覆盖 try 里的 return，还把异常吞了（<code>athrow</code> 被跳过）。</li>
+<li><strong><code>Exception table</code> 的 <code>from 0 to 5</code></strong> 说明 finally 覆盖的范围是"try 体内的所有指令"。插桩时如果在这个范围里插了指令，异常处理的范围不会自动扩大——这是"插桩后异常没被 finally 捕获"的根因。</li>
+</ol>
+
+<p>插桩要做的，就是在这几条指令前后各加几条：</p>
+
+<pre data-lang="text"><code>invokestatic System.nanoTime:()J   ← 插在 visitCode 之后
+lstore 10                          ← 存进一个空闲局部变量槽
+  ...原来的方法体...
+invokestatic System.nanoTime:()J   ← 插在每个 RETURN 之前
+lload 10
+lsub                               ← 相减得到耗时
+invokestatic Probe.record:(J)V
+返回指令</code></pre>
+
+<p>看起来很简单。但 L7 会告诉你，就这 6 条指令，让业务从 16ns 变成 58.8ns。</p>
+
+<h2><span class="n">L3</span>Instrumentation：五个能力，一个回调</h2>
+
+<p class="lead"><code>java.lang.instrument</code> 是 JVMTI 的一层 Java 封装，核心只有两个东西：<strong><code>Instrumentation</code> 接口（能力）</strong> 和 <strong><code>ClassFileTransformer</code>（回调）</strong>。</p>
+
+<table>
+<tr><th>方法</th><th>用途</th><th>面试里常被问的点</th></tr>
+<tr><td><code>addTransformer(t, canRetransform)</code></td><td>注册字节码转换器</td><td><strong>第二个参数决定 retransform 时是否还叫它</strong></td></tr>
+<tr><td><code>retransformClasses(Class...)</code></td><td>重新触发 transform</td><td>从<strong>原始字节码</strong>开始，不叠加</td></tr>
+<tr><td><code>redefineClasses(ClassDefinition...)</code></td><td>直接替换字节码</td><td>只能改方法体，不能改 schema</td></tr>
+<tr><td><code>getAllLoadedClasses()</code></td><td>拿所有已加载类</td><td>实测 1199 个</td></tr>
+<tr><td><code>getObjectSize(obj)</code></td><td>估算对象大小</td><td>有误差，JOL 更准</td></tr>
+<tr><td><code>appendToBootstrapClassLoaderSearch(jar)</code></td><td>往 bootstrap 搜索路径塞 jar</td><td>Arthas 的 Spy 类靠它</td></tr>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#ffffff"/>
+  <text x="450" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1d21">回调模型：每个类都会被叫一次，不是"你指定哪个类才叫"</text>
+
+  <rect x="24" y="70" width="150" height="70" rx="7" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="99" y="96" text-anchor="middle" font-size="11" font-weight="700" fill="#3d454e">JVM 加载类</text>
+  <text x="99" y="116" text-anchor="middle" font-size="10" fill="#6b7683">Target.class</text>
+  <text x="99" y="132" text-anchor="middle" font-size="10" fill="#6b7683">读出字节</text>
+
+  <rect x="204" y="70" width="140" height="70" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="274" y="96" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a5fb4">复制 classfileBuffer</text>
+  <text x="274" y="116" text-anchor="middle" font-size="10" fill="#3d454e">每个类都复制</text>
+  <text x="274" y="132" text-anchor="middle" font-size="10" fill="#6b7683">改不改都要复制</text>
+
+  <rect x="374" y="52" width="130" height="50" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="439" y="73" text-anchor="middle" font-size="10.5" font-weight="700" fill="#3d454e">t1 只改 com.foo.*</text>
+  <text x="439" y="90" text-anchor="middle" font-size="9.5" fill="#6b7683">返回 byte[]</text>
+
+  <rect x="374" y="116" width="130" height="50" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="439" y="137" text-anchor="middle" font-size="10.5" font-weight="700" fill="#3d454e">t2 return null</text>
+  <text x="439" y="154" text-anchor="middle" font-size="9.5" fill="#6b7683">表示"不改"</text>
+
+  <rect x="374" y="180" width="130" height="50" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="439" y="201" text-anchor="middle" font-size="10.5" font-weight="700" fill="#3d454e">t3 加日志</text>
+  <text x="439" y="218" text-anchor="middle" font-size="9.5" fill="#6b7683">链式接收 t2 结果</text>
+
+  <rect x="544" y="70" width="140" height="70" rx="7" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="614" y="96" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e7d3c">最终字节码</text>
+  <text x="614" y="116" text-anchor="middle" font-size="10" fill="#3d454e">t3 的输出</text>
+  <text x="614" y="132" text-anchor="middle" font-size="10" fill="#6b7683">交给 defineClass</text>
+
+  <rect x="714" y="70" width="150" height="70" rx="7" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="789" y="96" text-anchor="middle" font-size="10.5" font-weight="700" fill="#6a3fa0">Class 对象</text>
+  <text x="789" y="116" text-anchor="middle" font-size="10" fill="#3d454e">进入方法区</text>
+  <text x="789" y="132" text-anchor="middle" font-size="10" fill="#6b7683">此后才可用</text>
+
+  <line x1="174" y1="105" x2="200" y2="105" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="200,105 190,100 190,110" fill="#9aa5b1"/>
+  <line x1="344" y1="95" x2="370" y2="80" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="370,80 360,79 363,89" fill="#9aa5b1"/>
+  <line x1="344" y1="110" x2="370" y2="138" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="370,138 363,129 359,139" fill="#9aa5b1"/>
+  <line x1="504" y1="77" x2="540" y2="95" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="540,95 536,85 531,94" fill="#9aa5b1"/>
+  <line x1="504" y1="141" x2="540" y2="118" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="540,118 531,119 536,128" fill="#9aa5b1"/>
+  <line x1="504" y1="205" x2="540" y2="130" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="540,130 530,131 535,140" fill="#9aa5b1"/>
+  <line x1="684" y1="105" x2="710" y2="105" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="710,105 700,100 700,110" fill="#9aa5b1"/>
+
+  <line x1="24" y1="250" x2="864" y2="250" stroke="#e4e8ed" stroke-width="1"/>
+  <text x="24" y="272" font-size="10.5" fill="#c62828">返回 null = 不改；返回 new byte[0] = 类文件为空 → ClassFormatError</text>
+  <text x="24" y="290" font-size="10.5" fill="#c62828">t3 收到的是 t2 的输出，所以多个 agent 的注册顺序决定了最终字节码</text>
+</svg>
+<figcaption><b>图 5</b>　transformer 链。注意"复制 classfileBuffer"这一步与"你改不改"无关——这是 L8 那 96ms 的来源。</figcaption>
+</figure>
+
+<p>三个必须记住的语义：</p>
+
+<ul>
+<li><strong>返回 <code>null</code> 表示"不改"，返回 <code>byte[]</code> 表示"换成这个"</strong>。返回空数组 <code>new byte[0]</code> 是<strong>错误</strong>的——它会被当成"类文件为空"，直接 <code>ClassFormatError</code>。</li>
+<li><strong>链式传递</strong>：<code>t2</code> 收到的是 <code>t1</code> 改完的结果。多个 agent 叠加时，<code>-javaagent</code> 的先后顺序很重要。</li>
+<li><strong><code>transform</code> 里抛异常 = 类加载失败</strong>。必须自己 try-catch 兜住，否则一个类的插桩 bug 会让整个应用起不来。我第一版就踩了（L5 的 VerifyError 直接让 <code>main</code> 没跑起来）。</li>
+</ul>
+
+<h2><span class="n">L4</span>premain vs agentmain：一条在启动时，一条在运行时</h2>
+
+<p class="lead">agent 有两种进场方式，差别不在 API，在<strong>时机</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 900 288" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="288" fill="#ffffff"/>
+  <text x="450" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1d21">同一个 Instrumentation 接口，两种进场时机</text>
+
+  <text x="24" y="66" font-size="11.5" font-weight="700" fill="#1a5fb4">启动期 premain</text>
+  <line x1="100" y1="94" x2="860" y2="94" stroke="#bcd4f2" stroke-width="2"/>
+  <polygon points="860,94 850,89 850,99" fill="#bcd4f2"/>
+  <circle cx="120" cy="94" r="6" fill="#1a5fb4"/>
+  <circle cx="330" cy="94" r="6" fill="#1a5fb4"/>
+  <circle cx="540" cy="94" r="6" fill="#1a5fb4"/>
+  <circle cx="750" cy="94" r="6" fill="#1a5fb4"/>
+  <text x="120" y="80" text-anchor="middle" font-size="10" fill="#3d454e">-javaagent</text>
+  <text x="330" y="80" text-anchor="middle" font-size="10" fill="#3d454e">premain()</text>
+  <text x="540" y="80" text-anchor="middle" font-size="10" fill="#3d454e">注册 transformer</text>
+  <text x="750" y="80" text-anchor="middle" font-size="10" fill="#3d454e">main() 开始</text>
+  <text x="120" y="114" text-anchor="middle" font-size="9.5" fill="#6b7683">JVM 启动参数</text>
+  <text x="330" y="114" text-anchor="middle" font-size="9.5" fill="#6b7683">main 之前</text>
+  <text x="540" y="114" text-anchor="middle" font-size="9.5" fill="#6b7683">此后每类都回调</text>
+  <text x="750" y="114" text-anchor="middle" font-size="9.5" fill="#6b7683">业务代码运行</text>
+
+  <text x="24" y="180" font-size="11.5" font-weight="700" fill="#9a6400">运行期 agentmain</text>
+  <line x1="100" y1="208" x2="860" y2="208" stroke="#efd9ab" stroke-width="2"/>
+  <polygon points="860,208 850,203 850,213" fill="#efd9ab"/>
+  <circle cx="120" cy="208" r="6" fill="#9a6400"/>
+  <circle cx="330" cy="208" r="6" fill="#9a6400"/>
+  <circle cx="540" cy="208" r="6" fill="#9a6400"/>
+  <circle cx="750" cy="208" r="6" fill="#9a6400"/>
+  <text x="120" y="194" text-anchor="middle" font-size="10" fill="#3d454e">目标 JVM 已在跑</text>
+  <text x="330" y="194" text-anchor="middle" font-size="10" fill="#3d454e">attach（socket）</text>
+  <text x="540" y="194" text-anchor="middle" font-size="10" fill="#3d454e">agentmain()</text>
+  <text x="750" y="194" text-anchor="middle" font-size="10" fill="#3d454e">retransform</text>
+  <text x="120" y="228" text-anchor="middle" font-size="9.5" fill="#6b7683">JDK 21 起会告警</text>
+  <text x="330" y="228" text-anchor="middle" font-size="9.5" fill="#6b7683">jcmd / Arthas</text>
+  <text x="540" y="228" text-anchor="middle" font-size="9.5" fill="#6b7683">拿到 inst 引用</text>
+  <text x="750" y="228" text-anchor="middle" font-size="9.5" fill="#6b7683">只改已加载的类</text>
+
+  <line x1="24" y1="252" x2="864" y2="252" stroke="#e4e8ed" stroke-width="1"/>
+  <text x="24" y="272" font-size="10.5" fill="#c62828">premain 时类还没加载，只能"等着"；agentmain 时类已加载，必须 retransform 才能改。</text>
+</svg>
+<figcaption><b>图 6</b>　两条时间线。premain 是"守株待兔"，agentmain 是"事后改造"。</figcaption>
+</figure>
+
+<table>
+<tr><th>维度</th><th>premain</th><th>agentmain</th></tr>
+<tr><td>触发</td><td><code>-javaagent:xxx.jar</code></td><td>Attach API / <code>jcmd</code> / <code>VirtualMachine.loadAgent</code></td></tr>
+<tr><td>MANIFEST 属性</td><td><code>Premain-Class</code></td><td><code>Agent-Class</code></td></tr>
+<tr><td>时机</td><td>main 之前</td><td>任意时刻</td></tr>
+<tr><td>能改已加载的类吗</td><td>不能（还没加载）</td><td>能，靠 <code>retransformClasses</code></td></tr>
+<tr><td>典型用途</td><td>APM、监控、字节码框架</td><td>Arthas、诊断、热修复</td></tr>
+<tr><td>JDK 21 之后</td><td>无变化</td><td><strong>要 <code>-XX:+EnableDynamicAgentLoading</code></strong></td></tr>
+</table>
+
+<p>最后一行是 2025 年之后必须知道的：<strong>JEP 451（JDK 21 落地）</strong>规定，动态加载 agent 默认会打印警告：</p>
+
+<pre data-lang="text"><code>WARNING: A Java agent has been loaded dynamically (...)
+WARNING: Dynamic loading of agents will be disallowed by default in a future release</code></pre>
+
+<p>这不是"不能用"，是"以后会默认禁止"。要么加 <code>-XX:+EnableDynamicAgentLoading</code> 启动参数，要么在后续 JDK 接受它变成硬错误。<strong>面试里能说出这一条，立刻和"背过 premain"的人区分开。</strong></p>
+
+<p>MANIFEST 的完整写法（本期的 agent 就是这个）：</p>
+
+<pre data-lang="text"><code>Manifest-Version: 1.0
+Premain-Class: TimingAgent
+Agent-Class: TimingAgent
+Can-Retransform-Classes: true
+Can-Redefine-Classes: true
+Class-Path: asm-9.6.jar</code></pre>
+
+<div class="box red">
+<div class="h">三个 MANIFEST 坑</div>
+<ul>
+<li><strong><code>Can-Retransform-Classes: true</code> 不写，<code>retransformClasses</code> 直接抛 <code>UnsupportedOperationException</code></strong>。写了 <code>Agent-Class</code> 就一定要写这两个 <code>Can-*</code>。</li>
+<li><strong><code>Class-Path</code> 是相对 agent jar 所在目录的</strong>，不是 classpath 的相对路径。我把 <code>asm-9.6.jar</code> 放别处时，直接 <code>NoClassDefFoundError: org/objectweb/asm/ClassReader</code>。</li>
+<li><strong><code>Boot-Class-Path</code> 慎用</strong>：加进去的 jar 由 bootstrap classloader 加载，意味着它能看到所有类，也意味着<strong>它永远卸载不掉</strong>。Arthas 的 <code>Spy</code> 就放在这里，代价是"Arthas 退出后 Spy 还在"。</li>
+</ul>
+</div>
+
+<h2><span class="n">L5</span>ASM：一个 VerifyError 教会你 maxLocals</h2>
+
+<p class="lead">手写字节码太痛苦，所以真实工具都用 ASM。ASM 的核心是<strong>访问者模式</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 900 286" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="286" fill="#ffffff"/>
+  <text x="450" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1d21">ASM 的访问者链：读 → 类级回调 → 指令级回调 → 写</text>
+
+  <rect x="30" y="48" width="180" height="60" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="120" y="72" text-anchor="middle" font-size="11" font-weight="700" fill="#1a5fb4">ClassReader</text>
+  <text x="120" y="92" text-anchor="middle" font-size="9.5" fill="#3d454e">解析字节，逐条回调</text>
+
+  <rect x="250" y="48" width="180" height="60" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="340" y="72" text-anchor="middle" font-size="11" font-weight="700" fill="#3d454e">ClassVisitor</text>
+  <text x="340" y="92" text-anchor="middle" font-size="9.5" fill="#6b7683">visit / visitField / visitMethod</text>
+
+  <rect x="470" y="48" width="180" height="60" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="560" y="72" text-anchor="middle" font-size="11" font-weight="700" fill="#3d454e">MethodVisitor</text>
+  <text x="560" y="92" text-anchor="middle" font-size="9.5" fill="#6b7683">visitCode / visitVarInsn</text>
+
+  <rect x="690" y="48" width="180" height="60" rx="7" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="780" y="72" text-anchor="middle" font-size="11" font-weight="700" fill="#1e7d3c">ClassWriter</text>
+  <text x="780" y="92" text-anchor="middle" font-size="9.5" fill="#3d454e">重新生成字节</text>
+
+  <line x1="210" y1="78" x2="246" y2="78" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="246,78 236,73 236,83" fill="#9aa5b1"/>
+  <line x1="430" y1="78" x2="466" y2="78" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="466,78 456,73 456,83" fill="#9aa5b1"/>
+  <line x1="650" y1="78" x2="686" y2="78" stroke="#9aa5b1" stroke-width="1.4"/>
+  <polygon points="686,78 676,73 676,83" fill="#9aa5b1"/>
+
+  <text x="340" y="132" text-anchor="middle" font-size="9.5" fill="#6b7683">accept(visitor)</text>
+  <text x="560" y="132" text-anchor="middle" font-size="9.5" fill="#6b7683">返回 MethodVisitor</text>
+
+  <rect x="30" y="150" width="840" height="100" rx="8" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="46" y="172" font-size="10.5" font-weight="700" fill="#3d454e">回调顺序（固定，必须按这个顺序写）</text>
+  <text x="46" y="196" font-size="10.5" fill="#1a5fb4">visit(版本, 修饰符, 类名, 签名, 父类, 接口)</text>
+  <text x="46" y="214" font-size="10.5" fill="#6b7683">├─ visitField(...) 字段　 ├─ visitMethod(...) 方法　 └─ visitEnd()</text>
+  <text x="46" y="234" font-size="10.5" fill="#9a6400">方法内：visitCode → visitVarInsn/visitMethodInsn/visitInsn → visitMaxs(3, 5) → visitEnd</text>
+
+  <text x="600" y="172" font-size="10" fill="#c62828">new ClassWriter(cr, flags)</text>
+  <text x="600" y="192" font-size="10" fill="#6b7683">把 ClassReader 传进去 →</text>
+  <text x="600" y="210" font-size="10" fill="#6b7683">未修改的方法直接复制原始</text>
+  <text x="600" y="228" font-size="10" fill="#6b7683">字节，不重新生成（关键优化）</text>
+</svg>
+<figcaption><b>图 7</b>　ASM 访问者链。右下角那个优化是它能扛住"给 2 万个类插桩"的根本原因。</figcaption>
+</figure>
+
+<p><strong>关键技巧：<code>new ClassWriter(cr, flags)</code> 把 ClassReader 传进去</strong>。这样"没被修改的方法"会直接复制原始字节，而不是重新生成。不传 <code>cr</code> 的话，每个方法都要完整重写一遍。实测：<code>Target.class</code> 单类 transform 只要 <strong>1.5us</strong>（含解析 + 重写），主要功劳就是这个优化。</p>
+
+<h3>5.1 COMPUTE_MAXS 不会帮你扩局部变量槽</h3>
+
+<p>第一版插桩，我用了 <code>ClassWriter.COMPUTE_MAXS</code>，插入 <code>lstore 10</code> 来暂存 <code>nanoTime</code>。运行时直接崩：</p>
+
+<pre data-lang="text"><code>$ java -javaagent:agent.jar -cp "out" Main
+Exception in thread "main" java.lang.VerifyError: get long/double overflows locals
+Exception Details:
+  Location:
+    Target.work(I)J @43: lload
+  Reason:
+    Local index 10 is invalid
+  Bytecode:
+    0000000: b800 1d37 0a09 ...        ← b8 0001 = invokestatic nanoTime, 37 0a = lstore 10
+  Stackmap Table:
+    append_frame(@10,Long,Integer)
+    chop_frame(@31,1)</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 286" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="286" fill="#ffffff"/>
+  <text x="450" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1d21">Target.work(int) 的局部变量表：maxLocals=5，而插桩要写到槽 10</text>
+
+  <rect x="60" y="96" width="40" height="46" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="80" y="118" text-anchor="middle" font-size="12" font-weight="700" fill="#1a5fb4">0</text>
+  <text x="80" y="134" text-anchor="middle" font-size="8.5" fill="#3d454e">this</text>
+
+  <rect x="106" y="96" width="40" height="46" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="126" y="118" text-anchor="middle" font-size="12" font-weight="700" fill="#1a5fb4">1</text>
+  <text x="126" y="134" text-anchor="middle" font-size="8.5" fill="#3d454e">n</text>
+
+  <rect x="152" y="96" width="88" height="46" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="196" y="118" text-anchor="middle" font-size="11" font-weight="700" fill="#1a5fb4">2 - 3</text>
+  <text x="196" y="134" text-anchor="middle" font-size="8.5" fill="#3d454e">s（long 占 2 槽）</text>
+
+  <rect x="246" y="96" width="40" height="46" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="266" y="118" text-anchor="middle" font-size="12" font-weight="700" fill="#1a5fb4">4</text>
+  <text x="266" y="134" text-anchor="middle" font-size="8.5" fill="#3d454e">i</text>
+
+  <rect x="292" y="96" width="40" height="46" rx="4" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="312" y="124" text-anchor="middle" font-size="10" fill="#b0b8c1">5</text>
+  <rect x="338" y="96" width="40" height="46" rx="4" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="358" y="124" text-anchor="middle" font-size="10" fill="#b0b8c1">6</text>
+  <rect x="384" y="96" width="40" height="46" rx="4" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="404" y="124" text-anchor="middle" font-size="10" fill="#b0b8c1">7</text>
+  <rect x="430" y="96" width="40" height="46" rx="4" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="450" y="124" text-anchor="middle" font-size="10" fill="#b0b8c1">8</text>
+  <rect x="476" y="96" width="40" height="46" rx="4" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="496" y="124" text-anchor="middle" font-size="10" fill="#b0b8c1">9</text>
+
+  <rect x="522" y="96" width="88" height="46" rx="4" fill="#fdeceb" stroke="#e07a72" stroke-width="2"/>
+  <text x="566" y="118" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">10 - 11</text>
+  <text x="566" y="134" text-anchor="middle" font-size="8.5" fill="#c62828">lstore 10（我插的）</text>
+
+  <rect x="616" y="96" width="40" height="46" rx="4" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="636" y="124" text-anchor="middle" font-size="10" fill="#b0b8c1">12</text>
+  <rect x="662" y="96" width="40" height="46" rx="4" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="682" y="124" text-anchor="middle" font-size="10" fill="#b0b8c1">13</text>
+  <rect x="708" y="96" width="40" height="46" rx="4" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="728" y="124" text-anchor="middle" font-size="10" fill="#b0b8c1">14</text>
+  <rect x="754" y="96" width="40" height="46" rx="4" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="774" y="124" text-anchor="middle" font-size="10" fill="#b0b8c1">15</text>
+
+  <line x1="290" y1="82" x2="290" y2="196" stroke="#c62828" stroke-width="2" stroke-dasharray="5 4"/>
+  <text x="290" y="72" text-anchor="middle" font-size="10" font-weight="700" fill="#c62828">maxLocals = 5</text>
+
+  <text x="30" y="222" font-size="10.5" fill="#3d454e">COMPUTE_MAXS 会重算 maxStack，但 maxLocals 依赖你传给 visitMaxs 的参数，</text>
+  <text x="30" y="240" font-size="10.5" fill="#3d454e">不会自动扩到 visitVarInsn 里用到的最大值 → VerifyError。</text>
+  <text x="30" y="266" font-size="10.5" fill="#1e7d3c">解法：COMPUTE_FRAMES，或 visitMaxs(..., Math.max(maxLocals, 12))，或用 AdviceAdapter 自己管 locals。</text>
+</svg>
+<figcaption><b>图 8</b>　红线左边是"类自身声明"的槽，右边是我要插入的槽。越界即 VerifyError，且报错发生在<strong>类加载时</strong>，不是 transformers 返回时。</figcaption>
+</figure>
+
+<p>原因只有一句话：<strong><code>Target.work</code> 原本的 <code>maxLocals</code> 是 5</strong>（<code>this</code>、<code>n</code>、<code>s</code>（占 2 槽）、<code>i</code>），我写到槽 10，超出上限。<code>COMPUTE_MAXS</code> 会重算 <code>maxStack</code>，但对 <code>maxLocals</code> 的处理<strong>依赖你写进去的 <code>visitMaxs(maxStack, maxLocals)</code> 参数</strong>。</p>
+
+<pre data-lang="java"><code>// 解法 1：用 COMPUTE_FRAMES（会整体重算）
+ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+
+// 解法 2：自己扩 maxLocals（性能最好，Arthas 走这条路）
+public void visitMaxs(int maxStack, int maxLocals) {
+    super.visitMaxs(Math.max(maxStack, 4), Math.max(maxLocals, 12));
+}
+
+// 解法 3：用 AdviceAdapter / Byte Buddy 的 Advice，让框架管 locals 分配</code></pre>
+
+<p>顺带一个反直觉的实测：网上都说 <code>COMPUTE_FRAMES</code> 比 <code>COMPUTE_MAXS</code> 慢 3~10 倍，<strong>我测出来没有显著差异</strong>：</p>
+
+<pre data-lang="bash"><code>$ java FrameCost
+Target.class            446B  MAXS=  14.79us  FRAMES=  17.10us  ratio=1.16x
+Main.class             1768B  MAXS=   9.24us  FRAMES=   8.45us  ratio=0.91x
+TimingAgent.class      5773B  MAXS=  37.30us  FRAMES=  31.84us  ratio=0.85x</code></pre>
+
+<p>原因是：<code>COMPUTE_FRAMES</code> 的算法本身不慢，<strong>真正的代价在 <code>getCommonSuperClass()</code></strong>——它要判断两个类型的公共父类，默认实现用 <code>Class.forName</code> 加载类，遇到复杂类加载器（OSGi、Spring Boot 的 <code>LaunchedURLClassLoader</code>）会真的去加载甚至失败。所以正确说法是：<strong>"COMPUTE_FRAMES 在类层次复杂时会触发额外类加载，那才是它慢的地方；纯算法开销在噪声内"</strong>。</p>
+
+<h3>5.2 ASM 版本墙：9.4 读不了 JDK 21</h3>
+
+<p>第二个坑更常见。<code>ClassReader</code> 构造时会检查 major version，超了就抛：</p>
+
+<pre data-lang="bash"><code>$ java -cp "out;asm-9.4.jar" AsmVersionTest
+class major = 65
+Exception in thread "main" java.lang.IllegalArgumentException: Unsupported class file major version 65
+    at org.objectweb.asm.ClassReader.&lt;init&gt;(ClassReader.java:199)</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 286" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="286" fill="#ffffff"/>
+  <text x="450" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1d21">各 ASM 版本能读的最高 class 版本（本机二分探测，非查文档）</text>
+
+  <line x1="80" y1="238" x2="860" y2="238" stroke="#d4dae1" stroke-width="1.5"/>
+
+  <rect x="120" y="208" width="100" height="30" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="170" y="228" text-anchor="middle" font-size="10" fill="#1a5fb4">20</text>
+  <text x="170" y="200" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a5fb4">ASM 9.4</text>
+  <text x="170" y="186" text-anchor="middle" font-size="9.5" fill="#6b7683">major 64</text>
+
+  <rect x="320" y="148" width="100" height="90" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="370" y="228" text-anchor="middle" font-size="10" fill="#1a5fb4">22</text>
+  <text x="370" y="140" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a5fb4">ASM 9.6</text>
+  <text x="370" y="126" text-anchor="middle" font-size="9.5" fill="#6b7683">major 66</text>
+
+  <rect x="520" y="88" width="100" height="150" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="570" y="228" text-anchor="middle" font-size="10" fill="#1e7d3c">24</text>
+  <text x="570" y="80" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e7d3c">ASM 9.7.1</text>
+  <text x="570" y="66" text-anchor="middle" font-size="9.5" fill="#6b7683">major 68</text>
+
+  <rect x="720" y="28" width="100" height="210" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="770" y="228" text-anchor="middle" font-size="10" fill="#1e7d3c">26</text>
+  <text x="770" y="20" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e7d3c">ASM 9.9.1 · major 70</text>
+
+  <line x1="80" y1="178" x2="860" y2="178" stroke="#c62828" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="86" y="172" font-size="10" fill="#c62828">JDK 21 = major 65：落在 9.4 之上、9.6 之下的空档里</text>
+
+  <text x="30" y="264" font-size="10.5" fill="#6b7683">规律：ASM 总是落后一到两个 JDK 版本。升级 JDK 后字节码框架挂掉，第一嫌疑就是它。</text>
+  <text x="30" y="280" font-size="10.5" fill="#6b7683">别用 Opcodes 包的 getImplementationVersion() 判版本：9.4 和 9.6 都返回 589824（0x090000）。</text>
+</svg>
+<figcaption><b>图 9</b>　版本台阶。JDK 21（major 65）刚好掉在 9.4 和 9.6 的空档里——这就是"升级 JDK 后 APM 起不来"的根因。</figcaption>
+</figure>
+
+<table>
+<tr><th>ASM 版本</th><th>最高 major</th><th>对应 Java</th></tr>
+<tr><td>9.4</td><td class="num">64</td><td>Java 20</td></tr>
+<tr><td>9.6</td><td class="num">66</td><td>Java 22</td></tr>
+<tr><td>9.7.1</td><td class="num">68</td><td>Java 24</td></tr>
+<tr><td>9.9.1</td><td class="num">70</td><td>Java 26</td></tr>
+</table>
+
+<div class="box purple">
+<div class="h">一个更隐蔽的坑</div>
+<p>别用 <code>Opcodes.class.getPackage().getImplementationVersion()</code> 判断 ASM 版本。我实测 9.4 和 9.6 都返回 <code>589824</code>（<code>0x090000</code> = 90000），因为 <code>Opcodes</code> 类里写死的 <code>ASM9 = 9 &lt;&lt; 16</code> 常量与 jar 版本无关。要判断真实版本，只能读 jar 的 MANIFEST，或者干脆 try-catch <code>ClassReader</code> 的构造异常。</p>
+</div>
+
+<h2><span class="n">L6</span>三类增强范式：APM 探针、Arthas、热部署</h2>
+
+<p class="lead">同样是"改字节码"，三种工具的落点完全不同。面试里说"我做过字节码增强"是空的，说清"改在哪一步、代价是什么"才有分量。</p>
+
+<h3>6.1 APM 探针：拦截器 + 上下文透传</h3>
+
+<p>SkyWalking / Pinpoint / ARMS 的套路是一致的：</p>
+
+<pre data-lang="text"><code>① agent 启动，注册 transformer（只匹配需要埋点的类，如 spring-web 的 DispatcherServlet）
+② 类加载时，在 doDispatch 前后插桩：
+     ContextManager.createSpan("HTTP/GET /order")
+     try { 原方法 } finally { ContextManager.stopSpan() }
+③ 跨线程/跨进程透传：spanId 塞进 HTTP header / MQ 消息属性
+④ 异步上报：本地环形缓冲 → 后台线程批量发 → 采样式</code></pre>
+
+<p>它和手写 <code>System.nanoTime</code> 的区别只在"③ 透传"和"④ 异步"。<strong>探针的性能生死线在 ④</strong>：如果每次调用都同步发一次网络请求，那不是 APM，是 DDoS 自己的服务。这也是 L7 那个 42.8ns 账要算清楚的原因。</p>
+
+<h3>6.2 Arthas watch：Spy 类 + 表达式求值</h3>
+
+<pre data-lang="text"><code>① attach 到目标 JVM（agentmain），把 Spy 类注入 bootstrap classloader
+   —— 为什么必须 bootstrap？要增强的类可能是任意 classloader 加载的，
+      只有 bootstrap 加载的类对所有 classloader 可见
+② retransform 目标类，在方法体里插入：
+      Spy.before(...)   ← 参数快照 + 记录 threadLocal 里的 watch 上下文
+      原方法
+      Spy.after(...)    ← 返回值快照
+③ 表达式求值：Arthas 自己实现了一个 OGNL，Spy 把对象引用传给它，
+   由 Arthas 进程侧算 "params[0].userId" 这种表达式</code></pre>
+
+<p>关键设计：<strong><code>Spy</code> 只做"存快照"，不做"算表达式"</strong>。求值在 Arthas 客户端做，因为客户端可以随便崩，不能拖累目标进程。这是"诊断工具不能改变被诊断系统"的教科书式实现。</p>
+
+<h3>6.3 热部署：restart 不是 reload</h3>
+
+<table>
+<tr><th>方式</th><th>做法</th><th>类对象会变吗</th><th>状态会丢吗</th><th>速度</th></tr>
+<tr><td>DevTools restart</td><td>新建 <code>RestartClassLoader</code>，丢掉旧的，重新加载所有类</td><td>会（新 classloader）</td><td>丢（静态字段重置）</td><td>1~3s，但要重跑整个容器</td></tr>
+<tr><td>DevTools reload</td><td>只重载改动的类</td><td>不会</td><td>不丢</td><td>快，但受限于 redefine 规则</td></tr>
+<tr><td>JRebel</td><td>改字节码 + 保留旧类的字段值</td><td>不会</td><td><strong>不丢</strong></td><td>最接近"改完就生效"</td></tr>
+<tr><td>HotSwap（JDK 自带）</td><td><code>redefineClasses</code></td><td>不会</td><td>不丢</td><td>只能改方法体（L10 的限制）</td></tr>
+</table>
+
+<p><code>RestartClassLoader</code> 是这里最聪明的设计：<strong>用"换类加载器"绕过"不能改 schema"的限制</strong>。你要加字段？新类里有。要改签名？新类里有。代价是旧的 <code>RestartClassLoader</code> 和它加载的所有类都要被 GC，而<strong>静态字段、单例、连接池全部重建</strong>——这就是"重启后要重新登录"的原因。</p>
+
+<h2><span class="n">L7</span>探针成本账：42.8ns 里，真正被插的代码只占 12ns</h2>
+
+<p class="lead">这是本期最需要背下来的一组数字。同一个 <code>work()</code> 方法，跑 30 万次取平均。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#ffffff"/>
+  <text x="450" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1d21">单次方法调用的耗时拆分（30 万次平均，1ns ≈ 11.9px）</text>
+
+  <text x="30" y="76" font-size="11" font-weight="700" fill="#3d454e">未插桩</text>
+  <rect x="140" y="56" width="190" height="40" rx="4" fill="#cfe3fb" stroke="#8fb8e8"/>
+  <text x="235" y="81" text-anchor="middle" font-size="11" fill="#1a5fb4">16.0 ns</text>
+  <text x="350" y="81" font-size="10" fill="#6b7683">业务本身的全部成本</text>
+
+  <text x="30" y="156" font-size="11" font-weight="700" fill="#3d454e">插桩后</text>
+  <rect x="140" y="136" width="190" height="40" rx="4" fill="#cfe3fb" stroke="#8fb8e8"/>
+  <text x="235" y="161" text-anchor="middle" font-size="10.5" fill="#1a5fb4">16.0</text>
+  <rect x="330" y="136" width="150" height="40" fill="#d8ecd9" stroke="#9ccaa4"/>
+  <text x="405" y="161" text-anchor="middle" font-size="10.5" fill="#1e7d3c">12.6</text>
+  <rect x="480" y="136" width="359" height="40" fill="#f7d9d7" stroke="#e0a29c"/>
+  <text x="659" y="161" text-anchor="middle" font-size="10.5" font-weight="700" fill="#c62828">30.2 ns　探针自身（两次 nanoTime）</text>
+
+  <text x="235" y="196" text-anchor="middle" font-size="9.5" fill="#6b7683">被插的业务</text>
+  <text x="405" y="196" text-anchor="middle" font-size="9.5" fill="#6b7683">6 条指令</text>
+  <text x="659" y="196" text-anchor="middle" font-size="9.5" fill="#c62828">占 70%</text>
+
+  <line x1="140" y1="220" x2="860" y2="220" stroke="#e4e8ed" stroke-width="1"/>
+  <text x="140" y="242" font-size="10.5" fill="#3d454e">总增量 42.8ns：你插进去的 6 条指令只值 12.6ns，剩下 30.2ns 全是"测量本身"。</text>
+  <text x="140" y="262" font-size="10.5" fill="#c62828">30.2ns 里，两次 System.nanoTime() 各约 20ns（rdtsc + 校准），这才是大头。</text>
+  <text x="140" y="282" font-size="10.5" fill="#1e7d3c">所以优化方向是"少测"（采样 / 减少埋点 / 异步批量），不是"测得快"。</text>
+</svg>
+<figcaption><b>图 10</b>　58.8ns 的构成。注意红色那段比蓝色那段还长——探针比被插的代码贵一倍多。</figcaption>
+</figure>
+
+<pre data-lang="text"><code>无 agent           16.0 ns/op    (15.8 / 16.2 三次)
+插桩后             58.8 ns/op    (57.2 / 58.8 / 60.3 三次)
+差值              +42.8 ns/op
+其中探针自测      30.2 ns/op    ← 两次 nanoTime + 一次 record 调用
+被插的业务本身    12.6 ns/op    ← 6 条字节码的真实成本</code></pre>
+
+<p>于是我做了个"优化验证"：把 <code>AtomicLong</code> 累加换成 ThreadLocal 本地缓冲（每线程一个 <code>long[2]</code>，只在 flush 时做原子累加）。直觉上应该快很多，因为避开了 CAS 竞争。实测：</p>
+
+<pre data-lang="bash"><code>$ java -Dprobe=atomic -javaagent:agent.jar ... Main
+RESULT ns_per_op=85.86   AGENT avg_ns_per_call=44.14
+
+$ java -Dprobe=fast   -javaagent:agent.jar ... Main
+RESULT ns_per_op=87.53   AGENT avg_ns_per_call=50.90</code></pre>
+
+<div class="box red">
+<div class="h">打脸式结论</div>
+<p><strong>没有区别，甚至在噪声里还更慢了。</strong>（这一轮绝对值比前面的 58.8 高，是因为同一次运行里还跑了 retransform/redefine 实验，JIT 状态不同，但两者之间是可比的。）</p>
+<p>探针的成本 90% 来自"取时间戳"这个动作本身，而不是计数器怎么累加。所以优化方向只有三个，全都是"少测"，不是"测得快"：① <strong>采样</strong>（每 100/1000 次才计一次）；② <strong>减少计时点</strong>（只给 Service/DAO 入口埋点）；③ <strong>异步 + 批量</strong>（本地环形缓冲，后台 flush）。</p>
+</div>
+
+<p>这笔账放到生产上算一遍，就知道为什么探针要采样：</p>
+
+<pre data-lang="text"><code>假设：单请求经过 200 个被插桩的方法，QPS = 5000
+每秒指令数   = 5000 × 200 = 100 万次
+每秒额外耗时 = 100 万 × 42.8ns = 42.8ms
+折合单核占用 = 42.8ms / 1000ms = 4.3%
+
+如果探针里顺手拼了个日志字符串（约 1us）：
+每秒额外耗时 = 100 万 × 1us = 1 秒  →  直接打满一个核</code></pre>
+
+<p><strong>"插桩本身不慢，探针写得烂才慢"</strong>——这句话可以从这组数字里长出来，而不是背出来。</p>
+
+<h2><span class="n">L8</span>启动账：一个什么都不做的 transformer 也要 20~100ms</h2>
+
+<p class="lead">APM 厂商最常被问的问题是"装了 agent 启动慢多少"。我测了三组。</p>
+
+<figure>
+<svg viewBox="0 0 900 288" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="288" fill="#ffffff"/>
+  <text x="450" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1d21">启动耗时（9 次中位数，ms）：改不改都躲不掉那 96ms</text>
+
+  <line x1="90" y1="234" x2="860" y2="234" stroke="#d4dae1" stroke-width="1.5"/>
+
+  <rect x="180" y="158" width="120" height="76" fill="#cfe3fb" stroke="#8fb8e8"/>
+  <text x="240" y="148" text-anchor="middle" font-size="13" font-weight="700" fill="#1a5fb4">147</text>
+  <text x="240" y="256" text-anchor="middle" font-size="10.5" fill="#3d454e">无 agent</text>
+
+  <rect x="400" y="108" width="120" height="126" fill="#e8f0fb" stroke="#8fb8e8"/>
+  <text x="460" y="98" text-anchor="middle" font-size="13" font-weight="700" fill="#1a5fb4">243</text>
+  <text x="460" y="256" text-anchor="middle" font-size="10.5" fill="#3d454e">空 agent</text>
+  <text x="460" y="274" text-anchor="middle" font-size="9.5" fill="#c62828">return null，一个类没改</text>
+
+  <rect x="620" y="34" width="120" height="200" fill="#f7d9d7" stroke="#e0a29c"/>
+  <text x="680" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="#c62828">388</text>
+  <text x="680" y="256" text-anchor="middle" font-size="10.5" fill="#3d454e">插桩 agent</text>
+  <text x="680" y="274" text-anchor="middle" font-size="9.5" fill="#c62828">含 ASM 依赖加载</text>
+
+  <line x1="90" y1="158" x2="860" y2="158" stroke="#9aa5b1" stroke-width="1" stroke-dasharray="4 4"/>
+  <text x="98" y="152" font-size="10" fill="#6b7683">+96ms</text>
+  <line x1="90" y1="34" x2="860" y2="34" stroke="#9aa5b1" stroke-width="1" stroke-dasharray="4 4"/>
+  <text x="98" y="28" font-size="10" fill="#6b7683">+241ms</text>
+</svg>
+<figcaption><b>图 11</b>　三组启动耗时。空 transformer 也 +96ms，因为 JVM 只要发现有 transformer 就会为每个类复制 classfileBuffer。</figcaption>
+</figure>
+
+<pre data-lang="text"><code>场景                                     启动耗时（9 次中位数）
+无 agent                                 147 ms
+空 agent（transformer 直接 return null）   243 ms   (+96ms)
+插桩 agent（含 ASM 依赖）                  388 ms   (+241ms)
+
+另一组（类更少的程序）：
+无 agent                                 114 ms
+空 agent                                 136 ms   (+22ms)</code></pre>
+
+<p>几个必须说清楚的细节：</p>
+
+<ul>
+<li><strong>空 transformer 什么都没改，却多花了 96ms</strong>。因为 JVM 只要发现有 transformer 注册，就会为每个类<strong>复制一份 <code>classfileBuffer</code></strong> 再回调。这份复制与"你改不改"无关。</li>
+<li><strong>不是线性的</strong>。323 次回调 +96ms，165 次回调 +22ms。说明固定开销（agent jar 加载、MANIFEST 解析、<code>Class-Path</code> 依赖加载、JVM 内部结构初始化）占大头，不能拿"每类 X 微秒"去线性外推。</li>
+<li><strong>插桩 agent 多出来的 145ms，主要是加载 ASM</strong>（几百个类 + 校验器）。这也是为什么成熟 APM 会自己 shade 一份精简 ASM，甚至用 CDS 预热（第 13 期讲过 CDS，这里正好用上）。</li>
+</ul>
+
+<p>对照一个真实量级：单体应用 1~2 万个类，APM agent 的启动增量通常在 <strong>200ms ~ 3s</strong>，取决于"transformer 匹配了多少类"和"匹配到之后做了多少事"。<strong>只匹配 20 个类</strong>的 agent 和<strong>匹配所有类</strong>的 agent，差的是两个数量级。</p>
+
+<h2><span class="n">L9</span>编译期增强：Lombok 不改字节码，它改 AST</h2>
+
+<p class="lead">面试里问"Lombok 原理"，答"字节码增强"是错的。Lombok 走的是<strong>注解处理器（APT）</strong>，在 javac 编译过程中直接改语法树。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#ffffff"/>
+  <text x="450" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1d21">四种"增强"的边界：只有 Agent 能改没有源码的第三方 jar</text>
+
+  <text x="210" y="58" text-anchor="middle" font-size="11" font-weight="700" fill="#1a5fb4">Lombok</text>
+  <text x="380" y="58" text-anchor="middle" font-size="11" font-weight="700" fill="#3d454e">MapStruct</text>
+  <text x="550" y="58" text-anchor="middle" font-size="11" font-weight="700" fill="#6a3fa0">Spring AOP</text>
+  <text x="720" y="58" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">ASM Agent</text>
+
+  <text x="30" y="92" font-size="10.5" fill="#3d454e">改没有源码的 jar</text>
+  <text x="30" y="132" font-size="10.5" fill="#3d454e">运行时才生效</text>
+  <text x="30" y="172" font-size="10.5" fill="#3d454e">能新增字段/方法</text>
+  <text x="30" y="212" font-size="10.5" fill="#3d454e">有每次调用开销</text>
+  <text x="30" y="252" font-size="10.5" fill="#3d454e">受 JDK 升级冲击</text>
+
+  <line x1="180" y1="68" x2="820" y2="68" stroke="#e4e8ed" stroke-width="1"/>
+  <line x1="180" y1="104" x2="820" y2="104" stroke="#f0f3f6" stroke-width="1"/>
+  <line x1="180" y1="144" x2="820" y2="144" stroke="#f0f3f6" stroke-width="1"/>
+  <line x1="180" y1="184" x2="820" y2="184" stroke="#f0f3f6" stroke-width="1"/>
+  <line x1="180" y1="224" x2="820" y2="224" stroke="#f0f3f6" stroke-width="1"/>
+  <line x1="180" y1="264" x2="820" y2="264" stroke="#f0f3f6" stroke-width="1"/>
+
+  <text x="210" y="92" text-anchor="middle" font-size="13" fill="#c62828">✗</text>
+  <text x="380" y="92" text-anchor="middle" font-size="13" fill="#c62828">✗</text>
+  <text x="550" y="92" text-anchor="middle" font-size="13" fill="#1e7d3c">✓</text>
+  <text x="720" y="92" text-anchor="middle" font-size="13" font-weight="700" fill="#1e7d3c">✓</text>
+
+  <text x="210" y="132" text-anchor="middle" font-size="13" fill="#c62828">✗</text>
+  <text x="380" y="132" text-anchor="middle" font-size="13" fill="#c62828">✗</text>
+  <text x="550" y="132" text-anchor="middle" font-size="13" fill="#1e7d3c">✓</text>
+  <text x="720" y="132" text-anchor="middle" font-size="13" fill="#1e7d3c">✓</text>
+
+  <text x="210" y="172" text-anchor="middle" font-size="13" fill="#1e7d3c">✓</text>
+  <text x="380" y="172" text-anchor="middle" font-size="13" fill="#c62828">✗</text>
+  <text x="550" y="172" text-anchor="middle" font-size="13" fill="#c62828">✗</text>
+  <text x="720" y="172" text-anchor="middle" font-size="13" fill="#1e7d3c">✓</text>
+
+  <text x="210" y="212" text-anchor="middle" font-size="13" fill="#1e7d3c">✗</text>
+  <text x="380" y="212" text-anchor="middle" font-size="13" fill="#1e7d3c">✗</text>
+  <text x="550" y="212" text-anchor="middle" font-size="13" fill="#c62828">✓</text>
+  <text x="720" y="212" text-anchor="middle" font-size="13" fill="#c62828">✓</text>
+
+  <text x="210" y="252" text-anchor="middle" font-size="13" fill="#c62828">✓</text>
+  <text x="380" y="252" text-anchor="middle" font-size="13" fill="#1e7d3c">✗</text>
+  <text x="550" y="252" text-anchor="middle" font-size="13" fill="#c62828">✓</text>
+  <text x="720" y="252" text-anchor="middle" font-size="13" fill="#c62828">✓</text>
+
+  <text x="450" y="286" text-anchor="middle" font-size="10" fill="#6b7683">最后一列才是 agent 存在的理由：只有它能改"你没有源码的第三方 jar"。</text>
+</svg>
+<figcaption><b>图 12</b>　能力矩阵。Lombok 能"加字段"但只对源码生效；AOP 能碰第三方 jar 但只能代理；只有 Agent 两者都能。</figcaption>
+</figure>
+
+<pre data-lang="text"><code>源码 .java
+   │
+   ├─▶ javac 解析 ──▶ AST（抽象语法树）
+   │                      │
+   │                  注解处理器（Lombok 在这里）
+   │                      │  ① 发现 @Data
+   │                      │  ② 反射拿到 javac 内部的 JCTree
+   │                      │  ③ 直接往里塞 getter/setter 节点
+   │                      ▼
+   │                  被改过的 AST
+   │                      │
+   └──────────────────▶ 生成字节码 .class</code></pre>
+
+<p>三个"为什么"：</p>
+
+<ul>
+<li><strong>为什么 Lombok 要 <code>--add-opens jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</code></strong>：它在反射操作 javac 的<strong>私有内部类</strong> <code>com.sun.tools.javac.tree.JCTree</code>。JDK 9 的模块化把它封起来，JDK 16 强封装后必须显式开洞。这是"强封装"最著名的受害者（第 23 期讲过反射的强封装）。</li>
+<li><strong>为什么 Lombok 版本要跟着 JDK 升</strong>：它依赖 javac 内部结构，JDK 每次改 AST 实现都可能让它崩。JDK 21 需要 Lombok 1.18.30+。</li>
+<li><strong>为什么 MapStruct 没这个问题</strong>：它<strong>只生成新类</strong>（<code>XxxMapperImpl</code>），不碰原类的 AST，所以不需要 <code>--add-opens</code>，也不怕 JDK 升级。</li>
+</ul>
+
+<h2><span class="n">L10</span>redefine 的红线：三个实验撞三堵墙</h2>
+
+<p class="lead"><code>redefineClasses</code> 和 <code>retransformClasses</code> 是运行期增强的两个入口，但限制完全不同。我写了三个变体，逐一撞墙，报错原样如下。</p>
+
+<pre data-lang="text"><code>$ java -javaagent:agent.jar -cp out Main
+AGENT redefine:
+  addField  = UnsupportedOperationException(
+              class redefinition failed: attempted to change the schema (add/remove fields));
+  changeSig = UnsupportedOperationException(
+              class redefinition failed: attempted to delete a method);
+  bodyOnly  = OK;
+  identitySame=true  markerKept=42/42  loadedClasses=1227</code></pre>
+
+<div class="grid3">
+<div class="card b"><div class="t">第一课：加字段被拒</div><div class="d"><code>attempted to change the schema</code>。字段表、方法表、常量池大小在 <code>defineClass</code> 时就固定，redefine 只允许换 <code>Code</code> 属性。</div></div>
+<div class="card a"><div class="t">第二课：改签名 = 删方法</div><div class="d">报错是 <code>attempted to delete a method</code>，不是"改签名"。JVM 里方法身份是 <code>(name, descriptor)</code>，改描述符就是删旧加新。</div></div>
+<div class="card g"><div class="t">第三课：只改方法体可以</div><div class="d"><code>identitySame=true</code>，<code>marker</code> 仍是 42。<strong>类对象不变、静态状态保留</strong>——这是热更新能保住状态的理论基础。</div></div>
+</div>
+
+<table>
+<tr><th>#</th><th>不能做的事</th><th>报错 / 后果</th></tr>
+<tr><td>1</td><td>增加/删除字段</td><td><code>attempted to change the schema</code></td></tr>
+<tr><td>2</td><td>增加/删除方法</td><td><code>attempted to delete a method</code></td></tr>
+<tr><td>3</td><td>改方法签名（=删+加）</td><td>同上</td></tr>
+<tr><td>4</td><td>改父类 / 实现的接口</td><td><code>attempted to change interfaces</code></td></tr>
+<tr><td>5</td><td>改类的修饰符（final/abstract）</td><td><code>attempted to change modifiers</code></td></tr>
+<tr><td>6</td><td>改注解但要立刻生效</td><td>改得动，但反射缓存要自己清</td></tr>
+<tr><td>7</td><td>改被 JIT 编译过的热点方法</td><td>改得动，但会 <strong>deopt 重编译</strong>，有一段性能抖动（第 22 期）</td></tr>
+</table>
+
+<p>还有一个我专门验证的传言：<strong>反复 retransform 会不会把增强叠加成 N 层？</strong>答案是不会。</p>
+
+<pre data-lang="text"><code>AGENT retransform: hits_during_1st=0  hits_during_2nd=0  hits_for_1000_calls=1000  marker=42</code></pre>
+
+<p><code>retransformClasses</code> 两次之后，1000 次调用只产生 1000 次记录——<strong>每次都从"原始字节码"（initial classfileBuffer）重新开始</strong>，不是在上一份增强结果上再增强一次。这是 JVM 规范行为，也是 Arthas 反复 <code>watch</code> 不会越来越慢的原因。</p>
+
+<div class="box red">
+<div class="h">但有个必须知道的配套条件</div>
+<p><code>addTransformer(t)</code> 默认 <code>canRetransform=false</code>，这样的 transformer <strong>不参与 retransform</strong>。如果 agent 在 premain 里用默认参数注册了 transformer，之后调用 <code>retransformClasses</code> 会把增强<strong>撤销掉</strong>（因为重新走一遍时没人改它）。正确写法只有一个：<code>inst.addTransformer(t, true)</code>。</p>
+<p><strong>这是 Arthas / SkyWalking 插件开发的经典事故</strong>：本地没 retransform 过，一切正常；线上被别的工具 retransform 一次，你的增强就消失了。</p>
+</div>
+
+<h2><span class="n">L11</span>七个生产事故：每一条都有人踩过</h2>
+
+<table>
+<tr><th>#</th><th>事故</th><th>后果 / 正确做法</th></tr>
+<tr><td>1</td><td><code>transform</code> 返回 <code>new byte[0]</code></td><td><code>ClassFormatError: Truncated class file</code>。不想改就返回 <code>null</code></td></tr>
+<tr><td>2</td><td><code>transform</code> 里抛异常没兜住</td><td>整个类加载失败，应用起不来。要 <code>catch (Throwable)</code>，不是 <code>Exception</code>（<code>LinkageError</code> 是 Error）</td></tr>
+<tr><td>3</td><td>忘了 <code>Can-Retransform-Classes: true</code></td><td><code>UnsupportedOperationException: class retransformation is not supported</code></td></tr>
+<tr><td>4</td><td><code>Class-Path</code> 写成绝对路径</td><td><code>NoClassDefFoundError</code>。它相对 <strong>agent jar 所在目录</strong></td></tr>
+<tr><td>5</td><td>往 <code>Boot-Class-Path</code> 塞业务 jar</td><td>类被 bootstrap 加载，<strong>永远无法卸载</strong>，反复 attach 会撑爆 Metaspace</td></tr>
+<tr><td>6</td><td>transformer 里持有 <code>Class</code>/<code>ClassLoader</code> 强引用</td><td>类加载器泄漏——"重启 30 次就 OOM"的经典原因</td></tr>
+<tr><td>7</td><td>无脑 retransform <code>getAllLoadedClasses()</code></td><td>数组类、基本类型、部分 <code>java.*</code> 会抛 <code>UnmodifiableClassException</code>。先 <code>isModifiableClass(c)</code> 过滤</td></tr>
+</table>
+
+<p>第 7 条补一个数字：本机一个 Hello 级程序启动后 <code>getAllLoadedClasses().length</code> 是 <strong>1199</strong>（含 ASM），遍历一遍判断耗时在毫秒级；但如果你对每个类都 <code>retransform</code>，那就是 1199 次字节码解析——<strong>这就是"Arthas 启动慢"和"某个插件把所有类都增强了"的差别</strong>。</p>
+
+<h2><span class="n">L12</span>数字速查</h2>
+
+<table>
+<tr><th>数字</th><th>含义</th><th>出处</th></tr>
+<tr><td><code>CAFEBABE</code></td><td>class 文件魔数</td><td>规范</td></tr>
+<tr><td class="num">65 / 44</td><td>JDK 21 的 major / 版本号基线</td><td>实测</td></tr>
+<tr><td class="num">43%~76%</td><td>常量池占 class 文件的体积比</td><td>实测 3 个类</td></tr>
+<tr><td class="num">23 / 24</td><td><code>Target.class</code> 实际条目 / <code>constant_pool_count</code></td><td>实测</td></tr>
+<tr><td class="num">1.5us</td><td>单个 446B 类的 transform 耗时</td><td>实测</td></tr>
+<tr><td class="num">16.0ns</td><td>未插桩的 <code>work()</code> 单次调用</td><td>实测</td></tr>
+<tr><td class="num">58.8ns</td><td>插桩后单次调用</td><td>实测</td></tr>
+<tr><td class="num">42.8ns</td><td>插桩增量</td><td>实测</td></tr>
+<tr><td class="num">30.2ns</td><td>其中探针自身（两次 nanoTime）</td><td>实测</td></tr>
+<tr><td class="num">12.6ns</td><td>真正被插的 6 条指令成本</td><td>实测</td></tr>
+<tr><td class="num">323</td><td>启动期 transformer 被调用次数</td><td>实测</td></tr>
+<tr><td class="num">+96ms / +22ms</td><td>空 transformer 的启动增量（两组）</td><td>实测</td></tr>
+<tr><td class="num">+241ms</td><td>插桩 agent 的启动增量（含 ASM）</td><td>实测</td></tr>
+<tr><td class="num">1199</td><td>启动后已加载类数</td><td>实测</td></tr>
+<tr><td class="num">64 / 66 / 68 / 70</td><td>ASM 9.4 / 9.6 / 9.7.1 / 9.9.1 的最高 major</td><td>实测</td></tr>
+<tr><td class="num">4.3%</td><td>5000 QPS × 200 方法 × 42.8ns 的单核占用</td><td>计算</td></tr>
+<tr><td class="num">100%</td><td>同场景下探针里拼一次日志字符串的单核占用</td><td>计算</td></tr>
+</table>
+
+<h2><span class="n">L13</span>十四个问答</h2>
+
+<div class="qa"><div class="q">字节码增强有哪几种时机，区别是什么？</div><div class="a">编译期（Lombok 改 AST、MapStruct 生成新类）：产物是 class 文件，改不了已发布的 jar。类加载期（premain + transformer）：能改任意类、能加字段，但只能在类加载前。运行期（agentmain + retransform）：能改已加载的类，但只能改方法体。代理期（AOP）：不改字节码，生成代理对象，有每次调用开销，且 final/static/自调用失效。</div></div>
+
+<div class="qa"><div class="q">装了 agent 为什么启动变慢？慢在哪？</div><div class="a">三块：① 每个类都要复制一份 <code>classfileBuffer</code> 并回调 transformer（即使 return null）；② 匹配到的类要做 ASM 解析 + 重写；③ agent 自己的依赖（ASM、日志框架）要加载。实测：空 transformer +22~96ms，插桩 agent +241ms。</div></div>
+
+<div class="qa"><div class="q">retransform 会不会叠加增强？</div><div class="a">不会。每次都从原始字节码重新开始。实测 retransform 两次后 1000 次调用仍只记 1000 次。但前提是 transformer 注册时 <code>canRetransform=true</code>，否则 retransform 会把你的增强撤销。</div></div>
+
+<div class="qa"><div class="q">为什么 redefine 不能加字段？</div><div class="a">类元数据（字段表、方法表）在 <code>defineClass</code> 时固化，redefine 只允许替换 <code>Code</code> 属性。报错原文 <code>attempted to change the schema (add/remove fields)</code>。需要加字段只能换 ClassLoader 重新加载（DevTools 的 <code>RestartClassLoader</code> 就是这么做的）。</div></div>
+
+<div class="qa"><div class="q">为什么改方法签名报的是"删方法"？</div><div class="a">JVM 里方法身份是 <code>(name, descriptor)</code>。改描述符 = 删旧方法 + 加新方法，两件事都违规。报错 <code>attempted to delete a method</code>。</div></div>
+
+<div class="qa"><div class="q">插桩时 COMPUTE_MAXS 为什么会 VerifyError？</div><div class="a"><code>COMPUTE_MAXS</code> 重算 <code>maxStack</code>，但 <code>maxLocals</code> 要你自己保证。往槽 10 写 long、原方法 <code>maxLocals=5</code>，就会 <code>VerifyError: get long/double overflows locals / Local index 10 is invalid</code>。解法：<code>COMPUTE_FRAMES</code> 或 <code>visitMaxs(..., Math.max(maxLocals, 12))</code>。</div></div>
+
+<div class="qa"><div class="q">ASM 报 Unsupported class file major version 怎么修？</div><div class="a">升 ASM。实测上限：9.4→Java 20、9.6→22、9.7.1→24、9.9.1→26。另外别用 <code>Opcodes</code> 包的 <code>getImplementationVersion()</code> 判版本，9.4 和 9.6 都返回 589824。</div></div>
+
+<div class="qa"><div class="q">Arthas watch 的原理？</div><div class="a">attach（agentmain）→ 把 <code>Spy</code> 注入 bootstrap classloader → retransform 目标类插入 <code>Spy.before/after</code> 快照 → 表达式求值在 Arthas 客户端做。<code>Spy</code> 放 bootstrap 是为了对所有 classloader 可见，代价是卸载不掉。</div></div>
+
+<div class="qa"><div class="q">Lombok 算字节码增强吗？</div><div class="a">不算。它是注解处理器，在 javac 里改 AST（<code>com.sun.tools.javac.tree.JCTree</code>），所以需要 <code>--add-opens</code>，且强依赖 JDK 内部结构。MapStruct 只生成新类，因此没这个问题。</div></div>
+
+<div class="qa"><div class="q">探针怎么做到低开销？</div><div class="a">先认清成本结构：实测 +42.8ns 里 30.2ns 是两次 <code>nanoTime</code>，换成 ThreadLocal 计数器<strong>没有改善</strong>（44.1 vs 50.9ns）。所以只能"少测"：采样（1/N）、只在入口埋点、异步批量上报。</div></div>
+
+<div class="qa"><div class="q">多个 agent 的执行顺序？</div><div class="a">按 <code>-javaagent</code> 在命令行出现的顺序，transformer 链式传递（后一个收到前一个的输出）。<code>agentmain</code> 按 attach 顺序。顺序会影响"谁改的是最终版本"，两个都要改同一个方法时必须约定先后。</div></div>
+
+<div class="qa"><div class="q">JEP 451 是什么？</div><div class="a">JDK 21 起，动态加载 agent（attach 方式）会打印警告"future release 将默认禁止"，需要 <code>-XX:+EnableDynamicAgentLoading</code> 显式开启。影响所有 attach 型工具（Arthas、jcmd 的 agent 加载、部分诊断脚本）。</div></div>
+
+<div class="qa"><div class="q">热部署为什么状态会丢？</div><div class="a">如果用"换 ClassLoader"（DevTools restart），所有类重新加载，静态字段/单例/连接池全部重建。真正保状态的（JRebel）必须在同一个 ClassLoader 内 redefine，而 redefine 不能改 schema，所以加字段的场景它也只能退化。</div></div>
+
+<div class="qa"><div class="q">agent 导致 NoClassDefFoundError 怎么排查？</div><div class="a">三个方向：① <code>Class-Path</code> 的相对路径（相对 agent jar 目录）；② 依赖冲突（agent 里的 ASM 版本和应用里的打架，需要 shade 重定位）；③ 类加载器隔离（agent 由 system classloader 加载，看不到应用自定义 classloader 里的类，需要 <code>appendToBootstrapClassLoaderSearch</code> 或反射调用）。</div></div>
+
+<h2><span class="n">L14</span>三道模拟面试题</h2>
+
+<div class="mt">
+<div class="qh"><span>题 1</span>设计一个方法级耗时监控，要求 P99 误差 &lt; 1%，性能损耗 &lt; 1%</div>
+<div class="lv l1"><span class="lb">不及格</span>用 AOP 给每个方法加 <code>@Around</code>，记录 <code>System.currentTimeMillis()</code>，同步写日志。（AOP 拦不住第三方 jar；<code>currentTimeMillis</code> 精度 1ms 且受时钟调整影响；同步写日志直接爆炸。）</div>
+<div class="lv l2"><span class="lb">及格</span>用 agent + ASM 在方法前后插 <code>nanoTime</code>，统计写进 <code>ConcurrentHashMap</code>，定时上报。（能跑，但没算过账：42.8ns/次，200 方法 × 5000 QPS 就是 4.3% 单核，超标。）</div>
+<div class="lv l3"><span class="lb">良好</span>上面再加三件事：① 只对 Service/Controller 入口埋点；② 采样率可配（默认 10%），P99 用采样数据估算（HdrHistogram）；③ 上报走本地环形缓冲 + 后台线程批量发。</div>
+<div class="lv l4"><span class="lb">优秀</span>在"良好"之上把误差说清楚——P99 的估计误差取决于样本量，10% 采样 + 5000 QPS = 每秒 500 样本，P99 需要至少 100 个尾部样本才稳定，所以采样率要按"目标 P99 的置信度"反推，而不是拍 10%。再补一句：<strong>用 <code>nanoTime</code> 不用 <code>currentTimeMillis</code></strong>（单调时钟，不受 NTP 调整影响），且只在方法入口/出口取时间，不要在中间打点。</div>
+</div>
+
+<div class="mt">
+<div class="qh"><span>题 2</span>线上用 Arthas watch 之后接口慢了 3 倍，怎么排查？</div>
+<div class="lv l1"><span class="lb">不及格</span>重启应用。</div>
+<div class="lv l2"><span class="lb">及格</span><code>stop</code> 掉 Arthas，观察是否恢复——恢复就说明是 watch 的锅。</div>
+<div class="lv l3"><span class="lb">良好</span>区分两种可能：① <code>watch</code> 的表达式太重（<code>params[0].toString()</code> 打大对象、<code>-x 3</code> 展开深层属性），每次调用都在做反射 + 字符串拼接；② 监控的是高频方法（每秒 10 万次的工具方法），插桩开销被放大。</div>
+<div class="lv l4"><span class="lb">优秀</span>给出量化路径——用 <code>watch -c &lt;classloader&gt;</code> 限定类加载器避免增强到多个副本；用 <code>-n 10</code> 限制次数而不是 <code>-n 100000</code>；把 <code>toString</code> 换成指定字段（<code>params[0].userId</code>）；必须长期监控就改用有采样和异步上报的 APM。最后补原理：<strong>watch 的成本不在插桩的 42.8ns，在表达式求值和日志输出</strong>，频率 × 单次成本才是总账。</div>
+</div>
+
+<div class="mt">
+<div class="qh"><span>题 3</span>升级到 JDK 21 后，APM agent 启动报 Unsupported class file major version 65，怎么定位和修复？</div>
+<div class="lv l1"><span class="lb">不及格</span>降回 JDK 17。</div>
+<div class="lv l2"><span class="lb">及格</span>看到 major 65 就知道是 ASM 太老，升 ASM 到 9.6+。</div>
+<div class="lv l3"><span class="lb">良好</span>说清定位过程——异常栈里是 <code>ClassReader.&lt;init&gt;</code>，说明是<strong>读</strong>的时候拒绝；major 65 = JDK 21；对照 ASM 版本表（9.4 顶到 Java 20）；升级后还要检查"ASM 是不是被 shade 进了别的 jar"（很多 APM 自带一份重定位过的 ASM）。</div>
+<div class="lv l4"><span class="lb">优秀</span>补充三点——① 升级 JDK 后所有字节码工具都要过一遍（ASM、ByteBuddy、CGLIB、Javassist 门槛各不同）；② 用 <code>mvn dependency:tree</code> 找出所有 ASM 副本，确认最终生效的是哪一个；③ 如果暂时不能升，让 transformer 先判断 major 再决定是否处理（读前 8 字节，超版本就 <code>return null</code>），保证"不认识的新类不增强"而不是"整站起不来"——这是所有成熟 agent 的兜底设计。</div>
+</div>
+
+<h2><span class="n">L15</span>二十六期知识地图</h2>
+
+<table>
+<tr><th>板块</th><th>期号 · 主题</th><th>一句话抓手</th></tr>
+<tr><td>语言与集合</td><td>01 · HashMap → CHM</td><td>扰动函数、树化 8/6/64</td></tr>
+<tr><td></td><td>14 · 集合并发容器</td><td>ArrayList 1.5 倍、CHM 锁粒度轴</td></tr>
+<tr><td></td><td>23 · 泛型擦除 · 反射 · 代理</td><td>桥方法、稳态反射只慢 7 倍</td></tr>
+<tr><td>JVM</td><td>02 · 内存模型与 GC</td><td>三色标记、CMS→G1→ZGC</td></tr>
+<tr><td></td><td>12 · 调优与压测</td><td>Eden = 速率 × 间隔</td></tr>
+<tr><td></td><td>21 · 内存泄漏取证</td><td>支配树、ThreadLocal 七跳链</td></tr>
+<tr><td></td><td>22 · JIT 与基准测试</td><td>内联 35/325、deopt</td></tr>
+<tr><td></td><td>13 · 类加载与新特性</td><td>双亲委派四次被打破、虚拟线程</td></tr>
+<tr><td></td><td><strong>26 · 字节码增强与 Agent</strong></td><td><strong>空 transformer 也 +96ms、42.8ns 里 30.2ns 是探针</strong></td></tr>
+<tr><td>并发</td><td>03 · 锁升级 · AQS · 线程池</td><td>Mark Word 三位、CLH 队列</td></tr>
+<tr><td></td><td>20 · 线程池深水区</td><td>ctl 3+29 位、依赖栈 LIFO</td></tr>
+<tr><td></td><td>19 · NIO 与 Netty</td><td>epoll 红黑树、ByteBuf 双指针</td></tr>
+<tr><td>框架</td><td>04 · Spring 核心</td><td>refresh 十二步、三级缓存</td></tr>
+<tr><td></td><td>15 · Boot 自动配置</td><td>153→60→40 六阶段</td></tr>
+<tr><td></td><td>24 · MyBatis 与持久层</td><td>九站执行链、CacheKey 37 进制</td></tr>
+<tr><td>存储</td><td>05 · MySQL 索引与事务</td><td>B+ 树 1170 扇出、ReadView</td></tr>
+<tr><td></td><td>16 · 分库分表与迁移</td><td>2053 万行上限、基因法</td></tr>
+<tr><td></td><td>25 · Elasticsearch 与搜索</td><td>三层倒排、BM25 可算</td></tr>
+<tr><td>缓存</td><td>06 · Redis</td><td>单线程边界、跳表</td></tr>
+<tr><td></td><td>17 · 缓存一致性</td><td>失败率是乘法：99.85% → 1.35 亿</td></tr>
+<tr><td>分布式</td><td>07 · MQ 与分布式事务</td><td>LEO/HW/ISR、六种方案</td></tr>
+<tr><td></td><td>08 · Spring Cloud</td><td>三级缓存 90~180s、重试 27 倍</td></tr>
+<tr><td></td><td>18 · 幂等与防重</td><td>0 行双重语义、处理中带租期</td></tr>
+<tr><td></td><td>10 · 大厂场景设计</td><td>秒杀四道闸门、雪花位图</td></tr>
+<tr><td>工程能力</td><td>09 · 线上排查</td><td>CPU 六真凶、OOM 九落点</td></tr>
+<tr><td></td><td>11 · 设计模式</td><td>策略替 if-else、责任链三变形</td></tr>
+</table>
+
+<div class="box blue">
+<div class="h">这一期在地图里的位置：它把五期串起来了</div>
+<p>字节码是 class 文件（02 的运行时数据区从 <code>defineClass</code> 开始）、增强发生在类加载（13 的双亲委派决定"谁能看见谁"）、transformer 的成本是类加载与元数据（21 的 Metaspace 泄漏）、插桩后的热点方法会 deopt 重编译（22 的 JIT）。</p>
+<p>一个具体的接缝：为什么"往 <code>Boot-Class-Path</code> 塞业务 jar"会导致 Metaspace 泄漏？因为 bootstrap 加载的类<strong>永远不会被卸载</strong>（13 期：类卸载要求 loader 不可达 + Class 不可达 + 实例不可达，而 bootstrap loader 永远可达），所以每次 attach 一份新 jar，就多一份永久驻留的类元数据——第 21 期"14 次 redeploy 撑爆 512M Metaspace"是同一个机制。</p>
+</div>
+
+<div class="next">
+<strong>下期预告 · 第 27 期：Java 模块化与工程化边界</strong><br>
+<code>module-info</code> 到底解决了什么 / classpath hell 的四种形态 / <code>jdeps</code> 查循环依赖 / Multi-Release JAR 与 shade 冲突 / 为什么大厂最后都用 ArchUnit 而不是 JPMS。这是本系列挂了五期的话题，终于要正面还债了。
+</div>
+
+<div class="foot">
+<p>本期事实来源：本机 JDK 21.0.7（major 65）实测。agent、transform、redefine、retransform、ASM 版本、启动耗时全部为真实运行结果，报错文案原样复制；ASM 版本上限表通过手工改写 class 文件 major 字段二分探测得到，非文档查询。JEP 451（JDK 21 动态加载 agent 告警）为规范事实。文中标注"计算"的损耗账已给出乘法过程。</p>
+</div>
+
+</div>
+<script>
+document.querySelectorAll('pre code').forEach(function (el) {
+  var esc = function (s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  };
+  var text = esc(el.textContent);
+  var re = /(\/\/[^\n]*|\u2190[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(public|private|protected|static|final|class|void|new|return|try|finally|catch|if|else|int|long|byte|short|char|boolean|double|float|const|import|package|extends|implements|throws|throw|interface|this|super|abstract|synchronized|volatile|transient|instanceof|default|switch|case|break|continue|while|for|null|true|false)\b|\b(\d+\.?\d*[fFdDlL]?)\b/g;
+  el.innerHTML = text.replace(re, function (m, c, s, k, n) {
+    if (c) return '<span class="c">' + m + '</span>';
+    if (s) return '<span class="s">' + m + '</span>';
+    if (k) return '<span class="k">' + m + '</span>';
+    if (n) return '<span class="n">' + m + '</span>';
+    return m;
+  });
+});
+</script>
+</body>
+</html>

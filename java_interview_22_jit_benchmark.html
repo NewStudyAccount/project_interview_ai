@@ -1,0 +1,1702 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第22期 · JIT 编译与基准测试</title>
+<style>
+:root{
+  --bg:#fbfcfe;
+  --card:#ffffff;
+  --panel:#f4f7fb;
+  --line:#dde5f0;
+  --ink:#1a2330;
+  --ink2:#4d5a6b;
+  --ink3:#7c8a9c;
+  --blue:#1f4e79;
+  --blue-l:#e8f0f9;
+  --amber:#b7791f;
+  --amber-l:#fdf3e3;
+  --red:#b93b3b;
+  --red-l:#fbeceb;
+  --green:#1e7a4d;
+  --green-l:#e8f5ee;
+  --violet:#5b4b8a;
+  --violet-l:#efecf8;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  font-size:15.5px;line-height:1.85;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px;margin:0 auto;padding:0 26px 90px}
+
+/* ---------- header ---------- */
+header{
+  background:linear-gradient(135deg,#12304d 0%,#1f4e79 55%,#2b6a9e 100%);
+  color:#fff;padding:52px 0 44px;margin-bottom:44px;
+  border-bottom:4px solid #16375a;
+}
+header .wrap{padding-bottom:0}
+.badge{
+  display:inline-block;font-size:12px;letter-spacing:.13em;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);
+  padding:4px 12px;border-radius:3px;margin-bottom:20px;
+}
+h1{font-size:31px;line-height:1.35;margin:0 0 14px;font-weight:700;letter-spacing:-.2px}
+.sub{color:#c3d8ec;font-size:15px;margin:0 0 22px}
+.meta{display:flex;flex-wrap:wrap;gap:10px;font-size:12.5px;color:#a8c6e0}
+.meta span{
+  background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.18);
+  padding:3px 10px;border-radius:3px;
+}
+
+/* ---------- nav ---------- */
+nav{
+  background:var(--card);border:1px solid var(--line);border-radius:6px;
+  padding:20px 24px;margin-bottom:46px;
+}
+nav h3{font-size:13px;letter-spacing:.1em;color:var(--ink3);margin:0 0 14px;font-weight:600}
+nav ol{margin:0;padding-left:20px;columns:2;column-gap:34px;font-size:14px}
+nav li{margin-bottom:7px;break-inside:avoid}
+nav a{color:var(--blue);text-decoration:none;border-bottom:1px solid transparent}
+nav a:hover{border-bottom-color:var(--blue)}
+
+/* ---------- section ---------- */
+section{margin-bottom:60px}
+h2{
+  font-size:22px;font-weight:700;margin:0 0 8px;color:var(--ink);
+  padding-left:14px;border-left:4px solid var(--blue);line-height:1.4;
+}
+h2 .lvl{
+  display:inline-block;font-size:11px;font-weight:600;letter-spacing:.1em;
+  color:var(--blue);background:var(--blue-l);padding:2px 8px;border-radius:3px;
+  margin-right:10px;vertical-align:2px;
+}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink)}
+p{margin:14px 0;color:var(--ink2)}
+p.lead{font-size:16.5px;color:var(--ink);border-left:3px solid var(--amber);padding-left:16px;background:#fffdf8}
+strong{color:var(--ink);font-weight:650}
+code{
+  font-family:"JetBrains Mono","Cascadia Code",Consolas,monospace;
+  font-size:.87em;background:#eef2f8;color:#1f4368;
+  padding:1.5px 6px;border-radius:3px;border:1px solid #e0e8f2;
+}
+a{color:var(--blue)}
+
+/* ---------- figure ---------- */
+figure{
+  margin:30px 0;background:var(--card);border:1px solid var(--line);
+  border-radius:6px;padding:20px 18px 14px;overflow-x:auto;
+}
+figure svg{display:block;width:100%;height:auto}
+figcaption{
+  margin-top:12px;padding-top:11px;border-top:1px dashed var(--line);
+  font-size:13px;color:var(--ink3);line-height:1.65;
+}
+figcaption b{color:var(--ink2);font-weight:600}
+
+/* ---------- code ---------- */
+pre{
+  background:#f8fafd;border:1px solid #e3eaf4;border-left:3px solid var(--blue);
+  border-radius:5px;padding:16px 18px;overflow-x:auto;margin:20px 0;
+  font-size:13.2px;line-height:1.72;
+}
+pre code{
+  background:none;border:none;padding:0;color:#243447;
+  font-family:"JetBrains Mono","Cascadia Code",Consolas,monospace;
+  font-size:13.2px;white-space:pre;
+}
+.tok-c{color:#7c8a9c;font-style:italic}
+.tok-s{color:#9a3412}
+.tok-k{color:#1f4e79;font-weight:600}
+.tok-n{color:#6b21a8}
+.tok-a{color:#0f766e;font-weight:600}
+
+/* ---------- table ---------- */
+.tblwrap{overflow-x:auto;margin:22px 0}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--card)}
+th,td{border:1px solid var(--line);padding:9px 13px;text-align:left;vertical-align:top}
+th{background:var(--panel);font-weight:650;color:var(--ink);font-size:13.5px}
+td{color:var(--ink2)}
+tr:nth-child(even) td{background:#fafcfe}
+td code{font-size:.85em}
+
+/* ---------- callouts ---------- */
+.note{
+  border-radius:5px;padding:15px 18px;margin:22px 0;font-size:14.5px;
+  border-left:3px solid;line-height:1.78;
+}
+.note .tag{
+  display:block;font-size:11.5px;font-weight:700;letter-spacing:.1em;
+  margin-bottom:6px;
+}
+.note p{margin:6px 0;color:inherit}
+.note.key{background:var(--green-l);border-color:var(--green);color:#14512f}
+.note.key .tag{color:var(--green)}
+.note.warn{background:var(--red-l);border-color:var(--red);color:#7d2626}
+.note.warn .tag{color:var(--red)}
+.note.tip{background:var(--amber-l);border-color:var(--amber);color:#7a4f10}
+.note.tip .tag{color:var(--amber)}
+
+/* ---------- qa ---------- */
+.qa{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px 20px;margin:18px 0}
+.qa .q{font-weight:650;color:var(--ink);margin:16px 0 6px;font-size:15px}
+.qa .a{margin:0 0 16px;color:var(--ink2);font-size:14.6px}
+.qa .q::before{content:"Q";display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;
+  background:var(--blue);color:#fff;font-size:12px;border-radius:3px;margin-right:9px;font-weight:700}
+
+/* ---------- 四档 ---------- */
+.tiers{margin:20px 0}
+.tier{
+  display:grid;grid-template-columns:100px 1fr;gap:0;
+  border:1px solid var(--line);border-radius:5px;margin-bottom:10px;overflow:hidden;
+  background:var(--card);
+}
+.tier .lv{
+  padding:14px 10px;text-align:center;font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;color:#fff;
+}
+.tier .bd{padding:13px 16px;font-size:14.3px;color:var(--ink2);line-height:1.75}
+.tier .bd em{display:block;margin-top:7px;color:var(--ink3);font-size:13px;font-style:normal}
+.t-bad .lv{background:#9aa5b4}
+.t-pass .lv{background:#c98a2b}
+.t-good .lv{background:#2f7d5c}
+.t-best .lv{background:#1f4e79}
+.t-bad{border-color:#dbe0e8}
+.t-pass{border-color:#f0e0c4}
+.t-good{border-color:#c9e5d7}
+.t-best{border-color:#c3d8ec;box-shadow:0 1px 4px rgba(31,78,121,.09)}
+
+/* ---------- footer ---------- */
+footer{
+  margin-top:70px;padding-top:28px;border-top:1px solid var(--line);
+  font-size:13.5px;color:var(--ink3);
+}
+footer .next{
+  background:var(--card);border:1px solid var(--line);border-left:3px solid var(--violet);
+  border-radius:5px;padding:16px 20px;margin-bottom:22px;color:var(--ink2);
+}
+footer .next b{color:var(--violet)}
+
+@media (max-width:720px){
+  nav ol{columns:1}
+  h1{font-size:24px}
+  .tier{grid-template-columns:78px 1fr}
+  body{font-size:15px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="badge">JAVA 面试深挖 · 第 22 期</div>
+    <h1>JIT 编译与基准测试<br>把「优化」变成可测的数字</h1>
+    <p class="sub">12 张手绘原理图 · 5 组本机实测 · 27 段可运行代码 —— 全部数字来自 JDK 21.0.7 / 16 核真机</p>
+    <div class="meta">
+      <span>JDK 21.0.7 LTS</span>
+      <span>PrintFlagsFinal 实采</span>
+      <span>PrintCompilation 实录</span>
+      <span>PrintInlining 实录</span>
+      <span>分配计数实测</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<nav>
+  <h3>本篇结构 · 由浅入深</h3>
+  <ol>
+    <li><a href="#l0">先算一笔账：同一段代码的三级台阶</a></li>
+    <li><a href="#l1">分层编译：五层状态机，不是三层</a></li>
+    <li><a href="#l2">触发编译的三个信号：调用、回边、OSR</a></li>
+    <li><a href="#l3">内联：35 与 325 两道门</a></li>
+    <li><a href="#l4">逃逸分析与标量替换：对象可以不存在</a></li>
+    <li><a href="#l5">去优化 deopt：JVM 会主动打自己的脸</a></li>
+    <li><a href="#l6">代码缓存：预留 245MB 只用 2.2MB</a></li>
+    <li><a href="#l7">基准测试：你写的 benchmark 为什么是错的</a></li>
+    <li><a href="#l8">面试怎么答：现象 → 机制 → 数字</a></li>
+    <li><a href="#l9">数字速查（本期全部实测值）</a></li>
+    <li><a href="#l10">十四问答</a></li>
+    <li><a href="#l11">三道模拟面试题（四档对照）</a></li>
+  </ol>
+</nav>
+
+<p class="lead">前 21 期讲的是「机制」，这一期讲<strong>机制背后的编译器</strong>。为什么单拿出来讲？因为 JIT 是面试里少有的「<strong>背不出来、只能测出来</strong>」的知识点。你能背「JIT 编译热点代码」，但答不出「C1 和 C2 的阈值分别是多少」「为什么我写的 benchmark 跑出来是 0ms」「@Fork 到底在隔离什么」——这三个问题背后，是同一套机制。</p>
+
+<!-- ============ L0 ============ -->
+<section id="l0">
+<h2><span class="lvl">L0</span>先算一笔账：同一段代码的三级台阶</h2>
+
+<p>先不谈理论。一段纯计算循环（20 万次加法异或，用 <code>volatile</code> 把结果写出去防止被优化掉），连跑 200 次，每次记录耗时：</p>
+
+<figure>
+<svg viewBox="0 0 900 390" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="390" fill="#ffffff"/>
+  <!-- 标题 -->
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">同一段代码在 200 次迭代中的耗时（本机实测，纵轴对数刻度）</text>
+
+  <!-- 绘图区背景 -->
+  <rect x="92" y="46" width="758" height="282" fill="#fafcfe" stroke="#e3eaf4" stroke-width="1"/>
+
+  <!-- 横向参考线 -->
+  <line x1="92" y1="67" x2="850" y2="67" stroke="#eef2f8" stroke-width="1"/>
+  <line x1="92" y1="145" x2="850" y2="145" stroke="#eef2f8" stroke-width="1"/>
+  <line x1="92" y1="310" x2="850" y2="310" stroke="#eef2f8" stroke-width="1"/>
+
+  <!-- Y 轴刻度 -->
+  <text x="82" y="71" font-size="11.5" fill="#7c8a9c" text-anchor="end" font-family="monospace">1.2 ms</text>
+  <text x="82" y="149" font-size="11.5" fill="#7c8a9c" text-anchor="end" font-family="monospace">0.5 ms</text>
+  <text x="82" y="314" font-size="11.5" fill="#7c8a9c" text-anchor="end" font-family="monospace">0.09 ms</text>
+
+  <!-- 折线：A -> B平台 -> C平台 -->
+  <polyline points="150,67 195,67 232,145" fill="none" stroke="#b93b3b" stroke-width="2.4"/>
+  <polyline points="232,145 546,145" fill="none" stroke="#b7791f" stroke-width="2.4"/>
+  <polyline points="546,145 626,310" fill="none" stroke="#1f4e79" stroke-width="2.4"/>
+  <polyline points="626,310 846,310" fill="none" stroke="#1e7a4d" stroke-width="2.4"/>
+
+  <!-- 节点 -->
+  <circle cx="150" cy="67" r="5.5" fill="#b93b3b"/>
+  <circle cx="232" cy="145" r="4.5" fill="#b7791f"/>
+  <circle cx="546" cy="145" r="4.5" fill="#b7791f"/>
+  <circle cx="626" cy="310" r="4.5" fill="#1f4e79"/>
+
+  <!-- A 标注 -->
+  <rect x="88" y="92" width="112" height="42" rx="3" fill="#fbeceb" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="96" y="109" font-size="11.5" fill="#8c2f2f" font-family="sans-serif" font-weight="600">第 1 次</text>
+  <text x="96" y="126" font-size="11.5" fill="#8c2f2f" font-family="monospace">1.11 ms</text>
+  <text x="150" y="46" font-size="11" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif">解释器</text>
+
+  <!-- B 平台标注 -->
+  <rect x="252" y="158" width="252" height="46" rx="3" fill="#fdf3e3" stroke="#e8cfa4" stroke-width="1"/>
+  <text x="262" y="175" font-size="11.5" fill="#7a4f10" font-family="sans-serif" font-weight="600">C1 平台 · 第 2 ~ 8 次</text>
+  <text x="262" y="193" font-size="11.5" fill="#7a4f10" font-family="monospace">495,000 ns（约 0.50 ms）</text>
+
+  <!-- C 平台标注 -->
+  <rect x="630" y="248" width="220" height="46" rx="3" fill="#e8f5ee" stroke="#a9d5bd" stroke-width="1"/>
+  <text x="640" y="265" font-size="11.5" fill="#14512f" font-family="sans-serif" font-weight="600">C2 平台 · 第 9 次起</text>
+  <text x="640" y="283" font-size="11.5" fill="#14512f" font-family="monospace">89,100 ns（约 0.089 ms）</text>
+
+  <!-- 加速比徽标 -->
+  <rect x="300" y="238" width="150" height="58" rx="4" fill="#1f4e79"/>
+  <text x="375" y="259" font-size="11.5" fill="#c3d8ec" text-anchor="middle" font-family="sans-serif">总加速比</text>
+  <text x="375" y="285" font-size="23" fill="#ffffff" text-anchor="middle" font-family="sans-serif" font-weight="700">12.5×</text>
+
+  <!-- X 轴 -->
+  <line x1="92" y1="328" x2="850" y2="328" stroke="#9aaabf" stroke-width="1.4"/>
+  <text x="150" y="348" font-size="11" fill="#7c8a9c" text-anchor="middle" font-family="monospace">1</text>
+  <text x="232" y="348" font-size="11" fill="#7c8a9c" text-anchor="middle" font-family="monospace">2</text>
+  <text x="390" y="348" font-size="11" fill="#7c8a9c" text-anchor="middle" font-family="monospace">5</text>
+  <text x="546" y="348" font-size="11" fill="#7c8a9c" text-anchor="middle" font-family="monospace">8</text>
+  <text x="626" y="348" font-size="11" fill="#7c8a9c" text-anchor="middle" font-family="monospace">9</text>
+  <text x="846" y="348" font-size="11" fill="#7c8a9c" text-anchor="middle" font-family="monospace">200</text>
+  <text x="471" y="372" font-size="11.5" fill="#4d5a6b" text-anchor="middle" font-family="sans-serif">迭代次数（横轴刻度非线性：前 9 次展开，之后压缩）</text>
+
+  <!-- 左侧说明 -->
+  <text x="30" y="150" font-size="11" fill="#7c8a9c" font-family="sans-serif" transform="rotate(-90 30 150)" text-anchor="middle">单次耗时</text>
+</svg>
+<figcaption><b>图 1 · 三级台阶与两个断崖。</b>第 1 次到第 9 次之间发生了两次质变：C1 编译完成（1.11ms → 495µs）和 C2 编译完成（495µs → 89µs）。<b>这两个断崖就是 JIT 的全部价值，也是「不预热就测性能」必然错的原因。</b></figcaption>
+</figure>
+
+<p>三个台阶，两个断崖。这张图是本期所有讨论的地基：</p>
+
+<div class="tblwrap">
+<table>
+<tr><th>阶段</th><th>耗时</th><th>发生了什么</th><th>相对上一档</th></tr>
+<tr><td>第 1 次</td><td><code>1,110,800 ns</code></td><td>解释器逐条执行</td><td>—</td></tr>
+<tr><td>第 2 ~ 8 次</td><td><code>495,000 ns</code></td><td>C1 编译完成，机器码但不做激进优化</td><td><strong>2.24×</strong></td></tr>
+<tr><td>第 9 次起</td><td><code>89,100 ns</code></td><td>C2 编译完成，内联 + 逃逸分析 + 向量化</td><td><strong>5.56×</strong></td></tr>
+</table>
+</div>
+
+<p><strong>为什么解释器那么慢？</strong>字节码不是机器码。执行一条 <code>iadd</code>，解释器要：取指令 → 解码操作码 → 查分派表（或 switch）→ 取操作数 → 执行 → 写回。等于把「一次加法」变成「十几次内存访问 + 一次间接跳转」。而 C2 编译后，同样的语义可能只剩一条 <code>add</code>，甚至连循环都被展开、被向量化。</p>
+
+<h3>关键认知：JIT 不是「编译一次就完事」</h3>
+
+<p>绝大多数人的误区是把 JIT 当成 AOT（提前编译）。真实的模型是：</p>
+
+<ul>
+<li>代码随时可能在「<strong>解释执行 / C1 版本 / C2 版本 / 已废弃版本</strong>」之间迁移</li>
+<li>迁移由<strong>计数器</strong>驱动，不由程序员驱动</li>
+<li><strong>编译不是单向的</strong>：优化假设一旦失效，编译结果会被<strong>主动废弃</strong>（deopt），退回解释器重来</li>
+</ul>
+
+<div class="note key">
+<span class="tag">本期主线</span>
+<p>最后一句是全篇的骨架。<strong>理解了「代码会来回跳」，才能理解后面所有的性能怪异现象</strong>：为什么预热重要、为什么多态杀性能、为什么热部署会抖、为什么 benchmark 会撒谎。</p>
+</div>
+
+</section>
+<!-- ============ L1 ============ -->
+<section id="l1">
+<h2><span class="lvl">L1</span>分层编译：五层状态机，不是三层</h2>
+
+<p>「C1 / C2」是简化说法。真实的分层编译（Tiered Compilation，JDK 8 起默认开启）是<strong>五层</strong>，而且标准路径不是逐层递进。</p>
+
+<figure>
+<svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="400" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">分层编译的五层与迁移路径（实线为主路径，虚线为旁路，红虚线为 deopt 回流）</text>
+
+  <!-- Tier 1 -->
+  <rect x="60" y="140" width="140" height="58" rx="4" fill="#fdf3e3" stroke="#d9a441" stroke-width="1.4"/>
+  <text x="130" y="163" font-size="14" fill="#7a4f10" text-anchor="middle" font-family="sans-serif" font-weight="700">Tier 1</text>
+  <text x="130" y="182" font-size="11" fill="#8a5e18" text-anchor="middle" font-family="sans-serif">C1 · 无 profile</text>
+
+  <!-- Tier 2 -->
+  <rect x="270" y="140" width="160" height="58" rx="4" fill="#fdf3e3" stroke="#c98a2b" stroke-width="1.4"/>
+  <text x="350" y="163" font-size="14" fill="#7a4f10" text-anchor="middle" font-family="sans-serif" font-weight="700">Tier 2</text>
+  <text x="350" y="182" font-size="11" fill="#8a5e18" text-anchor="middle" font-family="sans-serif">C1 · 有限 profile</text>
+
+  <!-- Tier 0 -->
+  <rect x="60" y="272" width="140" height="60" rx="4" fill="#eef2f8" stroke="#9aa5b4" stroke-width="1.4"/>
+  <text x="130" y="296" font-size="14" fill="#4a5568" text-anchor="middle" font-family="sans-serif" font-weight="700">Tier 0</text>
+  <text x="130" y="315" font-size="11" fill="#5a6675" text-anchor="middle" font-family="sans-serif">解释器 · 采样 33%</text>
+
+  <!-- Tier 3 -->
+  <rect x="330" y="272" width="170" height="60" rx="4" fill="#e8f0f9" stroke="#2b6a9e" stroke-width="1.4"/>
+  <text x="415" y="296" font-size="14" fill="#1f4e79" text-anchor="middle" font-family="sans-serif" font-weight="700">Tier 3</text>
+  <text x="415" y="315" font-size="11" fill="#2b5578" text-anchor="middle" font-family="sans-serif">C1 · 完整 profile</text>
+
+  <!-- Tier 4 -->
+  <rect x="620" y="272" width="170" height="60" rx="4" fill="#1f4e79" stroke="#16375a" stroke-width="1.4"/>
+  <text x="705" y="296" font-size="14" fill="#ffffff" text-anchor="middle" font-family="sans-serif" font-weight="700">Tier 4</text>
+  <text x="705" y="315" font-size="11" fill="#c3d8ec" text-anchor="middle" font-family="sans-serif">C2 · 用 profile 优化</text>
+
+  <!-- 0 -> 3 -->
+  <line x1="200" y1="302" x2="322" y2="302" stroke="#2b6a9e" stroke-width="2"/>
+  <polygon points="322,302 312,297 312,307" fill="#2b6a9e"/>
+  <text x="261" y="293" font-size="10.5" fill="#1f4e79" text-anchor="middle" font-family="monospace">200 调用</text>
+  <text x="261" y="322" font-size="10.5" fill="#1f4e79" text-anchor="middle" font-family="monospace">60000 回边</text>
+
+  <!-- 3 -> 4 -->
+  <line x1="500" y1="302" x2="612" y2="302" stroke="#1f4e79" stroke-width="2"/>
+  <polygon points="612,302 602,297 602,307" fill="#1f4e79"/>
+  <text x="556" y="293" font-size="10.5" fill="#1f4e79" text-anchor="middle" font-family="monospace">5000 调用</text>
+  <text x="556" y="322" font-size="10.5" fill="#1f4e79" text-anchor="middle" font-family="monospace">40000 回边</text>
+
+  <!-- 0 -> 1 (trivial) -->
+  <line x1="120" y1="272" x2="120" y2="206" stroke="#b7791f" stroke-width="1.8" stroke-dasharray="5 4"/>
+  <polygon points="120,206 115,216 125,216" fill="#b7791f"/>
+  <text x="128" y="238" font-size="10.5" fill="#7a4f10" font-family="sans-serif">≤6 字节</text>
+
+  <!-- 3 -> 2 -->
+  <line x1="380" y1="272" x2="350" y2="206" stroke="#b7791f" stroke-width="1.8" stroke-dasharray="5 4"/>
+  <polygon points="350,206 345,216 355,216" fill="#b7791f"/>
+
+  <!-- deopt 回流 -->
+  <line x1="705" y1="332" x2="705" y2="362" stroke="#b93b3b" stroke-width="1.8" stroke-dasharray="6 4"/>
+  <line x1="705" y1="362" x2="130" y2="362" stroke="#b93b3b" stroke-width="1.8" stroke-dasharray="6 4"/>
+  <line x1="130" y1="362" x2="130" y2="340" stroke="#b93b3b" stroke-width="1.8" stroke-dasharray="6 4"/>
+  <polygon points="130,340 125,350 135,350" fill="#b93b3b"/>
+  <rect x="330" y="350" width="200" height="24" rx="3" fill="#fbeceb" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="430" y="366" font-size="11.5" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif">deopt：假设失效，退回解释器</text>
+
+  <!-- 左侧竖排注释 -->
+  <text x="34" y="160" font-size="11" fill="#7c8a9c" font-family="sans-serif" transform="rotate(-90 34 160)" text-anchor="middle">编译成本低</text>
+  <text x="34" y="300" font-size="11" fill="#7c8a9c" font-family="sans-serif" transform="rotate(-90 34 300)" text-anchor="middle">执行质量低</text>
+</svg>
+<figcaption><b>图 2 · 五层与真实迁移路径。</b>标准路径是 <b>0 → 3 → 4</b>，不是逐层递进。Tier 1 是给 ≤6 字节的超级小方法准备的旁路（<code>MaxTrivialSize=6</code>），Tier 2 是 C1 的中间档（两者升温后也可直接升 Tier 4，为保持图示清晰未画）。<b>注意底部那条红色回流线——它是本期后半程的主角。</b></figcaption>
+</figure>
+
+<div class="tblwrap">
+<table>
+<tr><th>层级</th><th>编译器</th><th>是否采集 profile</th><th>编译速度</th><th>代码质量</th><th>用途</th></tr>
+<tr><td><strong>Tier 0</strong></td><td>解释器</td><td>采样（每 33 次记 1 次）</td><td>—</td><td>最低</td><td>冷代码、deopt 落点</td></tr>
+<tr><td><strong>Tier 1</strong></td><td>C1</td><td>否</td><td>极快</td><td>低</td><td><code>MaxTrivialSize</code> ≤6 字节方法</td></tr>
+<tr><td><strong>Tier 2</strong></td><td>C1</td><td>有限 profile</td><td>快</td><td>偏低</td><td>短方法但不够热，省 profiling 开销</td></tr>
+<tr><td><strong>Tier 3</strong></td><td>C1</td><td><strong>完整 profile</strong></td><td>中</td><td>中</td><td><strong>主力层：采集类型/分支，喂给 C2</strong></td></tr>
+<tr><td><strong>Tier 4</strong></td><td>C2</td><td>使用 profile</td><td>慢（几十 ms）</td><td>最高</td><td>真正的热点</td></tr>
+</table>
+</div>
+
+<h3>为什么需要这么多层：一次真实的取舍</h3>
+
+<p>C2 编译一个方法要几十毫秒。如果只有 C2：启动期所有方法都在排队等编译，应用会长时间停在解释执行——<strong>启动反而更慢</strong>。</p>
+
+<p>所以真实的策略是<strong>快慢双轨</strong>：用几毫秒的 C1 覆盖 90% 的代码（先让它「跑起来不慢」），把昂贵的 C2 预算留给 10% 的真热点（再让它「跑得快」）。</p>
+
+<p>而 Tier 3 有一个容易被忽略的隐含职责：<strong>它是 profile 采集器</strong>。C2 的所有激进优化——去虚化、内联决策、分支布局——都依赖 Tier 3 采到的类型分布数据。所以 <code>0 → 3 → 4</code> 不是「越来越快」的简单升级，而是「<strong>先测量、再优化</strong>」的两阶段。</p>
+
+<h3>真实日志长什么样</h3>
+
+<p>这是本机 <code>-XX:+PrintCompilation</code> 的实录（跑的是后文 L5 的 deopt 实验）：</p>
+
+<pre><code class="text">    40   87 %     3       Deopt::sumInts @ 4 (30 bytes)      ← OSR 编译，进 Tier 3
+    41   89 %     4       Deopt::sumInts @ 4 (30 bytes)      ← 紧接着升到 Tier 4
+    43   87 %     3       Deopt::sumInts @ 4 (30 bytes)   made not entrant   ← L3 版本废弃
+    43   90       4       Deopt::sumInts (30 bytes)          ← 非 OSR 的 Tier 4 版本</code></pre>
+
+<div class="tblwrap">
+<table>
+<tr><th>列</th><th>含义</th></tr>
+<tr><td>第 1 列 <code>40</code></td><td>时间戳（JVM 启动后毫秒数）</td></tr>
+<tr><td>第 2 列 <code>87</code></td><td>编译任务 ID（单调递增，可用来追踪同一方法的重编译）</td></tr>
+<tr><td><code>%</code></td><td><strong>OSR 编译</strong>（On-Stack Replacement，栈上替换）</td></tr>
+<tr><td>第 4 列 <code>3</code> / <code>4</code></td><td>目标层级</td></tr>
+<tr><td><code>@ 4</code></td><td>编译入口的字节码偏移（bci）——<strong>不是方法开头</strong></td></tr>
+<tr><td><code>(30 bytes)</code></td><td>字节码大小，直接决定内联决策</td></tr>
+<tr><td><code>made not entrant</code></td><td>该版本已废弃，不再接受新调用</td></tr>
+</table>
+</div>
+
+<div class="note tip">
+<span class="tag">读日志的一个细节</span>
+<p>注意 <code>% 3</code> 到 <code>% 4</code> 只隔了 <b>1 毫秒</b>。这说明 Tier 3 到 Tier 4 的升级可以极快——因为 Tier 3 编译完成后 profile 立刻开始累积，很快撞到 Tier 4 阈值。<b>「先 C1 再 C2」不是一段漫长的等待，在热点代码上往往只有几毫秒。</b></p>
+</div>
+
+<h3>各层阈值：本机 <code>PrintFlagsFinal</code> 实测</h3>
+
+<pre><code class="text">$ java -XX:+PrintFlagsFinal -version | grep -E "Tier[34]"
+
+intx Tier3InvocationThreshold = 200      {product} {default}
+intx Tier3CompileThreshold    = 2000     {product} {default}
+intx Tier3BackEdgeThreshold   = 60000    {product} {default}
+intx Tier4InvocationThreshold = 5000     {product} {default}
+intx Tier4CompileThreshold    = 15000    {product} {default}
+intx Tier4BackEdgeThreshold   = 40000    {product} {default}
+intx CICompilerCount          = 12       {product} {ergonomic}</code></pre>
+
+<p><strong>这六个数字要成对理解</strong>：<code>200 / 5000</code> 是<strong>方法被调用</strong>多少次，<code>60000 / 40000</code> 是<strong>循环体被走</strong>多少遍，<code>2000 / 15000</code> 是两者之和的门槛。</p>
+
+<div class="note warn">
+<span class="tag">反直觉点</span>
+<p>Tier 4 的回边阈值（<b>40000</b>）比 Tier 3（<b>60000</b>）<b>更低</b>。意思是「循环体只要转 4 万圈就够格上 C2」，而「方法要被调用 5000 次」。因为<b>循环才是性能热点的主要形态</b>，JVM 对循环更激进。</p>
+</div>
+
+<h3><code>CICompilerCount=12</code> 是怎么来的</h3>
+
+<p>本机 16 核 → 12 个编译线程（约 3/4），这是 <code>CICompilerCountPerCPU=true</code> 的默认启发式。</p>
+
+<p><strong>为什么要多个</strong>：C2 编译一个方法要几十毫秒，如果只有单线程，启动期大量方法排队，应用长时间停在解释执行。多线程让「编译」和「执行」并行——<strong>用空闲的核去优化正在跑的代码</strong>。但也不是越多越好：编译线程本身抢 CPU，C2 编译还占内存，所以 JVM 把它控制在核数的 3/4 左右，且最少 2 个。</p>
+
+</section>
+
+<!-- ============ L2 ============ -->
+<section id="l2">
+<h2><span class="lvl">L2</span>触发编译的三个信号：调用、回边、OSR</h2>
+
+<p>计数器有两个，不是一个。而第三个机制 OSR 是最容易被问倒的点。</p>
+
+<figure>
+<svg viewBox="0 0 900 350" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="350" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">两种计数器和 OSR 的切入位置</text>
+
+  <!-- 方法框 -->
+  <rect x="48" y="56" width="420" height="212" rx="4" fill="#f8fafd" stroke="#c3cedd" stroke-width="1.3"/>
+  <text x="62" y="78" font-size="12" fill="#4d5a6b" font-family="monospace">static int sumInts(Object[] arr) {</text>
+
+  <!-- bci 标记 -->
+  <text x="62" y="100" font-size="11" fill="#7c8a9c" font-family="monospace">bci=0</text>
+  <text x="62" y="120" font-size="12" fill="#243447" font-family="monospace">  int s = 0;</text>
+
+  <!-- 循环体 -->
+  <rect x="56" y="132" width="404" height="86" rx="3" fill="#e8f0f9" stroke="#2b6a9e" stroke-width="1.2" stroke-dasharray="5 3"/>
+  <text x="64" y="150" font-size="11" fill="#1f4e79" font-family="monospace">bci=4  ← OSR 编译从这里切入</text>
+  <text x="72" y="172" font-size="12" fill="#243447" font-family="monospace">for (int i = 0; i &lt; arr.length; i++) {</text>
+  <text x="88" y="192" font-size="12" fill="#243447" font-family="monospace">s += ((Integer) arr[i]).intValue();</text>
+  <text x="72" y="211" font-size="12" fill="#243447" font-family="monospace">}</text>
+
+  <text x="62" y="240" font-size="12" fill="#243447" font-family="monospace">  return s;</text>
+  <text x="62" y="259" font-size="12" fill="#4d5a6b" font-family="monospace">}</text>
+
+  <!-- 回边箭头 -->
+  <line x1="460" y1="200" x2="460" y2="150" stroke="#b7791f" stroke-width="1.6"/>
+  <line x1="452" y1="200" x2="452" y2="150" stroke="#b7791f" stroke-width="1.6"/>
+  <polygon points="456,146 451,156 461,156" fill="#b7791f"/>
+  <text x="470" y="178" font-size="10.5" fill="#7a4f10" font-family="sans-serif">回边</text>
+
+  <!-- 右侧面板 -->
+  <rect x="510" y="56" width="356" height="212" rx="4" fill="#ffffff" stroke="#dde5f0" stroke-width="1.2"/>
+  <text x="526" y="80" font-size="12" fill="#1a2330" font-family="sans-serif" font-weight="700">三个触发信号</text>
+
+  <!-- 信号 1 -->
+  <rect x="524" y="92" width="328" height="50" rx="3" fill="#e8f0f9" stroke="#b9d0e6" stroke-width="1"/>
+  <text x="536" y="110" font-size="11.5" fill="#1f4e79" font-family="sans-serif" font-weight="600">① 方法调用计数</text>
+  <text x="536" y="130" font-size="11" fill="#2b5578" font-family="monospace">进入方法 +1 → 5000 次升 Tier 4</text>
+
+  <!-- 信号 2 -->
+  <rect x="524" y="150" width="328" height="50" rx="3" fill="#fdf3e3" stroke="#e8cfa4" stroke-width="1"/>
+  <text x="536" y="168" font-size="11.5" fill="#7a4f10" font-family="sans-serif" font-weight="600">② 回边计数（backedge）</text>
+  <text x="536" y="188" font-size="11" fill="#8a5e18" font-family="monospace">循环跳回自己 +1 → 40000 触发 OSR</text>
+
+  <!-- 信号 3 -->
+  <rect x="524" y="208" width="328" height="50" rx="3" fill="#e8f5ee" stroke="#a9d5bd" stroke-width="1"/>
+  <text x="536" y="226" font-size="11.5" fill="#14512f" font-family="sans-serif" font-weight="600">③ 总计数 = ① + ②</text>
+  <text x="536" y="246" font-size="11" fill="#1e7a4d" font-family="monospace">与 Tier*CompileThreshold 比较</text>
+
+  <!-- 底部对比 -->
+  <rect x="48" y="288" width="818" height="46" rx="3" fill="#fbeceb" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="60" y="306" font-size="11.5" fill="#8c2f2f" font-family="sans-serif" font-weight="600">普通编译：f() 被调用 5000 次 → 编译 f() → 下一次调用才用新版本</text>
+  <text x="60" y="325" font-size="11.5" fill="#8c2f2f" font-family="sans-serif" font-weight="600">OSR 编译：循环转到 40000 圈 → 编译循环体 → 当前这次调用中途就切换</text>
+</svg>
+<figcaption><b>图 3 · 计数器与 OSR 的切入位置。</b>关键在于蓝色虚线框：OSR 编译的入口是 <b>bci=4</b>（循环入口），不是方法开头。所以日志里会出现 <code>@ 4</code> 这样的偏移量——<b>它是「从哪儿开始编译」的直接证据</b>。</figcaption>
+</figure>
+
+<h3>OSR：方法还没跑完，就把它换掉</h3>
+
+<p>这是最容易考倒人的一个点。两者的差别在「<strong>当前这次调用</strong>」：</p>
+
+<div class="tblwrap">
+<table>
+<tr><th>机制</th><th>触发条件</th><th>生效时机</th><th>编译入口</th></tr>
+<tr><td>普通编译</td><td>方法被调用 5000 次</td><td><strong>下次</strong>调用时</td><td>方法开头（bci=0）</td></tr>
+<tr><td><strong>OSR 编译</strong></td><td>循环回边 40000 次</td><td><strong>当前这次</strong>调用中途</td><td>循环体（如 bci=4）</td></tr>
+</table>
+</div>
+
+<p>假如你写了一个 <code>main</code> 方法，里面跑 10 亿次循环：</p>
+
+<ul>
+<li><strong>没有 OSR</strong>：<code>main</code> 只被调用 <strong>1 次</strong>，永远撞不到 5000 的调用阈值，<strong>整个 10 亿次循环都在解释器里跑</strong></li>
+<li><strong>有 OSR</strong>：循环转到 4 万圈时就被替换成编译版本，后面 9.9996 亿次都是机器码</li>
+</ul>
+
+<div class="note key">
+<span class="tag">面试可直接用的推论</span>
+<p>如果你想测一段代码的性能，把它放在 <code>main</code> 里跑大循环，<b>会被 OSR 编译</b>；如果想测「方法调用开销」，必须从别的循环里去调它。<b>这两种测法测的是不同的东西——这是基准测试设计的第一个分岔。</b></p>
+</div>
+
+<h3>采样率：<code>InterpreterProfilePercentage=33</code></h3>
+
+<p>解释器不是每次都记录 profile，而是<strong>每 33 次记一次</strong>。目的是降低解释执行的开销（记录类型信息本身要花钱），同时保证统计上足够。</p>
+
+<p>但代价是：profile 是<strong>采样</strong>的，不是全量。这意味着<strong>极少出现的类型可能采样不到</strong>——等到它真出现时就会触发 deopt。这条线一直连到 L5。</p>
+
+</section>
+<!-- ============ L3 ============ -->
+<section id="l3">
+<h2><span class="lvl">L3</span>内联：整个 JIT 最重要的一个优化</h2>
+
+<p>先给结论：<strong>内联是其他所有优化的前提</strong>。没有内联，逃逸分析无从下手（看不到对象创建点）、常量传播无从下手（跨不过方法边界）、锁消除也无从下手（看不到完整的加锁范围）。</p>
+
+<p>但内联不是「愿意就能做」，它有<strong>两道门</strong>，而这两道门的区别是本期的第一个硬考点。</p>
+
+<figure>
+<svg viewBox="0 0 900 350" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="350" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">内联的两道门：MaxInlineSize=35 与 FreqInlineSize=325（横轴对数刻度）</text>
+
+  <!-- 三段区域 -->
+  <rect x="70" y="56" width="407" height="42" fill="#e8f5ee" stroke="#a9d5bd" stroke-width="1"/>
+  <rect x="477" y="56" width="254" height="42" fill="#fdf3e3" stroke="#e8cfa4" stroke-width="1"/>
+  <rect x="731" y="56" width="129" height="42" fill="#fbeceb" stroke="#e8b4b3" stroke-width="1"/>
+
+  <text x="273" y="74" font-size="12" fill="#14512f" text-anchor="middle" font-family="sans-serif" font-weight="700">一定内联</text>
+  <text x="273" y="90" font-size="10.5" fill="#1e7a4d" text-anchor="middle" font-family="sans-serif">&lt; MaxInlineSize</text>
+
+  <text x="604" y="74" font-size="12" fill="#7a4f10" text-anchor="middle" font-family="sans-serif" font-weight="700">热点才内联</text>
+  <text x="604" y="90" font-size="10.5" fill="#8a5e18" text-anchor="middle" font-family="sans-serif">&lt; FreqInlineSize 且 hot</text>
+
+  <text x="795" y="74" font-size="12" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif" font-weight="700">永不内联</text>
+  <text x="795" y="90" font-size="10.5" fill="#b93b3b" text-anchor="middle" font-family="sans-serif">hot method too big</text>
+
+  <!-- 轴 -->
+  <line x1="70" y1="108" x2="860" y2="108" stroke="#9aaabf" stroke-width="1.4"/>
+  <line x1="70" y1="104" x2="70" y2="112" stroke="#9aaabf" stroke-width="1.4"/>
+  <line x1="477" y1="102" x2="477" y2="114" stroke="#2b6a9e" stroke-width="2"/>
+  <line x1="731" y1="102" x2="731" y2="114" stroke="#b93b3b" stroke-width="2"/>
+  <line x1="860" y1="104" x2="860" y2="112" stroke="#9aaabf" stroke-width="1.4"/>
+
+  <text x="70" y="130" font-size="11" fill="#7c8a9c" text-anchor="middle" font-family="monospace">0 B</text>
+  <text x="477" y="130" font-size="11.5" fill="#1f4e79" text-anchor="middle" font-family="monospace" font-weight="700">35 B</text>
+  <text x="731" y="130" font-size="11.5" fill="#b93b3b" text-anchor="middle" font-family="monospace" font-weight="700">325 B</text>
+  <text x="858" y="130" font-size="11" fill="#7c8a9c" text-anchor="end" font-family="monospace">1000 B</text>
+
+  <!-- 三个方法块 -->
+  <!-- small: 4B -> x=228 -->
+  <rect x="163" y="152" width="130" height="58" rx="3" fill="#ffffff" stroke="#1e7a4d" stroke-width="1.5"/>
+  <text x="228" y="172" font-size="12" fill="#14512f" text-anchor="middle" font-family="sans-serif" font-weight="700">small()</text>
+  <text x="228" y="190" font-size="11" fill="#1e7a4d" text-anchor="middle" font-family="monospace">4 bytes</text>
+  <text x="228" y="204" font-size="10" fill="#5a6675" text-anchor="middle" font-family="sans-serif">inline</text>
+  <line x1="228" y1="108" x2="228" y2="152" stroke="#1e7a4d" stroke-width="1" stroke-dasharray="3 3"/>
+
+  <!-- medium: 74B -> x=562 -->
+  <rect x="497" y="152" width="130" height="58" rx="3" fill="#ffffff" stroke="#b7791f" stroke-width="1.5"/>
+  <text x="562" y="172" font-size="12" fill="#7a4f10" text-anchor="middle" font-family="sans-serif" font-weight="700">medium()</text>
+  <text x="562" y="190" font-size="11" fill="#8a5e18" text-anchor="middle" font-family="monospace">74 bytes</text>
+  <text x="562" y="204" font-size="10" fill="#5a6675" text-anchor="middle" font-family="sans-serif">too large → hot</text>
+  <line x1="562" y1="108" x2="562" y2="152" stroke="#b7791f" stroke-width="1" stroke-dasharray="3 3"/>
+
+  <!-- large: 825B -> x=790 -->
+  <rect x="725" y="152" width="130" height="58" rx="3" fill="#ffffff" stroke="#b93b3b" stroke-width="1.5"/>
+  <text x="790" y="172" font-size="12" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif" font-weight="700">large()</text>
+  <text x="790" y="190" font-size="11" fill="#b93b3b" text-anchor="middle" font-family="monospace">825 bytes</text>
+  <text x="790" y="204" font-size="10" fill="#5a6675" text-anchor="middle" font-family="sans-serif">hot / too big</text>
+  <line x1="790" y1="108" x2="790" y2="152" stroke="#b93b3b" stroke-width="1" stroke-dasharray="3 3"/>
+
+  <!-- 判定结论 -->
+  <text x="30" y="240" font-size="12" fill="#4d5a6b" font-family="sans-serif" font-weight="600">实测判定</text>
+
+  <rect x="70" y="250" width="360" height="34" rx="3" fill="#f8fafd" stroke="#c3cedd" stroke-width="1"/>
+  <text x="80" y="272" font-size="11" fill="#243447" font-family="monospace">small (4 bytes)  inline</text>
+
+  <rect x="70" y="290" width="360" height="46" rx="3" fill="#f8fafd" stroke="#c3cedd" stroke-width="1"/>
+  <text x="80" y="308" font-size="11" fill="#243447" font-family="monospace">medium (74 bytes)  callee is too large</text>
+  <text x="80" y="326" font-size="11" fill="#1e7a4d" font-family="monospace">                   inline (hot)  ← 放行</text>
+
+  <rect x="470" y="250" width="390" height="86" rx="3" fill="#fbeceb" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="480" y="270" font-size="11" fill="#243447" font-family="monospace">large (825 bytes)  callee is too large</text>
+  <text x="480" y="290" font-size="11" fill="#b93b3b" font-family="monospace">                  hot method too big</text>
+  <text x="480" y="312" font-size="11" fill="#8c2f2f" font-family="sans-serif">JVM 明确回复：我知道你热，但你太大了</text>
+  <text x="480" y="328" font-size="10.5" fill="#7c8a9c" font-family="sans-serif">（判定两次：35 门拒，325 门仍拒）</text>
+</svg>
+<figcaption><b>图 4 · 两道门的实测分界。</b>三个方法字节码 4B / 74B / 825B，正好卡在 35 和 325 两侧。<b>medium 被判定两次</b>（先 <code>too large</code> 按 35 拒绝，后 <code>inline (hot)</code> 按 325 放行），这是两道门真实存在的最直接证据；large 第二次的拒绝原因是 <code>hot method too big</code>，措辞都变了。</figcaption>
+</figure>
+
+<div class="tblwrap">
+<table>
+<tr><th>参数</th><th>本机值</th><th>管什么</th></tr>
+<tr><td><code>MaxInlineSize</code></td><td><strong>35</strong></td><td><strong>非热点</strong>调用点的字节码大小上限</td></tr>
+<tr><td><code>FreqInlineSize</code></td><td><strong>325</strong></td><td><strong>热点</strong>（<code>inline (hot)</code>）调用点的大小上限</td></tr>
+<tr><td><code>MaxInlineLevel</code></td><td>15</td><td>内联嵌套深度</td></tr>
+<tr><td><code>MaxRecursiveInlineLevel</code></td><td>1</td><td>递归内联深度</td></tr>
+<tr><td><code>InlineSmallCode</code></td><td>2500</td><td>目标方法已编译且机器码 &lt; 2500 字节，直接内联机器码</td></tr>
+<tr><td><code>LiveNodeCountInliningCutoff</code></td><td>40000</td><td>内联后 IR 节点数上限</td></tr>
+</table>
+</div>
+
+<p><strong>为什么要有两个数</strong>：35 是很严的门槛，如果只有它，稍微复杂的方法永远内联不了，而真实业务里的热点方法动辄几百字节。所以 JVM 设了第二道门：<strong>只要你够热，我容忍你大一点</strong>。</p>
+
+<div class="note tip">
+<span class="tag">面试追问预判</span>
+<p>问「怎么让我的方法能被内联」，标准答案是「保持方法小」——但更准确的答案是「<b>保持方法在热点路径上小</b>」。前者是教条，后者是工程判断：一个 200 字节的方法如果每秒被调 10 万次，它就是热点，325 的门会为它打开；一个 20 字节的方法如果在冷路径上，内联了也没意义。</p>
+</div>
+
+<h3>内联失败的真实原因分布</h3>
+
+<p>跑了完整的 <code>-XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining</code>，把失败原因统计出来（一次普通 JVM 启动 + 业务代码）：</p>
+
+<div class="tblwrap">
+<table>
+<tr><th>失败原因（日志原文）</th><th>出现次数</th><th>含义</th></tr>
+<tr><td><code>force inline by annotation</code></td><td>33</td><td>被 <code>@ForceInline</code> 强制（JDK 内部大量使用，<strong>这是成功的</strong>）</td></tr>
+<tr><td><code>callee uses too much stack</code></td><td><strong>31</strong></td><td>被调方法栈帧太大（局部变量/参数太多）</td></tr>
+<tr><td><code>not inlineable</code></td><td>17</td><td>native 方法、未加载类、方法句柄等</td></tr>
+<tr><td><code>inlining prohibited by policy</code></td><td>8</td><td>调用点在异常处理器内、或 <code>CompileCommand</code> 禁止</td></tr>
+<tr><td><code>too big</code></td><td>2</td><td>超过大小门</td></tr>
+</table>
+</div>
+
+<p>这张表的价值在于：面试问「内联什么情况下会失败」，能答出「太大、太深、递归、栈太大、native、策略禁止」六类，并且知道<strong>「栈太大」比「太大」更常见</strong>（31 次 vs 2 次），说明你的知识来自日志而不是背诵。</p>
+
+<p><code>callee uses too much stack</code> 尤其反直觉：一个方法<strong>字节码很短但局部变量很多</strong>，同样内联不了，因为内联要把被调方法的局部变量塞进调用者的栈帧。所以「方法短」不等于「能内联」，<strong>参数和局部变量也要少</strong>。</p>
+
+<h3>内联的连锁收益：为什么它是一切的前提</h3>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="300" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">内联之后的优化链条：第一环断了，后面全断</text>
+
+  <!-- 五个环节 -->
+  <rect x="36" y="80" width="150" height="74" rx="4" fill="#e8f0f9" stroke="#2b6a9e" stroke-width="1.3"/>
+  <text x="111" y="104" font-size="12.5" fill="#1f4e79" text-anchor="middle" font-family="sans-serif" font-weight="700">① 去虚化</text>
+  <text x="111" y="124" font-size="10.5" fill="#2b5578" text-anchor="middle" font-family="sans-serif">profile 确认单实现</text>
+  <text x="111" y="141" font-size="10.5" fill="#2b5578" text-anchor="middle" font-family="sans-serif">省掉 vtable 查表</text>
+
+  <rect x="216" y="80" width="150" height="74" rx="4" fill="#e8f0f9" stroke="#2b6a9e" stroke-width="1.3"/>
+  <text x="291" y="104" font-size="12.5" fill="#1f4e79" text-anchor="middle" font-family="sans-serif" font-weight="700">② 内联</text>
+  <text x="291" y="124" font-size="10.5" fill="#2b5578" text-anchor="middle" font-family="sans-serif">方法体展开到调用者</text>
+  <text x="291" y="141" font-size="10.5" fill="#2b5578" text-anchor="middle" font-family="sans-serif">消除调用开销</text>
+
+  <rect x="396" y="80" width="150" height="74" rx="4" fill="#e8f5ee" stroke="#1e7a4d" stroke-width="1.3"/>
+  <text x="471" y="104" font-size="12.5" fill="#14512f" text-anchor="middle" font-family="sans-serif" font-weight="700">③ 常量传播</text>
+  <text x="471" y="124" font-size="10.5" fill="#1e7a4d" text-anchor="middle" font-family="sans-serif">参数变成常量</text>
+  <text x="471" y="141" font-size="10.5" fill="#1e7a4d" text-anchor="middle" font-family="sans-serif">分支被剪掉</text>
+
+  <rect x="576" y="80" width="150" height="74" rx="4" fill="#e8f5ee" stroke="#1e7a4d" stroke-width="1.3"/>
+  <text x="651" y="104" font-size="12.5" fill="#14512f" text-anchor="middle" font-family="sans-serif" font-weight="700">④ 逃逸分析</text>
+  <text x="651" y="124" font-size="10.5" fill="#1e7a4d" text-anchor="middle" font-family="sans-serif">看见 new 才能分析</text>
+  <text x="651" y="141" font-size="10.5" fill="#1e7a4d" text-anchor="middle" font-family="sans-serif">对象被拆成标量</text>
+
+  <rect x="756" y="80" width="112" height="74" rx="4" fill="#efecf8" stroke="#5b4b8a" stroke-width="1.3"/>
+  <text x="812" y="104" font-size="12.5" fill="#3f3269" text-anchor="middle" font-family="sans-serif" font-weight="700">⑤ 向量化</text>
+  <text x="812" y="124" font-size="10.5" fill="#5b4b8a" text-anchor="middle" font-family="sans-serif">SIMD 并行</text>
+  <text x="812" y="141" font-size="10.5" fill="#5b4b8a" text-anchor="middle" font-family="sans-serif">一轮算 4~8 个</text>
+
+  <!-- 箭头 -->
+  <line x1="186" y1="117" x2="212" y2="117" stroke="#4d5a6b" stroke-width="1.6"/>
+  <polygon points="212,117 204,113 204,121" fill="#4d5a6b"/>
+  <line x1="366" y1="117" x2="392" y2="117" stroke="#4d5a6b" stroke-width="1.6"/>
+  <polygon points="392,117 384,113 384,121" fill="#4d5a6b"/>
+  <line x1="546" y1="117" x2="572" y2="117" stroke="#4d5a6b" stroke-width="1.6"/>
+  <polygon points="572,117 564,113 564,121" fill="#4d5a6b"/>
+  <line x1="726" y1="117" x2="752" y2="117" stroke="#4d5a6b" stroke-width="1.6"/>
+  <polygon points="752,117 744,113 744,121" fill="#4d5a6b"/>
+
+  <!-- 断链示意 -->
+  <line x1="291" y1="158" x2="291" y2="186" stroke="#b93b3b" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="300" y="180" font-size="11" fill="#b93b3b" font-family="sans-serif">内联失败 → 后面 ③④⑤ 全部失效</text>
+
+  <!-- 实测对比 -->
+  <rect x="36" y="204" width="408" height="62" rx="4" fill="#e8f5ee" stroke="#a9d5bd" stroke-width="1.2"/>
+  <text x="48" y="224" font-size="11.5" fill="#14512f" font-family="sans-serif" font-weight="700">单态：只有 Circle</text>
+  <text x="48" y="248" font-size="17" fill="#1e7a4d" font-family="monospace" font-weight="700">0.7 µs/call</text>
+  <text x="210" y="248" font-size="10.5" fill="#1e7a4d" font-family="sans-serif">内联成功，全链条生效</text>
+
+  <rect x="456" y="204" width="412" height="62" rx="4" fill="#fbeceb" stroke="#e8b4b3" stroke-width="1.2"/>
+  <text x="468" y="224" font-size="11.5" fill="#8c2f2f" font-family="sans-serif" font-weight="700">巨态：Circle + Square + Tri</text>
+  <text x="468" y="248" font-size="17" fill="#b93b3b" font-family="monospace" font-weight="700">3.3 µs/call</text>
+  <text x="620" y="248" font-size="10.5" fill="#8c2f2f" font-family="sans-serif">内联失败，4.7 倍差距</text>
+
+  <text x="30" y="290" font-size="10.5" fill="#7c8a9c" font-family="sans-serif">差距不是来自「查一次表」，而是来自「链条上后面四步全没了」</text>
+</svg>
+<figcaption><b>图 5 · 内联的连锁收益。</b>虚调用本身只值几纳秒，真正的损失是它<b>挡住了后面一整串优化</b>。实测单态 0.7µs、巨态 3.3µs，<b>4.7 倍差距</b>——这就是「多态杀性能」的机制解释，不是玄学。</figcaption>
+</figure>
+
+<p>这就是「内联是优化之母」的机制。也是为什么<strong>多态会杀死性能</strong>——不是虚调用本身慢（一次 vtable 查表只值几纳秒），而是<strong>虚调用挡住了它后面一整串优化</strong>。</p>
+
+</section>
+<!-- ============ L4 ============ -->
+<section id="l4">
+<h2><span class="lvl">L4</span>逃逸分析与标量替换：对象可以不存在</h2>
+
+<p>如果内联是最重要的优化，<strong>逃逸分析就是最被高估的优化</strong>——网上到处说「小对象分配在栈上」，这句话在 JDK 21 上是<strong>错的</strong>。</p>
+
+<p>准确说法：<strong>JVM 不会把对象分配到栈上，它是把对象「拆掉」</strong>。</p>
+
+<div class="tblwrap">
+<table>
+<tr><th>逃逸状态</th><th>含义</th><th>能否优化</th></tr>
+<tr><td><code>NoEscape</code></td><td>对象只在方法内使用，不传出</td><td>可完全标量替换</td></tr>
+<tr><td><code>ArgEscape</code></td><td>作为参数传给其他方法，但对方不存储</td><td>可能部分替换</td></tr>
+<tr><td><code>GlobalEscape</code></td><td>赋给静态字段、返回、存进堆对象</td><td>必须真实分配</td></tr>
+</table>
+</div>
+
+<p>对应三个开关（本机实测默认值）：</p>
+
+<pre><code class="text">bool DoEscapeAnalysis     = true    {C2 product} {default}   ← 分析本身
+bool EliminateAllocations = true    {C2 product} {default}   ← 消除分配
+bool EliminateLocks       = true    {C2 product} {default}   ← 锁消除</code></pre>
+
+<h3>实测：三档逃逸的分配量</h3>
+
+<p>用 <code>ThreadMXBean.getThreadAllocatedBytes</code> 精确计量。为什么不看 GC 日志？因为小对象可能根本不触发 GC，「分配了多少」和「回收了几次」是两件事，前者才是 EA 的直接收益。</p>
+
+<pre><code class="java">static class Point {
+    final int x, y;
+    Point(int x, int y) { this.x = x; this.y = y; }
+}
+
+// A. 完全本地使用：整个对象被拆成两个栈上 int
+static long noEscape(int n) {
+    long s = 0;
+    for (int i = 0; i &lt; n; i++) {
+        Point p = new Point(i, i + 1);
+        s += p.x + p.y;
+    }
+    return s;
+}
+
+// B. 只有字段 y 逃逸：字段级拆解，对象仍不必分配
+static long fieldEscape(int n) {
+    long s = 0;
+    for (int i = 0; i &lt; n; i++) {
+        Point p = new Point(i, i + 1);
+        SINK = p.y;            // volatile 静态字段
+        s += p.x;
+    }
+    return s;
+}
+
+// C. 对象整体逃逸：无法标量替换，真实分配
+static long fullEscape(int n) {
+    long s = 0;
+    for (int i = 0; i &lt; n; i++) {
+        Point p = new Point(i, i + 1);
+        SINKP = p;             // 整个引用赋给静态字段
+        s += p.x;
+    }
+    return s;
+}</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="330" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">1000 万次循环的总分配量（条长比例尺：满格 = 228.88 MB）</text>
+
+  <!-- 场景 A -->
+  <text x="40" y="76" font-size="12.5" fill="#1a2330" font-family="sans-serif" font-weight="700">A · 不逃逸</text>
+  <text x="40" y="94" font-size="10.5" fill="#7c8a9c" font-family="monospace">s += p.x + p.y</text>
+  <text x="290" y="74" font-size="10" fill="#4d5a6b" text-anchor="end" font-family="sans-serif">EA 开</text>
+  <text x="290" y="100" font-size="10" fill="#4d5a6b" text-anchor="end" font-family="sans-serif">EA 关</text>
+  <line x1="300" y1="62" x2="300" y2="106" stroke="#e3eaf4" stroke-width="1"/>
+  <line x1="700" y1="62" x2="700" y2="106" stroke="#e3eaf4" stroke-width="1" stroke-dasharray="3 3"/>
+  <text x="310" y="74" font-size="11" fill="#1e7a4d" font-family="monospace" font-weight="700">0.00 MB</text>
+  <rect x="300" y="86" width="400" height="18" rx="2" fill="#b93b3b"/>
+  <text x="710" y="100" font-size="11" fill="#b93b3b" font-family="monospace">228.88 MB</text>
+
+  <!-- 场景 B -->
+  <text x="40" y="156" font-size="12.5" fill="#1a2330" font-family="sans-serif" font-weight="700">B · 字段逃逸</text>
+  <text x="40" y="174" font-size="10.5" fill="#7c8a9c" font-family="monospace">SINK = p.y</text>
+  <text x="290" y="154" font-size="10" fill="#4d5a6b" text-anchor="end" font-family="sans-serif">EA 开</text>
+  <text x="290" y="180" font-size="10" fill="#4d5a6b" text-anchor="end" font-family="sans-serif">EA 关</text>
+  <line x1="300" y1="142" x2="300" y2="186" stroke="#e3eaf4" stroke-width="1"/>
+  <line x1="700" y1="142" x2="700" y2="186" stroke="#e3eaf4" stroke-width="1" stroke-dasharray="3 3"/>
+  <text x="310" y="154" font-size="11" fill="#1e7a4d" font-family="monospace" font-weight="700">0.00 MB</text>
+  <rect x="300" y="166" width="400" height="18" rx="2" fill="#b93b3b"/>
+  <text x="710" y="180" font-size="11" fill="#b93b3b" font-family="monospace">228.88 MB</text>
+
+  <!-- 场景 B 的惊叹标注 -->
+  <rect x="380" y="120" width="300" height="20" rx="3" fill="#e8f5ee"/>
+  <text x="530" y="135" font-size="10.5" fill="#14512f" text-anchor="middle" font-family="sans-serif">写了 volatile 字段，分配量仍然是 0</text>
+
+  <!-- 场景 C -->
+  <text x="40" y="236" font-size="12.5" fill="#1a2330" font-family="sans-serif" font-weight="700">C · 整体逃逸</text>
+  <text x="40" y="254" font-size="10.5" fill="#7c8a9c" font-family="monospace">SINKP = p</text>
+  <text x="290" y="234" font-size="10" fill="#4d5a6b" text-anchor="end" font-family="sans-serif">EA 开</text>
+  <text x="290" y="260" font-size="10" fill="#4d5a6b" text-anchor="end" font-family="sans-serif">EA 关</text>
+  <line x1="300" y1="222" x2="300" y2="266" stroke="#e3eaf4" stroke-width="1"/>
+  <line x1="700" y1="222" x2="700" y2="266" stroke="#e3eaf4" stroke-width="1" stroke-dasharray="3 3"/>
+  <rect x="300" y="226" width="400" height="18" rx="2" fill="#b93b3b"/>
+  <text x="710" y="240" font-size="11" fill="#b93b3b" font-family="monospace">228.88 MB</text>
+  <rect x="300" y="246" width="400" height="18" rx="2" fill="#b93b3b"/>
+  <text x="710" y="260" font-size="11" fill="#b93b3b" font-family="monospace">228.88 MB</text>
+
+  <!-- 结论 -->
+  <rect x="40" y="288" width="820" height="32" rx="3" fill="#1f4e79"/>
+  <text x="450" y="309" font-size="12" fill="#ffffff" text-anchor="middle" font-family="sans-serif" font-weight="600">单次分配 24.0 B/op　·　EA 生效时 A、B 两档的堆分配完全消失　·　只有整体逃逸才必须真实分配</text>
+</svg>
+<figcaption><b>图 6 · 三档逃逸的分配量实测。</b>场景 B 是本期第二个反直觉发现：即使把对象的<b>一个字段</b>写进 <code>volatile</code> 静态字段，分配量依然是 <b>0</b>。因为 C2 做的是<b>字段级拆解</b>——把 <code>p.x</code> 变成局部变量，只把 <code>p.y</code> 的值真正写出去，<b>整个对象从未存在于堆上</b>。</figcaption>
+</figure>
+
+<p>这就是「标量替换」（Scalar Replacement）的字面意思：<strong>把聚合对象拆成若干标量</strong>。粒度是<strong>字段级</strong>，不是对象级。</p>
+
+<figure>
+<svg viewBox="0 0 900 290" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="290" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">标量替换：把堆上对象拆成栈上/寄存器里的标量</text>
+
+  <!-- 左：对象 -->
+  <text x="150" y="60" font-size="12" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif" font-weight="700">替换前：堆上 24 字节</text>
+  <rect x="60" y="76" width="180" height="104" rx="3" fill="#ffffff" stroke="#b93b3b" stroke-width="1.5"/>
+  <rect x="60" y="76" width="56" height="26" fill="#f4d7d6" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="88" y="94" font-size="9.5" fill="#8c2f2f" text-anchor="middle" font-family="monospace">mark</text>
+  <rect x="116" y="76" width="34" height="26" fill="#f4d7d6" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="133" y="94" font-size="9.5" fill="#8c2f2f" text-anchor="middle" font-family="monospace">klass</text>
+  <rect x="150" y="76" width="90" height="26" fill="#fbeceb" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="195" y="94" font-size="9.5" fill="#8c2f2f" text-anchor="middle" font-family="monospace">(填充)</text>
+
+  <rect x="60" y="102" width="90" height="42" rx="0" fill="#fff7f6" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="105" y="128" font-size="12" fill="#8c2f2f" text-anchor="middle" font-family="monospace" font-weight="700">int x</text>
+  <rect x="150" y="102" width="90" height="42" fill="#fff7f6" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="195" y="128" font-size="12" fill="#8c2f2f" text-anchor="middle" font-family="monospace" font-weight="700">int y</text>
+
+  <rect x="60" y="144" width="180" height="36" rx="0" fill="#f4d7d6" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="150" y="167" font-size="11" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif">对象头 12 B + 字段 8 B + 对齐 4 B</text>
+
+  <text x="150" y="204" font-size="11" fill="#7c8a9c" text-anchor="middle" font-family="sans-serif">new Point(i, i+1)</text>
+
+  <!-- 箭头 -->
+  <line x1="268" y1="128" x2="500" y2="128" stroke="#1f4e79" stroke-width="2.2"/>
+  <polygon points="500,128 488,122 488,134" fill="#1f4e79"/>
+  <text x="384" y="116" font-size="11.5" fill="#1f4e79" text-anchor="middle" font-family="sans-serif" font-weight="600">标量替换</text>
+  <text x="384" y="150" font-size="10.5" fill="#4d5a6b" text-anchor="middle" font-family="sans-serif">NoEscape 且已内联</text>
+
+  <!-- 右：两个标量 -->
+  <text x="700" y="60" font-size="12" fill="#14512f" text-anchor="middle" font-family="sans-serif" font-weight="700">替换后：0 字节堆分配</text>
+
+  <rect x="560" y="92" width="130" height="46" rx="3" fill="#e8f5ee" stroke="#1e7a4d" stroke-width="1.5"/>
+  <text x="625" y="112" font-size="11" fill="#14512f" text-anchor="middle" font-family="monospace" font-weight="700">px = i</text>
+  <text x="625" y="129" font-size="10" fill="#1e7a4d" text-anchor="middle" font-family="sans-serif">寄存器 / 栈槽</text>
+
+  <rect x="710" y="92" width="130" height="46" rx="3" fill="#e8f5ee" stroke="#1e7a4d" stroke-width="1.5"/>
+  <text x="775" y="112" font-size="11" fill="#14512f" text-anchor="middle" font-family="monospace" font-weight="700">py = i+1</text>
+  <text x="775" y="129" font-size="10" fill="#1e7a4d" text-anchor="middle" font-family="sans-serif">寄存器 / 栈槽</text>
+
+  <rect x="560" y="152" width="280" height="46" rx="3" fill="#f8fafd" stroke="#c3cedd" stroke-width="1"/>
+  <text x="572" y="170" font-size="10.5" fill="#4d5a6b" font-family="sans-serif">对象从未存在 → 不需要分配、不需要 GC、</text>
+  <text x="572" y="188" font-size="10.5" fill="#4d5a6b" font-family="sans-serif">不需要初始化对象头（省 12 B + 一次清零）</text>
+
+  <text x="30" y="240" font-size="10.5" fill="#7c8a9c" font-family="sans-serif">注意：不是「把对象放在栈上」，而是「对象这个概念被拆没了」</text>
+  <text x="30" y="260" font-size="10.5" fill="#7c8a9c" font-family="sans-serif">HotSpot 从不做栈上分配（stack allocation），只做标量替换</text>
+</svg>
+<figcaption><b>图 7 · 标量替换的真实形态。</b>「对象被搬到栈上」是流传最广的错误说法。真实动作是：<b>对象不再作为一个整体存在</b>，它的字段变成了独立的局部变量。省下的不只是 24 字节，还有对象头初始化和一次内存清零。</figcaption>
+</figure>
+
+<h3>24 字节是怎么算出来的</h3>
+
+<p>这个数字值得记住，因为它是「Java 对象开销」的直接体现：</p>
+
+<figure>
+<svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="250" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">一个含两个 int 字段的对象：24 字节的构成（每格 25px = 1 字节）</text>
+
+  <!-- 分段条 -->
+  <rect x="60" y="70" width="200" height="54" fill="#e8f0f9" stroke="#2b6a9e" stroke-width="1.3"/>
+  <text x="160" y="93" font-size="12" fill="#1f4e79" text-anchor="middle" font-family="monospace" font-weight="700">mark word</text>
+  <text x="160" y="112" font-size="11" fill="#2b5578" text-anchor="middle" font-family="monospace">8 B</text>
+
+  <rect x="260" y="70" width="100" height="54" fill="#e8f0f9" stroke="#2b6a9e" stroke-width="1.3"/>
+  <text x="310" y="93" font-size="12" fill="#1f4e79" text-anchor="middle" font-family="monospace" font-weight="700">klass</text>
+  <text x="310" y="112" font-size="11" fill="#2b5578" text-anchor="middle" font-family="monospace">4 B</text>
+
+  <rect x="360" y="70" width="100" height="54" fill="#e8f5ee" stroke="#1e7a4d" stroke-width="1.3"/>
+  <text x="410" y="93" font-size="12" fill="#14512f" text-anchor="middle" font-family="monospace" font-weight="700">x</text>
+  <text x="410" y="112" font-size="11" fill="#1e7a4d" text-anchor="middle" font-family="monospace">4 B</text>
+
+  <rect x="460" y="70" width="100" height="54" fill="#e8f5ee" stroke="#1e7a4d" stroke-width="1.3"/>
+  <text x="510" y="93" font-size="12" fill="#14512f" text-anchor="middle" font-family="monospace" font-weight="700">y</text>
+  <text x="510" y="112" font-size="11" fill="#1e7a4d" text-anchor="middle" font-family="monospace">4 B</text>
+
+  <rect x="560" y="70" width="100" height="54" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.3" stroke-dasharray="4 3"/>
+  <text x="610" y="93" font-size="12" fill="#7a4f10" text-anchor="middle" font-family="monospace" font-weight="700">pad</text>
+  <text x="610" y="112" font-size="11" fill="#8a5e18" text-anchor="middle" font-family="monospace">4 B</text>
+
+  <!-- 大括号式标注 -->
+  <line x1="60" y1="134" x2="360" y2="134" stroke="#4d5a6b" stroke-width="1"/>
+  <line x1="60" y1="134" x2="60" y2="140" stroke="#4d5a6b" stroke-width="1"/>
+  <line x1="360" y1="134" x2="360" y2="140" stroke="#4d5a6b" stroke-width="1"/>
+  <text x="210" y="156" font-size="11" fill="#4d5a6b" text-anchor="middle" font-family="sans-serif">对象头 12 B（任何对象都有）</text>
+
+  <line x1="360" y1="134" x2="560" y2="134" stroke="#1e7a4d" stroke-width="1"/>
+  <line x1="560" y1="134" x2="560" y2="140" stroke="#1e7a4d" stroke-width="1"/>
+  <text x="460" y="156" font-size="11" fill="#1e7a4d" text-anchor="middle" font-family="sans-serif">字段 8 B</text>
+
+  <line x1="560" y1="134" x2="660" y2="134" stroke="#b7791f" stroke-width="1"/>
+  <line x1="660" y1="134" x2="660" y2="140" stroke="#b7791f" stroke-width="1"/>
+  <text x="610" y="156" font-size="11" fill="#7a4f10" text-anchor="middle" font-family="sans-serif">对齐 4 B</text>
+
+  <!-- 合计 -->
+  <rect x="690" y="70" width="150" height="54" rx="3" fill="#1f4e79"/>
+  <text x="765" y="93" font-size="11" fill="#c3d8ec" text-anchor="middle" font-family="sans-serif">合计</text>
+  <text x="765" y="115" font-size="19" fill="#ffffff" text-anchor="middle" font-family="monospace" font-weight="700">24 B</text>
+
+  <!-- 说明 -->
+  <text x="60" y="190" font-size="11" fill="#4d5a6b" font-family="sans-serif">· 对齐规则：对象总大小必须是 8 的倍数 → 20 B 补齐到 24 B</text>
+  <text x="60" y="212" font-size="11" fill="#4d5a6b" font-family="sans-serif">· klass 指针 4 B 是因为 UseCompressedOops=true（压缩 oop）；不压缩则是 8 B</text>
+  <text x="60" y="234" font-size="11" fill="#7c8a9c" font-family="sans-serif">· 所以「100 万个小对象」≈ 24 MB —— 这个换算比任何 GC 调优参数都实用</text>
+</svg>
+<figcaption><b>图 8 · 24 字节的构成。</b>注意最后 4 B 是<b>纯浪费</b>。这也解释了为什么字段顺序有讲究：<code>int + int</code> 是 20 B → 补到 24 B，如果再塞一个 <code>int</code> 变成 24 B → 仍是 24 B（<b>白送一个字段</b>）。HotSpot 会自动重排字段减少 padding，但理解这套账才能估算内存占用。</figcaption>
+</figure>
+
+<div class="note warn">
+<span class="tag">要命的一句话</span>
+<p>这 24 字节在 EA 生效时是 <b>0</b>。所以「Java 对象分配贵」这个前提，在<b>短生命周期、不逃逸</b>的场景下根本不成立。现代 JVM 上 TLAB 分配只是一次指针碰撞，比 <code>malloc</code> 快一个数量级——<b>真正的成本在「活得久」，不在「new」</b>。</p>
+</div>
+
+<h3>什么时候 EA 会失效</h3>
+
+<div class="tblwrap">
+<table>
+<tr><th>失效原因</th><th>例子</th></tr>
+<tr><td>对象赋给静态/实例字段</td><td><code>this.cache = new Node()</code></td></tr>
+<tr><td>作为返回值返回</td><td><code>return new Result()</code></td></tr>
+<tr><td>存入集合</td><td><code>list.add(new Item())</code></td></tr>
+<tr><td>被 <code>synchronized</code> 锁定且锁对象逃逸</td><td>锁对象外部可见时不能锁消除</td></tr>
+<tr><td><strong>方法未内联</strong></td><td><strong>看不到对象创建点，EA 直接放弃</strong></td></tr>
+<tr><td>方法太大不内联</td><td>同上</td></tr>
+</table>
+</div>
+
+<p>最后两行是关键链条：<strong>EA 依赖内联</strong>。一个 800 字节的工厂方法如果内联不了，它里面 <code>new</code> 的对象 EA 一律看不见。所以「保持方法小」这件事，收益是<strong>双份</strong>的：既提高内联率，又让 EA 有机会生效。</p>
+
+</section>
+<!-- ============ L5 ============ -->
+<section id="l5">
+<h2><span class="lvl">L5</span>去优化 deopt：JVM 会主动打自己的脸</h2>
+
+<p>这是全篇最重要的机制，也是绝大多数人完全没概念的部分。</p>
+
+<h3>核心事实：C2 的优化是「带赌注」的</h3>
+
+<p>C2 编译 <code>((Integer) o).intValue()</code> 时，profile 告诉它「这个调用点 100% 是 Integer」。C2 不会生成「检查类型再转型」的通用代码，而是<strong>赌</strong>「一定是 Integer」，然后按最优路径编译——把 checkcast 直接删掉。</p>
+
+<p>赌注记录在编译产物里（<code>nmethod</code> 的依赖列表）。一旦赌输，JVM 必须做三件事：</p>
+
+<figure>
+<svg viewBox="0 0 900 370" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="370" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">deopt 的完整时序：从「删除类型检查」到「退回解释器」再「重新编译」</text>
+
+  <!-- ① -->
+  <rect x="46" y="60" width="176" height="78" rx="4" fill="#e8f0f9" stroke="#2b6a9e" stroke-width="1.4"/>
+  <text x="134" y="82" font-size="11.5" fill="#1f4e79" text-anchor="middle" font-family="sans-serif" font-weight="700">① C2 编译</text>
+  <text x="134" y="101" font-size="10.5" fill="#2b5578" text-anchor="middle" font-family="sans-serif">profile：这里 100% 是 Integer</text>
+  <text x="134" y="119" font-size="10.5" fill="#2b5578" text-anchor="middle" font-family="sans-serif">→ 删除 checkcast</text>
+  <text x="134" y="133" font-size="10.5" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif">这是赌注</text>
+
+  <!-- ② -->
+  <rect x="266" y="60" width="160" height="78" rx="4" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/>
+  <text x="346" y="82" font-size="11.5" fill="#7a4f10" text-anchor="middle" font-family="sans-serif" font-weight="700">② 传入 Long</text>
+  <text x="346" y="101" font-size="10.5" fill="#8a5e18" text-anchor="middle" font-family="sans-serif">profile 采样没覆盖到</text>
+  <text x="346" y="119" font-size="10.5" fill="#8a5e18" text-anchor="middle" font-family="sans-serif">罕见类型出现</text>
+  <text x="346" y="133" font-size="10.5" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif">赌输了</text>
+
+  <!-- ③ -->
+  <rect x="470" y="60" width="180" height="78" rx="4" fill="#fbeceb" stroke="#b93b3b" stroke-width="1.6"/>
+  <text x="560" y="82" font-size="11.5" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif" font-weight="700">③ uncommon trap</text>
+  <text x="560" y="101" font-size="10.5" fill="#a83a3a" text-anchor="middle" font-family="sans-serif">checkcast 检查失败</text>
+  <text x="560" y="119" font-size="10.5" fill="#a83a3a" text-anchor="middle" font-family="sans-serif">从机器码跳出</text>
+  <text x="560" y="133" font-size="10.5" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif">→ ClassCastException</text>
+
+  <!-- ① -> ② -->
+  <line x1="222" y1="99" x2="262" y2="99" stroke="#4d5a6b" stroke-width="1.8"/>
+  <polygon points="262,99 252,94 252,104" fill="#4d5a6b"/>
+  <!-- ② -> ③ -->
+  <line x1="426" y1="99" x2="466" y2="99" stroke="#4d5a6b" stroke-width="1.8"/>
+  <polygon points="466,99 456,94 456,104" fill="#4d5a6b"/>
+
+  <!-- ③ 下折 -->
+  <line x1="650" y1="99" x2="700" y2="99" stroke="#b93b3b" stroke-width="1.8"/>
+  <line x1="700" y1="99" x2="700" y2="220" stroke="#b93b3b" stroke-width="1.8"/>
+  <polygon points="700,220 695,210 705,210" fill="#b93b3b"/>
+
+  <!-- ④ -->
+  <rect x="600" y="232" width="270" height="72" rx="4" fill="#fbeceb" stroke="#b93b3b" stroke-width="1.4"/>
+  <text x="735" y="254" font-size="11.5" fill="#8c2f2f" text-anchor="middle" font-family="sans-serif" font-weight="700">④ 标记 made not entrant</text>
+  <text x="735" y="273" font-size="10.5" fill="#a83a3a" text-anchor="middle" font-family="sans-serif">该编译版本不再接受新调用</text>
+  <text x="735" y="291" font-size="10.5" fill="#a83a3a" text-anchor="middle" font-family="sans-serif">正在执行的栈帧退回解释器继续跑</text>
+
+  <!-- ④ -> ⑤ -->
+  <line x1="596" y1="268" x2="470" y2="268" stroke="#4d5a6b" stroke-width="1.8"/>
+  <polygon points="470,268 480,263 480,273" fill="#4d5a6b"/>
+
+  <!-- ⑤ -->
+  <rect x="290" y="232" width="180" height="72" rx="4" fill="#efecf8" stroke="#5b4b8a" stroke-width="1.4"/>
+  <text x="380" y="254" font-size="11.5" fill="#3f3269" text-anchor="middle" font-family="sans-serif" font-weight="700">⑤ 重新收集 profile</text>
+  <text x="380" y="273" font-size="10.5" fill="#5b4b8a" text-anchor="middle" font-family="sans-serif">解释执行中重新采样</text>
+  <text x="380" y="291" font-size="10.5" fill="#5b4b8a" text-anchor="middle" font-family="sans-serif">这次会看到两种类型</text>
+
+  <!-- ⑤ -> ⑥ -->
+  <line x1="286" y1="268" x2="200" y2="268" stroke="#4d5a6b" stroke-width="1.8"/>
+  <polygon points="200,268 210,263 210,273" fill="#4d5a6b"/>
+
+  <!-- ⑥ -->
+  <rect x="46" y="232" width="150" height="72" rx="4" fill="#e8f5ee" stroke="#1e7a4d" stroke-width="1.4"/>
+  <text x="121" y="254" font-size="11.5" fill="#14512f" text-anchor="middle" font-family="sans-serif" font-weight="700">⑥ 重新编译</text>
+  <text x="121" y="273" font-size="10.5" fill="#1e7a4d" text-anchor="middle" font-family="sans-serif">这次生成带检查的</text>
+  <text x="121" y="291" font-size="10.5" fill="#1e7a4d" text-anchor="middle" font-family="sans-serif">通用版本</text>
+
+  <!-- 时间轴 -->
+  <line x1="46" y1="330" x2="870" y2="330" stroke="#9aaabf" stroke-width="1.2"/>
+  <text x="46" y="348" font-size="10.5" fill="#7c8a9c" font-family="sans-serif">时间</text>
+  <text x="470" y="348" font-size="10.5" fill="#7c8a9c" text-anchor="middle" font-family="sans-serif">代价：这一段期间执行变慢，但结束后会恢复</text>
+
+  <!-- 实测 -->
+  <rect x="470" y="158" width="250" height="46" rx="3" fill="#f8fafd" stroke="#c3cedd" stroke-width="1"/>
+  <text x="482" y="176" font-size="10.5" fill="#1e7a4d" font-family="monospace">PHASE1 单态   0.4 µs/call</text>
+  <text x="482" y="194" font-size="10.5" fill="#1e7a4d" font-family="monospace">PHASE3 deopt后 0.4 µs/call</text>
+</svg>
+<figcaption><b>图 9 · deopt 时序。</b>注意 ⑤→⑥ 这段：<b>deopt 不是终点，JVM 会在解释执行中重新收集 profile，然后重新编译</b>。所以「deopt 导致性能永久下降」是错的——真正的代价是<b>那一段慢速执行和反复 deopt 造成的抖动</b>。</figcaption>
+</figure>
+
+<h3>实测：deopt 全过程</h3>
+
+<p>代码：一个方法在循环里做 <code>((Integer) arr[i]).intValue()</code>，先用 <code>Integer[]</code> 喂到 C2，然后突然传 <code>Long[]</code>。</p>
+
+<pre><code class="java">static int sumInts(Object[] arr) {
+    int s = 0;
+    for (int i = 0; i &lt; arr.length; i++) {
+        s += ((Integer) arr[i]).intValue();   // profile 会记录"只会是 Integer"
+    }
+    return s;
+}</code></pre>
+
+<pre><code class="text">PHASE1 monomorphic  =      0.4 us/call     ← 单态，C2 已把 checkcast 优化掉
+PHASE2 ClassCastException (符合预期)        ← 赌输了
+PHASE3 after-deopt   =      0.4 us/call     ← 重新编译后恢复</code></pre>
+
+<p><strong>注意 PHASE3 又回到 0.4 µs</strong>。一次 deopt 不会让你永久变慢，JVM 会在解释执行中重新收集 profile，然后重新编译。</p>
+
+<h3>编译日志里的证据</h3>
+
+<pre><code class="text">    40   87 %     3   Deopt::sumInts @ 4 (30 bytes)      ← Tier 3 OSR
+    41   89 %     4   Deopt::sumInts @ 4 (30 bytes)      ← 升 Tier 4
+    43   87 %     3   Deopt::sumInts @ 4 (30 bytes)   made not entrant   ← 旧版本废弃
+    43   90       4   Deopt::sumInts (30 bytes)          ← 新 Tier 4 版本（非 OSR）</code></pre>
+
+<div class="note tip">
+<span class="tag">读日志的技巧</span>
+<p><code>made not entrant</code> 是 deopt 的<b>唯一可靠标志</b>。看到它出现在某个方法上，就说明那个方法的某个优化假设被推翻了。同一个方法<b>反复出现</b>才是真问题，偶尔出现是正常的版本迭代。</p>
+</div>
+
+<h3>巨态调用：deopt 的慢性版本</h3>
+
+<p>除了「类型突变」这种一次性 deopt，还有一种<strong>持续的</strong>性能损失：megamorphic call site（巨态调用点）。</p>
+
+<p>C2 对调用点的类型 profile 有容量上限（单态 → 双态）。当一个接口出现 3 种以上实现，profile 溢出成 megamorphic，C2 就<strong>彻底放弃内联</strong>——不是「内联失败一次」，而是「这个调用点永远不会被内联」。</p>
+
+<figure>
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="320" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">同一段 Shape.area() 求和：实现数量决定调用点命运</text>
+
+  <!-- 条形：单态 -->
+  <text x="40" y="80" font-size="12" fill="#14512f" font-family="sans-serif" font-weight="700">单态（1 种实现）</text>
+  <text x="40" y="100" font-size="10.5" fill="#7c8a9c" font-family="sans-serif">只有 Circle</text>
+  <rect x="200" y="66" width="140" height="34" rx="2" fill="#1e7a4d"/>
+  <text x="350" y="89" font-size="13" fill="#14512f" font-family="monospace" font-weight="700">0.7 µs/call</text>
+
+  <!-- 条形：巨态 -->
+  <text x="40" y="160" font-size="12" fill="#8c2f2f" font-family="sans-serif" font-weight="700">巨态（3 种实现）</text>
+  <text x="40" y="180" font-size="10.5" fill="#7c8a9c" font-family="sans-serif">Circle + Square + Tri</text>
+  <rect x="200" y="146" width="660" height="34" rx="2" fill="#b93b3b"/>
+  <text x="700" y="169" font-size="13" fill="#ffffff" font-family="monospace" font-weight="700">3.3 µs/call</text>
+
+  <!-- 比例尺 -->
+  <line x1="200" y1="200" x2="860" y2="200" stroke="#c3cedd" stroke-width="1" stroke-dasharray="3 3"/>
+  <text x="200" y="216" font-size="10" fill="#7c8a9c" font-family="monospace">0</text>
+  <text x="860" y="216" font-size="10" fill="#7c8a9c" text-anchor="end" font-family="monospace">3.5 µs</text>
+
+  <!-- 4.7x 徽章 -->
+  <rect x="380" y="106" width="120" height="34" rx="3" fill="#ffffff" stroke="#b93b3b" stroke-width="1.4"/>
+  <text x="440" y="129" font-size="15" fill="#b93b3b" text-anchor="middle" font-family="monospace" font-weight="700">4.7 ×</text>
+
+  <!-- 下半：profile 三态 -->
+  <text x="40" y="252" font-size="11.5" fill="#4d5a6b" font-family="sans-serif" font-weight="600">调用点类型 profile 的三档命运</text>
+
+  <rect x="40" y="262" width="250" height="46" rx="3" fill="#e8f5ee" stroke="#a9d5bd" stroke-width="1"/>
+  <text x="52" y="280" font-size="10.5" fill="#14512f" font-family="sans-serif" font-weight="600">monomorphic · 1 种</text>
+  <text x="52" y="297" font-size="10.5" fill="#1e7a4d" font-family="sans-serif">内联 + 去虚化，全链条生效</text>
+
+  <rect x="306" y="262" width="250" height="46" rx="3" fill="#fdf3e3" stroke="#e8cfa4" stroke-width="1"/>
+  <text x="318" y="280" font-size="10.5" fill="#7a4f10" font-family="sans-serif" font-weight="600">bimorphic · 2 种</text>
+  <text x="318" y="297" font-size="10.5" fill="#8a5e18" font-family="sans-serif">生成类型判断 + 两条内联分支</text>
+
+  <rect x="572" y="262" width="288" height="46" rx="3" fill="#fbeceb" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="584" y="280" font-size="10.5" fill="#8c2f2f" font-family="sans-serif" font-weight="600">megamorphic · 3+ 种</text>
+  <text x="584" y="297" font-size="10.5" fill="#b93b3b" font-family="sans-serif">永久放弃内联，退化为真实虚调用</text>
+</svg>
+<figcaption><b>图 10 · 单态与巨态的实测差距。</b>4.7 倍的来源不是「多查了一次 vtable」，而是<b>整个优化链条被切断</b>。这也是「线上服务加了第二种实现，接口突然变慢 4 倍」的完整机制。</figcaption>
+</figure>
+
+<p>日志里能看到「凶手」：</p>
+
+<pre><code class="text">    75   215       3   Deopt$Circle::area (14 bytes)      made not entrant
+    78   217 %     3   Deopt::sumShapes @ 11 (42 bytes)   made not entrant
+    92   220       4   Deopt::sumShapes (42 bytes)        made not entrant
+    94   226       3   Deopt$Square::area (10 bytes)      made not entrant
+    94   227       3   Deopt$Tri::area (14 bytes)         made not entrant</code></pre>
+
+<p><strong>连 <code>Circle::area</code> 这个 14 字节的 getter 都被废弃了</strong>。不是因为它本身有问题，而是因为「内联它」这个决定所依赖的单态假设失效了。</p>
+
+<h3>工程推论：哪些写法会引来 deopt</h3>
+
+<div class="tblwrap">
+<table>
+<tr><th>写法</th><th>风险</th><th>规避</th></tr>
+<tr><td><code>instanceof</code> 链 + 强制转型</td><td>类型突变 → deopt</td><td>用多态，或 <code>switch</code> 模式匹配</td></tr>
+<tr><td>接口被 3+ 实现频繁混调</td><td>megamorphic，永久失去内联</td><td>拆分接口、按类型分流</td></tr>
+<tr><td><code>Map.get()</code> 返回不同类型</td><td>调用点巨态</td><td>用具体类型 <code>HashMap&lt;String,Order&gt;</code>，别用裸 <code>Map</code></td></tr>
+<tr><td>反射 / <code>MethodHandle</code></td><td>无法内联</td><td>缓存 <code>MethodHandle</code>，或用 <code>LambdaMetafactory</code></td></tr>
+<tr><td>运行期加载新子类</td><td>CHA 失效（类层次分析被推翻）</td><td>热路径别动态加载实现类</td></tr>
+</table>
+</div>
+
+<p>最后一条值得展开：C2 用 <strong>CHA（Class Hierarchy Analysis）</strong>判断「这个接口只有一个实现」，从而把虚调用改成直接调用。<strong>如果你在运行期动态加载了一个新实现类，所有基于「只有一个实现」的编译结果全部失效</strong>——这就是「热部署 / 插件化框架会导致性能抖动」的底层原因。</p>
+
+</section>
+<!-- ============ L6 ============ -->
+<section id="l6">
+<h2><span class="lvl">L6</span>代码缓存：预留 245MB，实际只用 2.2MB</h2>
+
+<p>编译出来的机器码存在 <strong>CodeCache</strong> 里，不在堆里。这是个常被忽略的内存区，但它是「线上跑着跑着突然变慢」的三大嫌疑人之一。</p>
+
+<p>本机实测（<code>-XX:+PrintCodeCache</code>）：</p>
+
+<pre><code class="text">CodeHeap 'non-profiled nmethods': size=119168Kb used=80Kb    max_used=80Kb    free=119087Kb
+CodeHeap 'profiled nmethods'    : size=119104Kb used=301Kb   max_used=301Kb   free=118802Kb
+CodeHeap 'non-nmethods'         : size=7488Kb   used=1833Kb  max_used=1847Kb  free=5654Kb</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="330" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">代码缓存三段式布局：预留容量 vs 实际占用（条长 = 预留，深色块 = 占用）</text>
+
+  <!-- 第一段 -->
+  <text x="40" y="68" font-size="11.5" fill="#1a2330" font-family="sans-serif" font-weight="600">non-profiled</text>
+  <text x="40" y="85" font-size="10" fill="#7c8a9c" font-family="sans-serif">C2 编译结果</text>
+  <rect x="200" y="56" width="520" height="30" rx="2" fill="#eef2f8" stroke="#c3cedd" stroke-width="1"/>
+  <rect x="200" y="56" width="4" height="30" rx="2" fill="#1f4e79"/>
+  <text x="212" y="76" font-size="10" fill="#1f4e79" font-family="monospace">used 80 K（0.07%）</text>
+  <text x="734" y="76" font-size="11" fill="#4d5a6b" font-family="monospace">预留 119,168 K</text>
+
+  <!-- 第二段 -->
+  <text x="40" y="138" font-size="11.5" fill="#1a2330" font-family="sans-serif" font-weight="600">profiled</text>
+  <text x="40" y="155" font-size="10" fill="#7c8a9c" font-family="sans-serif">C1 编译结果</text>
+  <rect x="200" y="126" width="520" height="30" rx="2" fill="#eef2f8" stroke="#c3cedd" stroke-width="1"/>
+  <rect x="200" y="126" width="5" height="30" rx="2" fill="#2b6a9e"/>
+  <text x="213" y="146" font-size="10" fill="#2b6a9e" font-family="monospace">used 301 K（0.25%）</text>
+  <text x="734" y="146" font-size="11" fill="#4d5a6b" font-family="monospace">预留 119,104 K</text>
+
+  <!-- 第三段 -->
+  <text x="40" y="208" font-size="11.5" fill="#1a2330" font-family="sans-serif" font-weight="600">non-nmethods</text>
+  <text x="40" y="225" font-size="10" fill="#7c8a9c" font-family="sans-serif">适配器 / stub</text>
+  <rect x="200" y="196" width="520" height="30" rx="2" fill="#eef2f8" stroke="#c3cedd" stroke-width="1"/>
+  <rect x="200" y="196" width="127" height="30" rx="2" fill="#b7791f"/>
+  <text x="335" y="216" font-size="10" fill="#7a4f10" font-family="monospace">used 1,833 K（24.5%）</text>
+  <text x="734" y="216" font-size="11" fill="#4d5a6b" font-family="monospace">预留 7,488 K</text>
+
+  <!-- 合计 -->
+  <rect x="40" y="248" width="440" height="52" rx="4" fill="#f8fafd" stroke="#c3cedd" stroke-width="1"/>
+  <text x="54" y="268" font-size="11" fill="#4d5a6b" font-family="sans-serif">预留总计 245.7 MB</text>
+  <text x="54" y="290" font-size="16" fill="#1f4e79" font-family="monospace" font-weight="700">实际占用 2.2 MB</text>
+  <text x="250" y="290" font-size="11" fill="#1e7a4d" font-family="sans-serif">不到 1%</text>
+
+  <rect x="492" y="248" width="380" height="52" rx="4" fill="#fbeceb" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="506" y="268" font-size="10.5" fill="#8c2f2f" font-family="sans-serif" font-weight="600">注意 non-nmethods 用了 24.5%</text>
+  <text x="506" y="289" font-size="10.5" fill="#8c2f2f" font-family="sans-serif">因为它只有 7.3 MB，却要放所有 stub 适配器</text>
+</svg>
+<figcaption><b>图 11 · 代码缓存的三段式布局。</b><code>SegmentedCodeCache=true</code>（默认）把缓存切成三段，避免 C1 的低质量代码和 C2 的高质量代码混在一起造成碎片。<b>普通应用永远用不满——但有三类会。</b></figcaption>
+</figure>
+
+<div class="tblwrap">
+<table>
+<tr><th>段</th><th>预留</th><th>实测占用</th><th>存什么</th></tr>
+<tr><td><code>non-profiled nmethods</code></td><td>119 MB</td><td>80 KB</td><td>C2 编译结果（不带 profile 的 nmethod）</td></tr>
+<tr><td><code>profiled nmethods</code></td><td>119 MB</td><td>301 KB</td><td>C1 编译结果（带 profile）</td></tr>
+<tr><td><code>non-nmethods</code></td><td>7.3 MB</td><td>1.8 MB</td><td>适配器、stub、编译器自身代码</td></tr>
+</table>
+</div>
+
+<p>总计预留 <strong>245.7 MB</strong>，实际只用 <strong>2.2 MB</strong>——<strong>用了不到 1%</strong>。</p>
+
+<p>这张表的面试价值：它直接回答了「代码缓存会不够吗」。答案是<strong>普通应用永远不会</strong>，但有三类会：</p>
+
+<ol>
+<li><strong>大量动态生成类的框架</strong>（CGLIB、Groovy、JSP、规则引擎、大量 lambda）——每个类都可能有自己的编译产物</li>
+<li><strong>脚本化 / 多租户平台</strong>，同一份逻辑被参数化成上万种变体</li>
+<li><strong>长时间运行的巨型单体</strong>，几万个方法都被编译</li>
+</ol>
+
+<h3>满了会怎样：最恶性的故障之一</h3>
+
+<p>代码缓存满了，<strong>JVM 停止编译，全部代码退回解释执行</strong>。这是最难排查的故障，因为：</p>
+
+<ul>
+<li><strong>不报 OOM</strong>，只是性能断崖</li>
+<li>日志里出现 <code>CodeCache is full. Compiler has been disabled</code></li>
+<li>从那一刻起，应用永久慢 5~10 倍（回到解释器的速度）</li>
+</ul>
+
+<div class="tblwrap">
+<table>
+<tr><th>参数</th><th>本机默认</th><th>说明</th></tr>
+<tr><td><code>ReservedCodeCacheSize</code></td><td>240 MB</td><td>上限（实测 251658240 B）</td></tr>
+<tr><td><code>UseCodeCacheFlushing</code></td><td>true</td><td>满了先尝试回收「冷」的编译产物</td></tr>
+<tr><td><code>StartAggressiveSweepingAt</code></td><td>10 (%)</td><td>用到 10% 就开始激进清扫</td></tr>
+<tr><td><code>SegmentedCodeCache</code></td><td>true</td><td>三段式，减少碎片</td></tr>
+</table>
+</div>
+
+<p><strong>处置</strong>：先用 <code>jcmd &lt;pid&gt; Compiler.codecache</code> 看占用，再决定是加 <code>-XX:ReservedCodeCacheSize=512m</code> 还是查「为什么会有这么多类」。<strong>盲目加参数是治标</strong>——如果是 CGLIB 每次请求都生成新类，512MB 也只是晚一点崩。</p>
+
+<h3>为什么代码缓存和堆必须分开</h3>
+
+<ul>
+<li>机器码是<strong>只读可执行</strong>的，需要 <code>PROT_EXEC</code> 权限，堆内存不需要</li>
+<li>代码缓存<strong>不参与 GC 的标记-整理</strong>，靠自己的清扫机制</li>
+<li>编译产物可能被<strong>全部废弃</strong>（deopt），需要独立的回收策略</li>
+</ul>
+
+<p>这三个理由决定了它必须是独立内存区。所以看到一个进程 RSS 比堆大很多时，<strong>别只怀疑堆外（DirectByteBuffer / Netty），还要算上代码缓存</strong>——虽然通常它只有几 MB。</p>
+
+</section>
+<!-- ============ L7 ============ -->
+<section id="l7">
+<h2><span class="lvl">L7</span>基准测试：为什么你写的 benchmark 一定是错的</h2>
+
+<p>这是面试里最能筛人的一段。因为「写 benchmark」看起来是件小事，实际上是个<strong>陷阱密集的专业技能</strong>。</p>
+
+<p>先看一个实测：同一段计算，写了两个「等价」的循环，测出来差 <strong>15 万倍</strong>。</p>
+
+<h3>坑 1：死代码消除（DCE）——最凶的那个</h3>
+
+<pre><code class="java">// A：结果丢弃
+static void deadLoop(int n) {
+    for (int i = 0; i &lt; n; i++) {
+        Math.sqrt(i * 1.0000001);     // 返回值没人要
+    }
+}
+
+// B：结果写 volatile 黑洞
+static void liveLoop(int n) {
+    double s = 0;
+    for (int i = 0; i &lt; n; i++) {
+        s += Math.sqrt(i * 1.0000001);
+    }
+    SINK = s;                          // volatile 写，无法优化掉
+}</code></pre>
+
+<pre><code class="text">COLD  deadLoop  =    1.596 ms      ← 冷启动，尚未完全优化
+WARM  deadLoop  =    0.001 ms      ← C2 把整个循环删了
+WARM  liveLoop  =  155.288 ms      ← 真实工作量
+─────────────────────────────────────────
+比值                 155,288 ×      ← 15 万倍</code></pre>
+
+<div class="note warn">
+<span class="tag">5000 万次 Math.sqrt 只花 1 微秒</span>
+<p>因为这个循环<b>根本不存在了</b>。C2 发现「计算结果无人使用、<code>Math.sqrt</code> 无副作用」，直接把整段代码删除。<b>这不是 bug，是正确优化</b>——但它让你的 benchmark 变成「测空气」。</p>
+</div>
+
+<p>正确写法：结果必须「被使用」，且不能被优化掉。</p>
+
+<pre><code class="java">static volatile double SINK;          // volatile 写有内存屏障，无法被消除
+
+// 或者用 JMH 的 Blackhole
+@Benchmark
+public void test(Blackhole bh) {
+    double s = 0;
+    for (int i = 0; i &lt; N; i++) s += Math.sqrt(i);
+    bh.consume(s);                    // Blackhole 保证结果被"用掉"
+}</code></pre>
+
+<p><code>Blackhole.consume()</code> 内部用了一套技巧，确保<strong>值既被使用、又不会引入额外开销</strong>。手写 <code>volatile</code> 也能防 DCE，但会引入写屏障成本——这就是为什么必须用 Blackhole 而不是自己造。</p>
+
+<h3>坑 2 ~ 7：一张表看完</h3>
+
+<div class="tblwrap">
+<table>
+<tr><th>坑</th><th>现象</th><th>为什么会错</th><th>解法</th></tr>
+<tr><td><strong>预热不足</strong></td><td>测出 1.11ms 而不是 89µs</td><td>测到的是 JIT 爬坡期，不是稳态</td><td><code>@Warmup(3,1)</code></td></tr>
+<tr><td><strong>OSR 干扰</strong></td><td>测的是「循环」不是「方法调用」</td><td>大循环被 OSR 编译，优化上下文受限</td><td><code>@Fork</code> + 独立方法</td></tr>
+<tr><td><strong>常量折叠</strong></td><td>结果快得不正常</td><td><code>final</code> 常量在编译期就算完了</td><td>字段非 final，通过参数传入</td></tr>
+<tr><td><strong>伪共享</strong></td><td>多线程扩展性极差</td><td>两个变量在同一缓存行互相失效</td><td>填充 / <code>@Contended</code></td></tr>
+<tr><td><strong>GC 干扰</strong></td><td>平均值被一次 Full GC 拉偏</td><td>单次长尾污染整体均值</td><td>给足堆 + 看 p99 分布</td></tr>
+<tr><td><strong><code>-Xcomp</code></strong></td><td>比正常慢 2~5 倍</td><td>profile 为空，所有基于 profile 的优化失效</td><td><strong>永远别用它测性能</strong></td></tr>
+</table>
+</div>
+
+<p><strong>关于伪共享</strong>：两个线程各自递增自己的 <code>long</code> 计数器，如果这两个字段落在<strong>同一个缓存行</strong>（64 B）里，会互相让对方的缓存行失效——性能可能差 5~10 倍。</p>
+
+<pre><code class="java">// 坏：a 和 b 在同一缓存行
+class BadCounter  { volatile long a; volatile long b; }
+
+// 好：填充到不同缓存行
+class GoodCounter { volatile long a; long p1,p2,p3,p4,p5,p6,p7; volatile long b; }</code></pre>
+
+<p>JDK 8+ 有 <code>@sun.misc.Contended</code>（需 <code>-XX:-RestrictContended</code>），JDK 21 里 <code>LongAdder</code> 内部就用它。<strong>面试关联</strong>：<code>LongAdder</code> 比 <code>AtomicLong</code> 快，一半功劳在 <code>Cell</code> 数组分散竞争，另一半就在 <code>@Contended</code> 避免伪共享。</p>
+
+<h3>JMH：三个必设参数</h3>
+
+<figure>
+<svg viewBox="0 0 900 310" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="900" height="310" fill="#ffffff"/>
+  <text x="30" y="26" font-size="13" fill="#4d5a6b" font-family="sans-serif">一次 JMH 运行的时间轴：三段各解决一类坑</text>
+
+  <!-- fork 阶段 -->
+  <rect x="60" y="96" width="90" height="54" rx="3" fill="#efecf8" stroke="#5b4b8a" stroke-width="1.3"/>
+  <text x="105" y="118" font-size="11" fill="#3f3269" text-anchor="middle" font-family="sans-serif" font-weight="700">Fork</text>
+  <text x="105" y="136" font-size="10" fill="#5b4b8a" text-anchor="middle" font-family="sans-serif">全新 JVM</text>
+
+  <!-- warmup 3 格 -->
+  <rect x="150" y="96" width="240" height="54" rx="3" fill="#fdf3e3" stroke="#c98a2b" stroke-width="1.3"/>
+  <line x1="230" y1="96" x2="230" y2="150" stroke="#e8cfa4" stroke-width="1"/>
+  <line x1="310" y1="96" x2="310" y2="150" stroke="#e8cfa4" stroke-width="1"/>
+  <text x="190" y="118" font-size="10" fill="#7a4f10" text-anchor="middle" font-family="monospace">1s</text>
+  <text x="270" y="118" font-size="10" fill="#7a4f10" text-anchor="middle" font-family="monospace">1s</text>
+  <text x="350" y="118" font-size="10" fill="#7a4f10" text-anchor="middle" font-family="monospace">1s</text>
+  <text x="270" y="138" font-size="10.5" fill="#7a4f10" text-anchor="middle" font-family="sans-serif">Warmup × 3（丢弃）</text>
+
+  <!-- measurement 5 格 -->
+  <rect x="390" y="96" width="400" height="54" rx="3" fill="#e8f5ee" stroke="#1e7a4d" stroke-width="1.3"/>
+  <line x1="470" y1="96" x2="470" y2="150" stroke="#a9d5bd" stroke-width="1"/>
+  <line x1="550" y1="96" x2="550" y2="150" stroke="#a9d5bd" stroke-width="1"/>
+  <line x1="630" y1="96" x2="630" y2="150" stroke="#a9d5bd" stroke-width="1"/>
+  <line x1="710" y1="96" x2="710" y2="150" stroke="#a9d5bd" stroke-width="1"/>
+  <text x="590" y="138" font-size="10.5" fill="#14512f" text-anchor="middle" font-family="sans-serif">Measurement × 5（计入结果）</text>
+
+  <!-- 收尾 -->
+  <rect x="790" y="96" width="70" height="54" rx="3" fill="#eef2f8" stroke="#9aa5b4" stroke-width="1.2"/>
+  <text x="825" y="118" font-size="10" fill="#4a5568" text-anchor="middle" font-family="sans-serif">输出</text>
+  <text x="825" y="136" font-size="10" fill="#4a5568" text-anchor="middle" font-family="monospace">±误差</text>
+
+  <!-- 时间轴 -->
+  <line x1="60" y1="170" x2="860" y2="170" stroke="#9aaabf" stroke-width="1.2"/>
+  <text x="60" y="188" font-size="10.5" fill="#7c8a9c" font-family="sans-serif">时间 →</text>
+
+  <!-- 三段说明 -->
+  <rect x="60" y="204" width="180" height="64" rx="3" fill="#f8fafd" stroke="#c3cedd" stroke-width="1"/>
+  <text x="72" y="222" font-size="10.5" fill="#3f3269" font-family="sans-serif" font-weight="600">@Fork(1)</text>
+  <text x="72" y="240" font-size="10" fill="#4d5a6b" font-family="sans-serif">隔离 profile 污染</text>
+  <text x="72" y="257" font-size="10" fill="#4d5a6b" font-family="sans-serif">隔离代码缓存状态</text>
+
+  <rect x="252" y="204" width="230" height="64" rx="3" fill="#f8fafd" stroke="#c3cedd" stroke-width="1"/>
+  <text x="264" y="222" font-size="10.5" fill="#7a4f10" font-family="sans-serif" font-weight="600">@Warmup(3, 1)</text>
+  <text x="264" y="240" font-size="10" fill="#4d5a6b" font-family="sans-serif">跑过解释器 → C1 → C2</text>
+  <text x="264" y="257" font-size="10" fill="#4d5a6b" font-family="sans-serif">这几轮结果直接丢弃</text>
+
+  <rect x="494" y="204" width="230" height="64" rx="3" fill="#f8fafd" stroke="#c3cedd" stroke-width="1"/>
+  <text x="506" y="222" font-size="10.5" fill="#14512f" font-family="sans-serif" font-weight="600">@Measurement(5, 1)</text>
+  <text x="506" y="240" font-size="10" fill="#4d5a6b" font-family="sans-serif">多轮取统计值</text>
+  <text x="506" y="257" font-size="10" fill="#4d5a6b" font-family="sans-serif">附带误差区间 ±</text>
+
+  <rect x="736" y="204" width="124" height="64" rx="3" fill="#fbeceb" stroke="#e8b4b3" stroke-width="1"/>
+  <text x="748" y="222" font-size="10.5" fill="#8c2f2f" font-family="sans-serif" font-weight="600">每个方法独立</text>
+  <text x="748" y="240" font-size="10" fill="#8c2f2f" font-family="sans-serif">各跑一次完整流程</text>
+  <text x="748" y="257" font-size="10" fill="#8c2f2f" font-family="sans-serif">互不影响</text>
+</svg>
+<figcaption><b>图 12 · JMH 的三段时间。</b><b>Fork 不是「多跑几次」，而是「起全新 JVM」</b>——因为编译状态是全局的。Warmup 的轮次结果直接丢弃，Measurement 才计入。<b>少了任何一段，数字都不可信。</b></figcaption>
+</figure>
+
+<pre><code class="java">@BenchmarkMode(Mode.AverageTime)         // 测平均耗时
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@State(Scope.Thread)                     // 状态作用域：每线程一份
+@Fork(value = 1, jvmArgs = {"-Xms2g", "-Xmx2g"})   // ① 独立 JVM
+@Warmup(iterations = 3, time = 1)        // ② 预热 3 轮 × 1 秒
+@Measurement(iterations = 5, time = 1)   // ③ 正式测量 5 轮 × 1 秒
+public class MyBenchmark {
+
+    @Param({"1000", "10000"})
+    int size;
+
+    private int[] data;
+
+    @Setup(Level.Trial)                  // 每个 fork 前初始化一次
+    public void setup() {
+        data = new int[size];
+        for (int i = 0; i &lt; size; i++) data[i] = i;
+    }
+
+    @Benchmark
+    public long sum() {
+        long s = 0;
+        for (int v : data) s += v;
+        return s;                        // 返回值被 JMH 消费，无需手写 Blackhole
+    }
+}</code></pre>
+
+<div class="tblwrap">
+<table>
+<tr><th>参数</th><th>解决什么坑</th><th>不设会怎样</th></tr>
+<tr><td><code>@Fork(1)</code></td><td>profile 污染、OSR 干扰</td><td>多个 benchmark 跑在同一 JVM，前一个的 profile 影响后一个</td></tr>
+<tr><td><code>@Warmup(3,1)</code></td><td>预热不足</td><td>测到 JIT 爬坡期，结果偏慢 10 倍</td></tr>
+<tr><td><code>@Measurement(5,1)</code></td><td>单次抖动</td><td>一次测量受 GC/调度影响，结果不可复现</td></tr>
+</table>
+</div>
+
+<div class="note key">
+<span class="tag">@Fork 到底在隔离什么</span>
+<p>JVM 的<b>编译状态是全局的</b>。第一个 benchmark 把某个接口编译成单态版本，第二个 benchmark 传入第二种实现 → 巨态 → 第二个莫名其妙慢 4 倍。代码缓存、profile、堆状态也会互相污染。<b>fork 出全新 JVM 才能保证互不干扰。</b></p>
+</div>
+
+</section>
+<!-- ============ L8 ============ -->
+<section id="l8">
+<h2><span class="lvl">L8</span>面试怎么答：现象 → 机制 → 数字</h2>
+
+<p>被问「说说 JIT 的工作原理」时，<strong>不要按教科书顺序背</strong>。按三层组织，每一层解决一个不同的疑虑：</p>
+
+<pre><code class="text">第一层（现象，10 秒）
+  同一段代码，跑第 1 次和第 1 万次能差一个数量级。我实测过 12.5 倍。
+
+第二层（机制，60 秒）
+  原因是分层编译：解释器 → C1(tier3，带 profile) → C2(tier4)。
+  触发靠两个计数器：方法调用 5000 次、循环回边 40000 次。
+  回边走的是 OSR，编译入口在循环体内，不是方法开头。
+
+第三层（数字与边界，看对方兴趣）
+  C2 的核心是内联，两道门 35 和 325 字节。内联之后逃逸分析才能把
+  不逃逸的对象拆成标量——我测过 1000 万次循环分配量从 228 MB 降到 0。
+  代价是优化带赌注，profile 失效就 deopt，日志里是 made not entrant。</code></pre>
+
+<p><strong>这三层的价值</strong>：第一层证明你动手测过；第二层证明你懂机制；第三层证明你知道边界在哪。绝大多数候选人停在第一层的变体（「JIT 会编译热点代码」）。</p>
+
+<h3>四档对照：问「你怎么做性能测试」</h3>
+
+<div class="tiers">
+<div class="tier t-bad">
+  <div class="lv">不及格</div>
+  <div class="bd">「用 <code>System.currentTimeMillis()</code> 前后夹一下。」
+  <em>没预热、没防 DCE、精度只有 ms 级</em></div>
+</div>
+<div class="tier t-pass">
+  <div class="lv">及格</div>
+  <div class="bd">「用 JMH，配 <code>@Warmup</code> 和 <code>@Fork</code>。」
+  <em>知道工具，但说不出为什么这么配</em></div>
+</div>
+<div class="tier t-good">
+  <div class="lv">良好</div>
+  <div class="bd">「JMH + 三个必设参数；结果必须经 Blackhole 消费防 DCE；看 p99 不看平均值。」
+  <em>知道每个参数解决哪个坑</em></div>
+</div>
+<div class="tier t-best">
+  <div class="lv">优秀</div>
+  <div class="bd">「先明确<strong>测什么</strong>：吞吐还是延迟？稳态还是爬坡？然后用 JMH fork 隔离，<code>@Setup(Level.Trial)</code> 准备数据避免把构造开销算进去，用 <code>Mode.SampleTime</code> 看分布而不是平均值，用 <code>jvmArgs</code> 固定堆大小排除 GC 影响。<strong>如果数字反常，先查 <code>PrintCompilation</code> 有没有 deopt。</strong>」
+  <em>有方法论，有排错路径，知道工具失灵时往哪儿看</em></div>
+</div>
+</div>
+
+</section>
+
+<!-- ============ L9 ============ -->
+<section id="l9">
+<h2><span class="lvl">L9</span>数字速查</h2>
+
+<p>本期全部实测值，面试前扫一遍就够：</p>
+
+<div class="tblwrap">
+<table>
+<tr><th>项目</th><th>数值</th><th>来源</th></tr>
+<tr><td>解释器 → C2 加速比</td><td><strong>12.5×</strong>（1.11ms → 89µs）</td><td>本机 Warmup 实测</td></tr>
+<tr><td>C1 → C2 加速比</td><td><strong>5.56×</strong>（495µs → 89µs）</td><td>同上</td></tr>
+<tr><td>Tier 3 阈值</td><td>200（调用）/ 60000（回边）/ 2000（总）</td><td>PrintFlagsFinal</td></tr>
+<tr><td>Tier 4 阈值</td><td>5000（调用）/ 40000（回边）/ 15000（总）</td><td>PrintFlagsFinal</td></tr>
+<tr><td>编译线程数</td><td><strong>12</strong>（16 核）</td><td>CICompilerCount</td></tr>
+<tr><td>内联第一道门</td><td><strong>35 B</strong>（MaxInlineSize）</td><td>PrintFlagsFinal</td></tr>
+<tr><td>内联第二道门</td><td><strong>325 B</strong>（FreqInlineSize）</td><td>PrintFlagsFinal</td></tr>
+<tr><td>内联最大深度</td><td>15 层（MaxInlineLevel）</td><td>PrintFlagsFinal</td></tr>
+<tr><td>实测内联分界</td><td>4B 通过 / 74B 热后通过 / 825B 拒绝</td><td>PrintInlining</td></tr>
+<tr><td>单次对象分配</td><td><strong>24 B</strong>（头 12 + 2×int + 对齐 4）</td><td>分配计数</td></tr>
+<tr><td>1000 万次不逃逸分配</td><td><strong>0 MB</strong>（EA 生效）</td><td>分配计数</td></tr>
+<tr><td>1000 万次逃逸分配</td><td><strong>228.88 MB</strong></td><td>分配计数</td></tr>
+<tr><td>DCE 造成的偏差</td><td><strong>15.5 万倍</strong>（0.001ms vs 155ms）</td><td>Bench2 实测</td></tr>
+<tr><td>单态 vs 巨态调用</td><td><strong>4.7×</strong>（0.7µs vs 3.3µs）</td><td>Deopt 实测</td></tr>
+<tr><td>代码缓存预留</td><td>245.7 MB</td><td>PrintCodeCache</td></tr>
+<tr><td>代码缓存实占</td><td><strong>2.2 MB</strong>（不到 1%）</td><td>PrintCodeCache</td></tr>
+<tr><td>解释器 profile 采样率</td><td>每 33 次记 1 次</td><td>InterpreterProfilePercentage</td></tr>
+</table>
+</div>
+
+</section>
+
+<!-- ============ L10 ============ -->
+<section id="l10">
+<h2><span class="lvl">L10</span>十四问答</h2>
+
+<div class="qa">
+<p class="q">JIT 和 AOT 的区别？</p>
+<p class="a">JIT 在<strong>运行时</strong>编译，能看到真实的类型分布和调用频率，因此能做「基于 profile 的激进优化」（去虚化、分支布局）；代价是启动慢、要预热、多占代码缓存。AOT（GraalVM native-image）在<strong>构建时</strong>编译，启动快、内存小，但看不到运行时 profile，峰值性能通常低于 JIT，且反射/动态代理需要额外配置。<strong>结论：长跑服务用 JIT，短命进程（CLI、Serverless）用 AOT。</strong></p>
+
+<p class="q">为什么 C1 和 C2 都要存在，只留 C2 不行吗？</p>
+<p class="a">C2 编译一个方法要几十毫秒。如果只有 C2，启动期所有方法都排队等编译，应用长时间停在解释执行——<strong>启动反而更慢</strong>。C1 只要几毫秒，先让代码「跑起来不慢」，C2 随后在后台把最热的少数方法优化到极致。这叫<strong>快慢双轨</strong>：用低质量快速编译覆盖 90% 的代码，把高质量慢编译的预算留给 10% 的真热点。</p>
+
+<p class="q"><code>made not entrant</code> 是什么意思？看到它要担心吗？</p>
+<p class="a">表示某个编译版本<strong>不再接受新调用</strong>（deopt 或代码缓存回收）。要分情况：<strong>偶尔出现是正常的</strong>，JVM 会不断用更好的版本替换旧版本；<strong>同一个方法反复出现</strong>才是问题，说明优化假设反复被推翻——常见原因是类型不稳定（同一调用点混用多种类型）或运行期加载新子类。</p>
+
+<p class="q">逃逸分析真的把对象分配在栈上吗？</p>
+<p class="a"><strong>不是。</strong>HotSpot 从不做「栈上分配」。它做的是<strong>标量替换</strong>：对象不逃逸时，把它的字段拆成独立局部变量（可能落在寄存器），<strong>对象本身根本不创建</strong>。准确说法是「对象被消除」，不是「对象搬到栈上」。这个区别在面试里是加分项——说「栈上分配」会暴露你看的是二手资料。</p>
+
+<p class="q">为什么类的字段顺序会影响内存占用？</p>
+<p class="a">对象要按 8 字节对齐。<code>int+int</code> 含 12 B 头共 20 B → 补齐到 24 B；再加一个 <code>long</code> 变成 8+4+8+8=28 → 32 B。HotSpot 会<strong>重排字段</strong>（<code>long</code>/<code>double</code> 在前，<code>int</code> 其次，引用和 <code>byte</code> 最后）来减少 padding，所以手工调顺序通常无效——但知道这套账才能估算「100 万对象 × 24 B = 24 MB」这类占用。</p>
+
+<p class="q">什么时候该用 <code>-XX:-DoEscapeAnalysis</code> 关掉 EA？</p>
+<p class="a">几乎没有正当理由。唯一场景是<strong>排查 EA 相关的正确性 bug</strong>。日常不要关——关了所有小对象都真分配，GC 压力明显上升。怀疑 EA 有问题时用 <code>-XX:+PrintEscapeAnalysis</code>（诊断选项）看分析结果，而不是直接关掉。</p>
+
+<p class="q">内联会不会导致代码膨胀，反而变慢？</p>
+<p class="a">会。这正是 <code>FreqInlineSize=325</code>、<code>MaxInlineLevel=15</code>、<code>LiveNodeCountInliningCutoff=40000</code> 存在的意义——<strong>防止内联失控</strong>。膨胀的代价是：指令缓存命中率下降、编译时间变长、代码缓存占用上升。JVM 的策略是「<strong>只对真正的热点放宽</strong>」，因为热点内联的收益远大于 i-cache 损失。</p>
+
+<p class="q">什么是「去虚化」（devirtualization）？</p>
+<p class="a">把 <code>invokevirtual</code>/<code>invokeinterface</code> 变成直接调用或内联展开，前提是 C2 通过 profile 或 CHA 确认「这个调用点只有一个实现」。收益不只是省一次 vtable 查表——更重要的是<strong>内联之后后面所有优化都能做了</strong>。「去虚化 → 内联 → 常量传播 → EA → 向量化」是一条链，第一环断了后面全断。</p>
+
+<p class="q"><code>volatile</code> 会让性能差多少？</p>
+<p class="a">单线程下几乎无差别（volatile 读在 x86 上就是普通 load）。差别在<strong>多线程写同一变量</strong>：volatile 写会带 <code>lock</code> 前缀，让其他核的缓存行失效，高竞争下可能慢一个数量级。但更该关注正确性——不要为了性能去掉必要的 volatile，那是在赌编译器不重排。</p>
+
+<p class="q">为什么 JMH 要 <code>@Fork</code>？不能在一个 JVM 里跑多个 benchmark 吗？</p>
+<p class="a">不能。JVM 的<strong>编译状态是全局的</strong>：benchmark A 把某接口编译成单态版本，benchmark B 传入第二种实现 → 巨态 → B 无故慢 4 倍。代码缓存、profile、堆状态也会互相污染。<code>@Fork(1)</code> 就是「<strong>每个 benchmark 起全新 JVM</strong>」，代价是启动开销。</p>
+
+<p class="q"><code>Blackhole.consume()</code> 到底做了什么？</p>
+<p class="a">它把值「用掉」但<strong>不引入可测量的开销</strong>：写进 volatile 字段（防 DCE）+ 阻止内联（防被优化掉）+ 特殊处理基本类型避免装箱。手写 <code>volatile</code> 也能防 DCE，但每个值多一次写屏障，在高频循环里会污染测量。<strong>这就是必须用它而不是自己造的原因。</strong></p>
+
+<p class="q">线上服务「跑着跑着变慢」，和 JIT 有关吗？</p>
+<p class="a">三种典型：① <strong>代码缓存满</strong>（<code>CodeCache is full</code>），编译停止，全退回解释器——断崖式变慢；② <strong>巨态化</strong>，某接口上线新实现后调用点变巨态，永久失去内联，慢 3~5 倍；③ <strong>反复 deopt</strong>，某方法类型不稳定，在 C2 和解释器之间来回跳。排查顺序：<code>jcmd &lt;pid&gt; Compiler.codecache</code> → <code>PrintCompilation</code> 看 <code>made not entrant</code> 频次 → <code>PrintInlining</code> 看热点方法是否还在内联列表。</p>
+
+<p class="q"><code>-Xcomp</code> 和 <code>-Xint</code> 分别用来干什么？</p>
+<p class="a"><code>-Xint</code> 纯解释执行，用于「验证这是不是 JIT 的 bug」——如果 <code>-Xint</code> 下问题消失，八成是 C2 优化有问题。<code>-Xcomp</code> 第一次调用就编译，用于「验证代码能被 JIT 编译而不崩溃」，<strong>绝不能用来测性能</strong>（没有 profile，基于 profile 的优化全失效，通常比正常慢 2~5 倍）。</p>
+
+<p class="q">GraalVM 比 C2 快吗？</p>
+<p class="a"><strong>部分场景是，整体不一定。</strong>Graal 用 Java 写，优势在更好的内联策略（能处理更大的方法图）、部分逃逸分析（比 C2 的全有全无更细）、可配合 AOT。劣势：编译更慢、内存占用更高（编译器自身跑在 JVM 上）、部分负载峰值不如 C2。<strong>不要指望换编译器解决架构问题</strong>，先看算法和 IO。</p>
+</div>
+
+</section>
+
+<!-- ============ L11 ============ -->
+<section id="l11">
+<h2><span class="lvl">L11</span>三道模拟面试题</h2>
+
+<h3>题 1（基础机制）：解释一下分层编译，为什么需要这么多层？</h3>
+
+<div class="tiers">
+<div class="tier t-bad"><div class="lv">不及格</div><div class="bd">「JIT 分 C1 和 C2，C1 编译快、C2 编译慢但优化好。」<em>只有结论，没有机制</em></div></div>
+<div class="tier t-pass"><div class="lv">及格</div><div class="bd">「五层：解释器、C1 的三个级别、C2。代码从解释器开始，热了升到 C1，更热升到 C2。」<em>层级对了，但说不出阈值，也说不清为什么</em></div></div>
+<div class="tier t-good"><div class="lv">良好</div><div class="bd">「标准路径是 0→3→4。Tier 3 是带完整 profile 的 C1，作用是<strong>采集类型和分支信息</strong>给 C2 用，本身也可执行。Tier 4 阈值是 5000 次调用或 40000 次回边。Tier 1 是给 6 字节以下的极简方法准备的旁路。」<em>有路径、有阈值、有旁路的作用</em></div></div>
+<div class="tier t-best"><div class="lv">优秀</div><div class="bd">「分层的本质是<strong>在「编译成本」和「执行收益」之间做多档权衡</strong>。C2 编译一个方法要几十毫秒，如果只有 C2，启动期全在排队。分层让 90% 的代码用几毫秒的 C1 覆盖，把 C2 预算留给 10% 的真热点。<br><br>另外 Tier 3 有个隐含职责：<strong>它是 profile 采集器</strong>，C2 的所有激进优化（去虚化、内联决策、分支布局）都依赖 Tier 3 采到的数据。所以 0→3→4 不是「越来越快」的简单升级，而是「<strong>先测量、再优化</strong>」的两阶段。<br><br>实测本机解释器到 C2 差 12.5 倍，其中 C1 到 C2 贡献 5.56 倍——这 5.56 倍就是 profile 指导优化的价值。」</div></div>
+</div>
+
+<h3>题 2（实战分析）：线上一个接口 P99 从 20ms 涨到 90ms，GC 正常，CPU 也不高，怎么查？</h3>
+
+<div class="tiers">
+<div class="tier t-bad"><div class="lv">不及格</div><div class="bd">「加日志看看慢在哪。」<em>没有假设</em></div></div>
+<div class="tier t-pass"><div class="lv">及格</div><div class="bd">「用 arthas trace 看耗时分解，看是哪个方法慢。」<em>工具有了，但没考虑「代码没变却变慢」这类情况</em></div></div>
+<div class="tier t-good"><div class="lv">良好</div><div class="bd">「先确认是不是 JIT 相关：看 <code>PrintCompilation</code> 有没有频繁 <code>made not entrant</code>，看代码缓存占用。如果 CPU 不高、GC 正常，很可能是<strong>退优化</strong>或<strong>失去内联</strong>——代码本身没变，但优化没了。」<em>方向对了</em></div></div>
+<div class="tier t-best"><div class="lv">优秀</div><div class="bd">「按「代码不变、环境变了」这个假设排查，四个方向：<br><br>
+① <strong>巨态化</strong>：最近有没有上线新的接口实现类？原来单实现的接口多了第二种实现，调用点变 megamorphic，内联永久失效。这最符合「P99 涨 4.5 倍、CPU 反而不高」——原本被向量化/常量传播的循环退化成了一次次虚调用。<br>
+② <strong>代码缓存满</strong>：<code>jcmd &lt;pid&gt; Compiler.codecache</code> 看 used 是否接近 size，日志有无 <code>CodeCache is full</code>。<br>
+③ <strong>反复 deopt</strong>：<code>PrintCompilation | grep 'made not entrant'</code>，看是否集中在某方法，根因通常是字段类型不稳定。<br>
+④ <strong>动态类加载</strong>：热部署/插件化框架加载新实现类，CHA 假设失效，大批编译产物被废弃。<br><br>
+优先验 ①，因为它最符合「CPU 不高」这个反常点——性能退化<strong>伴随 CPU 上升</strong>是「干得更多」；<strong>CPU 不高但变慢</strong>是「干得更笨」，通常是优化丢失。定位到方法后用 <code>PrintInlining</code> 确认它是否还在内联列表里。」</div></div>
+</div>
+
+<h3>题 3（深度原理）：你说逃逸分析能把对象优化掉，那为什么我 new 了一亿个对象还是 OOM？</h3>
+
+<div class="tiers">
+<div class="tier t-bad"><div class="lv">不及格</div><div class="bd">「因为逃逸分析不是万能的。」<em>正确但无信息量</em></div></div>
+<div class="tier t-pass"><div class="lv">及格</div><div class="bd">「对象逃逸了就不能优化，比如放进集合里。」<em>说对一半</em></div></div>
+<div class="tier t-good"><div class="lv">良好</div><div class="bd">「EA 只在 C2 编译的代码里生效，且要求对象不逃逸。放进 <code>List</code>、赋给字段、作为返回值都会导致 <code>GlobalEscape</code>，必须真分配。」<em>机制对了</em></div></div>
+<div class="tier t-best"><div class="lv">优秀</div><div class="bd">「三个层次：<br><br>
+① <strong>逃逸状态</strong>：只有 <code>NoEscape</code> 才能完全标量替换。放进集合 = 存进堆对象 = <code>GlobalEscape</code>，一亿个对象就是一亿次真实分配。<br>
+② <strong>EA 的前提是内联</strong>：如果创建对象的代码在 500 字节的工厂方法里而该方法没被内联进调用者，C2 在调用者视角里<strong>根本看不到 <code>new</code> 指令</strong>，EA 无从下手。「方法太大」会间接杀死 EA。<br>
+③ <strong>EA 的粒度是字段级</strong>：我实测过一个反直觉的例子——把对象的一个字段写进 <code>volatile</code> 静态字段，分配量仍是 0，因为 C2 只把那个字段真写出去，另一个字段留在栈上。部分逃逸不等于全部分配。<br><br>
+回到你的问题：如果一亿个对象必须活过方法调用，EA 帮不了你，该做的是<strong>减少数量</strong>（基本类型数组、对象池）或<strong>让它们更快死</strong>（缩短作用域，靠 TLAB 指针碰撞 + 年轻代回收扛住）。<strong>「new 很贵」在现代 JVM 上是伪命题，真正的成本在「活得久」</strong>。」</div></div>
+</div>
+
+</section>
+
+<footer>
+<div class="next">
+<b>下一期预告 · 第 23 期</b><br>
+Java 模块化与工程化边界：<code>module-info</code> 到底解决了什么问题 / 类路径 hell 与拆包 / <code>jdeps</code> 查循环依赖 / 多版本 jar 与 shading / 为什么大厂内部禁止跨模块使用 <code>internal</code> 包。<br>
+<span style="color:#7c8a9c">22 期下来唯一还没碰的「工程侧」话题，也是从「写代码」到「维护系统」的分水岭。</span>
+</div>
+
+<p><strong>本期一句话</strong>：JIT 不是「把字节码翻译成机器码」，而是一个<strong>带赌注的投机优化系统</strong>——投机（profile 假设）→ 下注（删检查、去虚化）→ 兑现（快 4~12 倍）→ 爆仓（deopt 回解释器重来）。理解了这套循环，就能解释几乎所有 JVM 性能怪现象。</p>
+
+<p style="margin-top:26px;font-size:12.5px;color:#9aa5b4">
+Java 面试深挖系列 · 第 22 期 / 全部数据来自本机 JDK 21.0.7（16 核）实测，参数取自 <code>-XX:+PrintFlagsFinal</code>，日志取自 <code>-XX:+PrintCompilation</code> 与 <code>-XX:+PrintInlining</code>
+</p>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var KW = /\b(public|private|protected|static|final|volatile|class|interface|implements|extends|return|new|for|int|long|double|void|if|else|while|try|catch|throw|throws|this|super|import|package|abstract|synchronized|transient|boolean|char|byte|short|float|null|true|false)\b/;
+
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  document.querySelectorAll('pre code').forEach(function (el) {
+    var raw = el.textContent;
+    var src = esc(raw);
+    if (el.className.indexOf('text') === 0) {
+      // 纯文本块：不加高亮，只保留排版
+      el.innerHTML = src;
+      return;
+    }
+    // 单次 alternation：注释 | 字符串 | 关键字 | 数字
+    var re = /(\/\/[^\n]*|"[^"]*"|'[^']*'|\b\d[\d._]*[a-zA-Z]?\b|\b(?:public|private|protected|static|final|volatile|class|interface|implements|extends|return|new|for|int|long|double|void|if|else|while|try|catch|throw|throws|this|super|import|package|abstract|synchronized|boolean|char|byte|short|float|null|true|false)\b)/g;
+
+    el.innerHTML = src.replace(re, function (m) {
+      if (m.indexOf('//') === 0) return '<span class="tok-c">' + m + '</span>';
+      if (m.charAt(0) === '"' || m.charAt(0) === "'") return '<span class="tok-s">' + m + '</span>';
+      if (/^[\d.]/.test(m)) return '<span class="tok-n">' + m + '</span>';
+      return '<span class="tok-k">' + m + '</span>';
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

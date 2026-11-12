@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 面试深水区 21 · 内存泄漏取证：支配树下的真凶</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#171a21; --muted:#5d6675;
+    --line:#e3e7ef; --soft:#f8f9fc;
+    --l0:#6b7280; --l1:#0369a1; --l2:#7c3aed; --l3:#b45309; --l4:#be123c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.78;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:36px 22px 80px}
+
+  header.hero{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:34px 34px 28px; position:relative; overflow:hidden;
+  }
+  header.hero::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:linear-gradient(180deg,#0369a1,#7c3aed 55%,#be123c);
+  }
+  .kicker{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#0369a1; font-weight:700; margin-bottom:10px;
+  }
+  h1{font-size:28px; line-height:1.34; margin:0 0 12px; letter-spacing:-.4px; font-weight:800}
+  h1 .arrow{color:#c7ccd8; font-weight:400; margin:0 5px}
+  .sub{color:var(--muted); font-size:14.5px; margin:0; max-width:790px}
+  .sub b{color:#be123c}
+  .meta{display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px dashed var(--line)}
+  .meta div{font-size:12.5px; color:var(--muted)}
+  .meta strong{display:block; font-size:19px; color:var(--ink); font-weight:800; letter-spacing:-.3px}
+
+  .path{display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 30px}
+  .path span{
+    font-size:12px; padding:5px 12px; border-radius:999px; background:#fff;
+    border:1px solid var(--line); color:var(--muted); font-weight:600;
+  }
+  .path span.on{background:#eff6fc; border-color:#bcdcf2; color:#0369a1}
+
+  section.card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:30px 32px; margin-bottom:22px;
+  }
+  .lvl{display:inline-flex; align-items:center; gap:8px; margin-bottom:14px}
+  .badge{font-size:11.5px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:6px; color:#fff}
+  .b0{background:var(--l0)} .b1{background:var(--l1)} .b2{background:var(--l2)}
+  .b3{background:var(--l3)} .b4{background:var(--l4)}
+  .lvl em{font-style:normal; font-size:12px; color:var(--muted)}
+  h2{font-size:21px; margin:0 0 6px; letter-spacing:-.3px; font-weight:800}
+  h3{font-size:15.5px; margin:26px 0 8px; font-weight:750; color:#262b36}
+  h3::before{content:"▎"; color:#0369a1; margin-right:2px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  code.inl{
+    background:#eef1f7; padding:1.5px 6px; border-radius:5px; font-size:13px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; color:#9f1239;
+  }
+  strong{font-weight:750}
+
+  .oneline{
+    background:var(--soft); border-left:4px solid #0369a1; border-radius:0 10px 10px 0;
+    padding:14px 18px; margin:16px 0; font-size:14.5px;
+  }
+  .oneline b{color:#075985; display:block; font-size:11.5px; letter-spacing:.1em; margin-bottom:4px}
+
+  pre{
+    background:#f3f5f9; border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; margin:16px 0; line-height:1.62;
+    font-family:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+    font-size:12.7px; color:#1f2430; tab-size:4;
+  }
+  pre .c{color:#8b93a5; font-style:italic}
+  pre .k{color:#7c3aed; font-weight:600}
+  pre .s{color:#0369a1}
+  pre .n{color:#b45309}
+
+  figure{margin:22px 0; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:16px 14px 10px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.6}
+  figcaption b{color:#262b36}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px}
+  th{background:#f3f5f9; text-align:left; padding:9px 12px; font-weight:750; border-bottom:2px solid var(--line); font-size:12.5px; color:#3b4252}
+  td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; color:#9f1239}
+
+  .warn{background:#fff8f0; border:1px solid #f4dcc2; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .warn b{color:#b45309}
+  .trap{background:#fff5f6; border:1px solid #f5ccd4; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .trap b{color:#be123c}
+  .good{background:#f2fbf6; border:1px solid #cceddc; border-radius:10px; padding:13px 18px; font-size:14px; margin:16px 0}
+  .good b{color:#047857}
+
+  .q{border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0; background:#fff}
+  .q h4{margin:0 0 8px; font-size:15px; font-weight:800; color:#171a21; line-height:1.6}
+  .q h4 span{color:#0369a1; margin-right:6px}
+  .q .lab{font-size:11.5px; font-weight:800; letter-spacing:.08em; color:#0369a1; margin:14px 0 4px}
+  .q .lab.g{color:#047857} .q .lab.r{color:#be123c}
+  .q p{margin:6px 0; font-size:14.2px}
+
+  footer{text-align:center; color:#9aa2b1; font-size:12.5px; margin-top:34px; line-height:1.9}
+  .qa{border-bottom:1px dashed var(--line); padding:14px 0}
+  .qa:last-child{border-bottom:none}
+  .qa .qq{font-weight:750; color:#171a21; font-size:14.5px}
+  .qa .qq::before{content:"Q"; display:inline-block; width:20px; color:#0369a1; font-weight:800}
+  .qa p{margin:6px 0 0 20px; font-size:14.2px; color:#2c333f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Java 面试深水区 · 第 21 期</div>
+  <h1>内存泄漏取证<span class="arrow">→</span>支配树下的真凶</h1>
+  <p class="sub">第 09 期讲的是「OOM 之后怎么救火」，这一期讲更难的那一半：<b>OOM 一直没来，内存却一直在涨</b>。一条 <code class="inl">jmap -histo</code> 看不出问题、MAT 打开的引用链最长的那条也不是元凶——因为「谁是元凶」在堆的快照里不是由引用链长短决定的，而是由<b>支配关系</b>决定的。本期把 Shallow / Retained / 支配树、四种引用强度、ThreadLocal 的七跳链、ClassLoader 的元空间阶梯、堆外四本账，全部拆成可算的数字与能直接跑的命令。</p>
+  <div class="meta">
+    <div><strong>12</strong>张手绘原理图</div>
+    <div><strong>21</strong>段源码与命令</div>
+    <div><strong>20</strong>个速查数字</div>
+    <div><strong>14</strong>道高频问答</div>
+    <div><strong>3</strong>道模拟面试</div>
+  </div>
+</header>
+
+<div class="path">
+  <span class="on">L0 三种"涨"</span>
+  <span>L1 支配树</span>
+  <span>L2 四种引用</span>
+  <span>L3 取证四步</span>
+  <span>L4 ThreadLocal</span>
+  <span>L5 ClassLoader</span>
+  <span>L6 四本账</span>
+  <span>L7 RSS 拆账</span>
+  <span>L8 五步法</span>
+  <span>L9 工具矩阵</span>
+  <span>L10 数字</span>
+  <span>L11 问答</span>
+  <span>L12 模拟题</span>
+</div>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L0</span><em>先把名词拆对，再谈排查</em></div>
+  <h2>面试官问「你遇到过内存泄漏吗」，九成人答错了一半</h2>
+
+  <p>标准答案是「ThreadLocal 忘了 remove」。这句话对，但它只覆盖了<b>三种完全不同的故障里的一种</b>。而线上真正的麻烦在于：这三种故障的<b>表象几乎一样</b>（内存曲线都在涨），但排查手段、修复成本、责任人都不是一回事。答错类型，后面全是白干。</p>
+
+  <h3>三种「涨」，各自长什么样</h3>
+  <table>
+    <tr><th style="width:130px">类型</th><th>本质</th><th>典型代表</th><th>dump 里看起来</th></tr>
+    <tr>
+      <td><strong>真泄漏</strong></td>
+      <td>对象<b>本该被回收</b>，但仍有强引用可达</td>
+      <td>ThreadLocal 未 remove、监听器未注销、静态 Map 只 put 不 remove、ClassLoader 残留</td>
+      <td>某个业务类实例数单调增长，且<b>增量恒定</b></td>
+    </tr>
+    <tr>
+      <td><strong>容量膨胀</strong><br><span style="color:#8b93a5;font-size:12px">假泄漏</span></td>
+      <td>每个对象<b>都可回收</b>，但同时活着的太多了</td>
+      <td>无界本地缓存、Session 没设 TTL、批量查询一次拉 10 万行、MQ 积压、一次导出全表</td>
+      <td>对象都"合法"，只是<b>数量是正常值的 100 倍</b></td>
+    </tr>
+    <tr>
+      <td><strong>账外内存</strong></td>
+      <td>堆<b>完全正常</b>，涨的是堆外</td>
+      <td>DirectByteBuffer、Netty ByteBuf 未 release、Metaspace、CodeCache、glibc arena、线程栈</td>
+      <td>dump 打开了也<b>什么都看不到</b>，因为东西不在堆里</td>
+    </tr>
+  </table>
+
+  <p>判别只需要一条命令，而且是三条命令里最便宜的一条：</p>
+
+  <pre><code># 一行分出「堆内」还是「堆外」——不要一上来就 dump
+jcmd 12345 GC.heap_info
+#  garbage-first heap   total 8388608K, used 2146304K [0x0000000700000000, ...)
+#   region size 8192K, 12 young (98304K), 1 survivors (8192K)
+#  Metaspace       used 258760K, committed 264192K, reserved 1114112K</code></pre>
+
+  <p>两次采样间隔 10 分钟，看 <code class="inl">used</code> 是否在涨。<b>堆在涨 → 前两种；堆不涨但容器 RSS 在涨 → 第三种。</b>这个分叉做错，后面所有动作都是无效劳动。</p>
+
+  <div class="warn"><b>为什么第三种最要命：</b>8G 堆 + 12G 容器 limit，堆外只要吃掉 4G，容器就被 cgroup 杀掉（<code>exit 137</code>）。此时 Java 层<b>一条异常都没有</b>：没有 OOM、没有 dump、日志停在最后一条正常请求上。运维看到的是"进程莫名重启"，开发看到的是"没有报错"，双方对不上账——这就是为什么「RSS 涨但堆不涨」必须当成一级故障处理。</div>
+
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <rect x="24" y="34" width="268" height="198" rx="8" fill="#ffffff" stroke="#e3e7ef"/>
+      <rect x="316" y="34" width="268" height="198" rx="8" fill="#ffffff" stroke="#e3e7ef"/>
+      <rect x="608" y="34" width="268" height="198" rx="8" fill="#ffffff" stroke="#e3e7ef"/>
+
+      <text x="24" y="24" font-size="11.5" font-weight="700" fill="#262b36">① 真泄漏：基线单向上移</text>
+      <text x="316" y="24" font-size="11.5" font-weight="700" fill="#262b36">② 容量膨胀：锯齿底抬高</text>
+      <text x="608" y="24" font-size="11.5" font-weight="700" fill="#262b36">③ 账外内存：堆平、RSS 涨</text>
+
+      <line x1="40" y1="204" x2="278" y2="204" stroke="#dfe4ee"/>
+      <line x1="332" y1="204" x2="570" y2="204" stroke="#dfe4ee"/>
+      <line x1="624" y1="204" x2="862" y2="204" stroke="#dfe4ee"/>
+      <text x="40" y="220" font-size="9.5" fill="#8b93a5">0</text>
+      <text x="274" y="220" font-size="9.5" fill="#8b93a5" text-anchor="end">24h</text>
+      <text x="332" y="220" font-size="9.5" fill="#8b93a5">0</text>
+      <text x="566" y="220" font-size="9.5" fill="#8b93a5" text-anchor="end">24h</text>
+      <text x="624" y="220" font-size="9.5" fill="#8b93a5">0</text>
+      <text x="858" y="220" font-size="9.5" fill="#8b93a5" text-anchor="end">24h</text>
+
+      <line x1="44" y1="192" x2="274" y2="192" stroke="#f0b3be" stroke-dasharray="3 3"/>
+      <polyline points="44,192 274,74" fill="none" stroke="#be123c" stroke-width="2.2"/>
+      <text x="150" y="60" font-size="10.5" fill="#be123c">斜率恒定，永不回落</text>
+
+      <polyline points="40,200 96,158 96,178 152,140 152,160 208,120 208,140 264,100"
+                fill="none" stroke="#b45309" stroke-width="2"/>
+      <line x1="40" y1="200" x2="270" y2="112" stroke="#e8c8a0" stroke-dasharray="4 4"/>
+      <text x="150" y="90" font-size="10.5" fill="#b45309">回落变浅，底越来越高</text>
+
+      <polyline points="624,150 858,150" fill="none" stroke="#0369a1" stroke-width="2.2"/>
+      <polyline points="624,192 858,102" fill="none" stroke="#be123c" stroke-width="2.2"/>
+      <text x="852" y="143" font-size="10.5" fill="#0369a1" text-anchor="end">Java 堆</text>
+      <text x="852" y="94" font-size="10.5" fill="#be123c" text-anchor="end">RSS</text>
+      <text x="640" y="178" font-size="10" fill="#8b93a5">dump 里看不到</text>
+    </svg>
+    <figcaption><b>图 1｜三条曲线，三种病。</b>真泄漏的斜率是常数（每个请求漏一份，QPS 不变就斜率不变）；容量膨胀每次回收后都回落，但<b>回落不到原处</b>（底越来越高）；账外内存最迷惑人——Java 堆是一条完美的水平线，dump 里干干净净，可进程却在变胖。</figcaption>
+  </figure>
+
+  <div class="oneline"><b>一句话记忆</b><strong>真泄漏看「斜率」、容量膨胀看「谷底」、账外内存看「RSS 减堆」。</strong>三个观测量对应三种病，互不替代。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L1</span><em>这一节决定你能不能读懂 MAT</em></div>
+  <h2>Shallow、Retained、支配树：为什么最长的引用链不是元凶</h2>
+
+  <p>几乎所有人都用过 MAT 的「Path to GC Roots」，并且 90% 的人用它得出了错误结论。原因是这个功能回答的问题和你以为的不一样。</p>
+
+  <h3>三个指标，三种问法</h3>
+  <table>
+    <tr><th style="width:120px">指标</th><th>回答的问题</th><th>怎么算</th></tr>
+    <tr><td><code>Shallow Heap</code></td><td>这个对象自己占多少</td><td>对象头 12B + 各字段（压缩指针下引用 4B）+ 对齐到 8B 的倍数</td></tr>
+    <tr><td><code>Retained Heap</code></td><td>把它干掉，能释放多少</td><td><b>它支配的</b>所有对象的 Shallow 之和</td></tr>
+    <tr><td><code>Path to GC Roots</code></td><td>有没有一条路能走到它</td><td>深度优先找到的<b>任意一条</b>路径</td></tr>
+  </table>
+
+  <p>第三行是坑。<b>「有一条路径」不等于「这条路径是唯一路径」，更不等于「这条路径上的上一跳是元凶」。</b>一个被 200 个线程同时引用的大对象，MAT 只会给你其中一条链，你顺着这条链去改代码，改完内存照涨。</p>
+
+  <h3>支配关系：唯一正确的「谁害了谁」</h3>
+
+  <p>定义很短，但要读两遍：<b>如果从 GC Roots 到对象 Y 的<b>每一条</b>路径都必须经过 X，那么 X 支配 Y。</b>把「支配」画成树，就叫支配树（Dominator Tree）。</p>
+
+  <ul>
+    <li>支配树的根是虚拟的「所有 GC Roots」。</li>
+    <li>一个节点在支配树里的<b>父节点</b>，就是「你把它干掉、这个节点才会被回收」的那个对象。</li>
+    <li>所以 <code class="inl">Retained Heap(B) = B 的子树里所有对象的 Shallow 之和</code>。</li>
+  </ul>
+
+  <p>下面这个例子是面试里最能分辨「背过 MAT」和「真用过 MAT」的地方。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <text x="20" y="20" font-size="11.5" font-weight="700" fill="#262b36">对象图（真实引用）</text>
+      <text x="500" y="20" font-size="11.5" font-weight="700" fill="#262b36">支配树（谁真的害了谁）</text>
+
+      <rect x="34" y="48" width="92" height="34" rx="6" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="80" y="70" font-size="11" fill="#0369a1" text-anchor="middle">GC Root 1</text>
+      <rect x="34" y="152" width="92" height="34" rx="6" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="80" y="174" font-size="11" fill="#0369a1" text-anchor="middle">GC Root 2</text>
+
+      <rect x="186" y="98" width="76" height="38" rx="6" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="224" y="122" font-size="12" font-weight="700" fill="#be123c" text-anchor="middle">A</text>
+      <rect x="330" y="42" width="76" height="38" rx="6" fill="#f5f2ff" stroke="#ddd3f7"/>
+      <text x="368" y="66" font-size="12" font-weight="700" fill="#7c3aed" text-anchor="middle">B</text>
+      <rect x="330" y="152" width="76" height="38" rx="6" fill="#f5f2ff" stroke="#ddd3f7"/>
+      <text x="368" y="176" font-size="12" font-weight="700" fill="#7c3aed" text-anchor="middle">C</text>
+
+      <line x1="126" y1="65" x2="184" y2="108" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="184,108 176,100 172,110" fill="#8b93a5"/>
+      <line x1="126" y1="169" x2="184" y2="128" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="184,128 172,126 176,136" fill="#8b93a5"/>
+      <line x1="262" y1="110" x2="328" y2="64" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="328,64 316,62 320,72" fill="#8b93a5"/>
+      <line x1="262" y1="124" x2="328" y2="168" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="328,168 320,158 316,168" fill="#8b93a5"/>
+      <line x1="368" y1="80" x2="368" y2="150" stroke="#c9b8f5" stroke-width="1.4" stroke-dasharray="4 3"/>
+      <polygon points="368,150 363,140 373,140" fill="#c9b8f5"/>
+      <text x="376" y="120" font-size="9.5" fill="#8b93a5">B → C</text>
+
+      <text x="186" y="200" font-size="10" fill="#be123c">两个 Root 都指向 A ⇒ 删 B 也救不了 C</text>
+
+      <rect x="700" y="26" width="90" height="30" rx="6" fill="#f3f5f9" stroke="#dfe4ee"/>
+      <text x="745" y="46" font-size="10.5" fill="#5d6675" text-anchor="middle">GC Roots</text>
+      <rect x="700" y="86" width="90" height="34" rx="6" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="745" y="109" font-size="12" font-weight="700" fill="#be123c" text-anchor="middle">A</text>
+      <rect x="606" y="158" width="72" height="34" rx="6" fill="#f5f2ff" stroke="#ddd3f7"/>
+      <text x="642" y="181" font-size="12" font-weight="700" fill="#7c3aed" text-anchor="middle">B</text>
+      <rect x="812" y="158" width="72" height="34" rx="6" fill="#f5f2ff" stroke="#ddd3f7"/>
+      <text x="848" y="181" font-size="12" font-weight="700" fill="#7c3aed" text-anchor="middle">C</text>
+
+      <line x1="745" y1="56" x2="745" y2="84" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="745,86 740,76 750,76" fill="#8b93a5"/>
+      <line x1="722" y1="120" x2="646" y2="156" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="646,156 650,146 656,153" fill="#8b93a5"/>
+      <line x1="768" y1="120" x2="844" y2="156" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="844,156 834,153 840,146" fill="#8b93a5"/>
+
+      <text x="606" y="212" font-size="10" fill="#be123c">A 的 retained = A + B + C</text>
+      <text x="606" y="230" font-size="10" fill="#7c3aed">B 的 retained = B 自己</text>
+      <text x="606" y="250" font-size="10" fill="#5d6675">B→C 这条边在支配树里被剪掉了，</text>
+      <text x="606" y="268" font-size="10" fill="#5d6675">因为 C 还有一条不经过 B 的路（A 直达）</text>
+    </svg>
+    <figcaption><b>图 2｜同一个图，两种读法。</b>左图里 B 看起来"持有 C"，顺着 B→C 你会去查 B 的清理逻辑；右图（支配树）告诉你 <b>B 只支配自己</b>——删掉 B，C 仍然能从 A 直达，一分内存都不会释放。真正该修的是 A（或 A 的两个 Root）。<b>这就是「按 Retained 排序而不是按引用链找元凶」的全部含义。</b></figcaption>
+  </figure>
+
+  <div class="trap"><b>实战里最常犯的三个误读：</b><br>① 按 <code>Objects</code> 列排序（那是实例个数，一个 <code>char[]</code> 只有 1 个但可能 2GB）；<br>② 按 <code>Shallow Heap</code> 排序（只看谁自己大，看不到谁拖着 10 万个孩子）；<br>③ 顺着「Path to GC Roots」的第一条链去改代码（那条链可能来自 Tomcat 的 <code>TaskThread</code>，看着像框架的锅）。<b>正确姿势只有一个：按 Retained Heap 降序，逐个展开看支配子树。</b></div>
+
+  <p>再补一个数字感：一个 <code>HashMap</code> 的 <code>Node</code> 在压缩指针下是 32B（头 12 + hash 4 + key 4 + value 4 + next 4 = 28，对齐到 32），100 万个条目光节点就 32MB，还不算 key/value 本体和一个必为 2 的幂的 <code>Node[]</code>（100 万 → 容量 1048576 → 数组本身 4MB）。</p>
+
+  <p>所以看到 <code>HashMap$Node</code> 排在 histo 第一页，别急着说"HashMap 泄漏了"——<b>HashMap 从来不泄漏，泄漏的是往里 put 的那个没上限的缓存。</b>这个区别决定了你是改配置还是改代码。</p>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b2">L2</span><em>把「该回收却没回收」变成可观测信号</em></div>
+  <h2>四种引用强度：弱引用不是用来「优化」，是用来「报警」的</h2>
+
+  <p>面试里问「四种引用」,大多数人能背出「强、软、弱、虚」，然后卡住——因为背的是<b>定义</b>，不是<b>用途</b>。真实的用途只有两个：<b>弱引用当缓存的 key</b>，<b>虚引用当内存泄漏的探针</b>。而这两件事恰好是 JVM 自己都在用的。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <rect x="30" y="34" width="530" height="52" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="46" y="58" font-size="12.5" font-weight="800" fill="#be123c">强  Strong</text>
+      <text x="152" y="58" font-size="11.5" fill="#3b4252">只要可达，永不回收，宁可 OOM</text>
+      <text x="152" y="76" font-size="10.5" fill="#8b93a5">普通赋值 · 99% 的泄漏都发生在这里</text>
+
+      <rect x="30" y="96" width="530" height="52" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="46" y="120" font-size="12.5" font-weight="800" fill="#b45309">软  Soft</text>
+      <text x="152" y="120" font-size="11.5" fill="#3b4252">内存不足时才回收（OOM 前最后挣扎）</text>
+      <text x="152" y="138" font-size="10.5" fill="#8b93a5">本意做缓存，实际被 LRU 缓存全面取代（不可控）</text>
+
+      <rect x="30" y="158" width="530" height="52" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="46" y="182" font-size="12.5" font-weight="800" fill="#0369a1">弱  Weak</text>
+      <text x="152" y="182" font-size="11.5" fill="#3b4252">下一次 GC 必定回收（只要没有强引用）</text>
+      <text x="152" y="200" font-size="10.5" fill="#8b93a5">ThreadLocalMap 的 key · WeakHashMap · 缓存 key</text>
+
+      <rect x="30" y="220" width="530" height="52" rx="8" fill="#f5f2ff" stroke="#ddd3f7"/>
+      <text x="46" y="244" font-size="12.5" font-weight="800" fill="#7c3aed">虚  Phantom</text>
+      <text x="152" y="244" font-size="11.5" fill="#3b4252">回收前后进队列，<tspan font-weight="700">拿不到对象</tspan>，只能收到通知</text>
+      <text x="152" y="262" font-size="10.5" fill="#8b93a5">DirectByteBuffer 的 Cleaner · Netty 泄漏检测 · 泄漏探针</text>
+
+      <rect x="590" y="34" width="282" height="238" rx="10" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="608" y="58" font-size="11.5" font-weight="700" fill="#262b36">ReferenceQueue 是探针</text>
+      <text x="608" y="82" font-size="10.5" fill="#3b4252">对象被回收的那一刻，</text>
+      <text x="608" y="99" font-size="10.5" fill="#3b4252">它的 Reference 会被塞进队列。</text>
+      <text x="608" y="124" font-size="10.5" fill="#3b4252">于是「回收」这件事变成了</text>
+      <text x="608" y="141" font-size="10.5" fill="#3b4252">一个你能 poll 到的事件。</text>
+      <text x="608" y="170" font-size="10.5" fill="#7c3aed">三条推论：</text>
+      <text x="608" y="190" font-size="10.5" fill="#3b4252">① 队列空 = 对象都还活着</text>
+      <text x="608" y="207" font-size="10.5" fill="#3b4252">② 队列满而不清 = 你在漏</text>
+      <text x="608" y="224" font-size="10.5" fill="#3b4252">③ 这是唯一能「事后才知道」</text>
+      <text x="608" y="241" font-size="10.5" fill="#3b4252">　 的 GC 可观测手段</text>
+    </svg>
+    <figcaption><b>图 3｜四级引用，一句话一级。</b>注意软引用的处境很尴尬：它的回收时机由 JVM 的「内存压力」决定，而内存压力不是你能配的，所以在有 LRU/TTL 需求的场景里它被 Caffeine 完胜。<b>面试被问「软引用做缓存好不好」时，答「不可控，别用」比背定义高分。</b></figcaption>
+  </figure>
+
+  <h3>ThreadLocalMap 的设计缺陷：key 弱了，value 没弱</h3>
+
+  <p>这是理解所有 ThreadLocal 泄漏问题的唯一钥匙。JDK 的实现是：</p>
+
+  <pre><code>// java.lang.ThreadLocal.ThreadLocalMap.Entry（JDK 源码，一字未改）
+static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt; {
+    Object value;                                  // ← 强引用！
+    Entry(ThreadLocal&lt;?&gt; k, Object v) {
+        super(k);                                  // ← key 是弱引用
+        value = v;
+    }
+}</code></pre>
+
+  <p>设计者的本意是：<b>ThreadLocal 对象本身没人用了（业务代码里那个 static 变量所在的类被卸载了），key 就该自动消失。</b>这个想法只对了一半——key 确实变成了 <code class="inl">null</code>，但 <b>Entry 这个对象本身还牢牢躺在 table 数组里</b>，而 <code class="inl">value</code> 被 Entry 强引用着。</p>
+
+  <p>结果就是一个「key 为 null、value 有 1MB」的僵尸条目。它的释放时机只有一个：<b>下一次对这个 Map 做 get / set / remove 时，顺带扫到它并 expunge。</b>如果这个线程之后再也不用这个 ThreadLocal，那就永远不会有人扫它。</p>
+
+  <p>把这个机制用代码复现出来，是「自己会清账的缓存」——也就是 ThreadLocalMap 本该有的样子：</p>
+
+  <pre><code>// 用「弱引用 key + 引用队列」做一份会自动清账的缓存
+static final class Key extends WeakReference&lt;Object&gt; {
+    final int hash;
+    Key(Object k, ReferenceQueue&lt;Object&gt; q) {
+        super(k, q);
+        this.hash = System.identityHashCode(k);
+    }
+}
+
+private final ReferenceQueue&lt;Object&gt; queue = new ReferenceQueue&lt;&gt;();
+private final Map&lt;Key, byte[]&gt; map = new HashMap&lt;&gt;();
+
+void put(Object k, byte[] v) {
+    expunge();                       // 关键：每次写入先清一遍僵尸条目
+    map.put(new Key(k, queue), v);
+}
+
+private void expunge() {
+    Reference&lt;?&gt; r;
+    while ((r = queue.poll()) != null) {
+        map.remove(r);               // 不 remove，value 就还是强引用，等于没做
+    }
+}</code></pre>
+
+  <p>这段代码解释了三个常被追问的点：</p>
+  <ol>
+    <li><b>为什么清理要「顺带」而不是「实时」？</b>因为 WeakReference 只能告诉你"没了"，不能主动帮你清理。要实时清理就得有一个后台线程轮询队列——ThreadLocalMap 为了零线程成本，选择了顺带清理，代价就是「不调用就永不清理」。</li>
+    <li><b>为什么 <code class="inl">map.remove(r)</code> 这一句是必须的？</b>因为 <code class="inl">r</code> 这个 Reference 对象本身还在 Map 里当 key，value 被它强引用。<b>这行漏了，弱引用缓存就变成了纯泄漏。</b></li>
+    <li><b>为什么 <code class="inl">WeakHashMap</code> 也有同样的问题？</b>它内部就是这么实现的，所以它同样只在 get/set 时清理——一个只用一次就再也不碰的 WeakHashMap，<b>泄漏起来和普通 HashMap 一模一样</b>。</li>
+  </ol>
+
+  <div class="trap"><b>反直觉结论：</b>「用了弱引用就不会泄漏」是错的。<b>弱引用只保证 key 不会拖住对象，不保证 Map 自己会瘦身。</b>凡是「用弱引用做 key 的容器」，都必须回答「谁在什么时候清理死条目」这个问题；答不上来，它就是一个包装得更漂亮的泄漏源。</div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L3</span><em>从「感觉在涨」到「指名道姓」</em></div>
+  <h2>取证四步：先定性，再定量，最后才 dump</h2>
+
+  <p>绝大多数人第一步就做错：直接 <code class="inl">jmap -dump</code> 一个 8G 的堆。后果是——<b>STW 30~60 秒</b>、生成 8~12G 文件、MAT 打开要 20G 以上堆、分析三天，最后发现是个无界缓存。</p>
+
+  <p>正确顺序是「<b>先便宜的后贵的，先定性的后定量的</b>」，四步，成本递增：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <line x1="60" y1="86" x2="850" y2="86" stroke="#dfe4ee" stroke-width="2"/>
+
+      <circle cx="100" cy="86" r="12" fill="#0369a1"/>
+      <text x="100" y="90" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="700">1</text>
+      <circle cx="320" cy="86" r="12" fill="#7c3aed"/>
+      <text x="320" y="90" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="700">2</text>
+      <circle cx="540" cy="86" r="12" fill="#b45309"/>
+      <text x="540" y="90" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="700">3</text>
+      <circle cx="760" cy="86" r="12" fill="#be123c"/>
+      <text x="760" y="90" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="700">4</text>
+
+      <text x="100" y="60" font-size="11" font-weight="700" fill="#0369a1" text-anchor="middle">基线</text>
+      <text x="320" y="60" font-size="11" font-weight="700" fill="#7c3aed" text-anchor="middle">时序三次</text>
+      <text x="540" y="60" font-size="11" font-weight="700" fill="#b45309" text-anchor="middle">判性质</text>
+      <text x="760" y="60" font-size="11" font-weight="700" fill="#be123c" text-anchor="middle">dump 支配树</text>
+
+      <text x="100" y="112" font-size="9.5" fill="#5d6675" text-anchor="middle">GC.heap_info</text>
+      <text x="100" y="128" font-size="9.5" fill="#5d6675" text-anchor="middle">耗时 &lt;1s</text>
+      <text x="100" y="144" font-size="9.5" fill="#5d6675" text-anchor="middle">无 STW</text>
+
+      <text x="320" y="112" font-size="9.5" fill="#5d6675" text-anchor="middle">GC.class_histogram</text>
+      <text x="320" y="128" font-size="9.5" fill="#5d6675" text-anchor="middle">每次 2~5s</text>
+      <text x="320" y="144" font-size="9.5" fill="#5d6675" text-anchor="middle">间隔 2 小时</text>
+
+      <text x="540" y="112" font-size="9.5" fill="#5d6675" text-anchor="middle">增量是否恒定</text>
+      <text x="540" y="128" font-size="9.5" fill="#5d6675" text-anchor="middle">真泄漏 / 容量 / 账外</text>
+      <text x="540" y="144" font-size="9.5" fill="#5d6675" text-anchor="middle">三种分流</text>
+
+      <text x="760" y="112" font-size="9.5" fill="#5d6675" text-anchor="middle">dump:live</text>
+      <text x="760" y="128" font-size="9.5" fill="#5d6675" text-anchor="middle">STW 30~60s</text>
+      <text x="760" y="144" font-size="9.5" fill="#5d6675" text-anchor="middle">够 2G 就 dump</text>
+
+      <rect x="60" y="182" width="790" height="56" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="76" y="204" font-size="10.5" fill="#b45309" font-weight="700">第 5 步（现代做法，可跳过 dump）：</text>
+      <text x="76" y="224" font-size="10.5" fill="#3b4252">JFR 的 OldObjectSample 事件直接给出「老年代活对象的分配栈」，开销 &lt;1%，可以生产常开</text>
+    </svg>
+    <figcaption><b>图 4｜成本递增的四步，加一条现代捷径。</b>第 4 步的 <code>dump:live</code> 会先做一次 Full GC 保证只包含活对象——这个「保证」的代价是 STW，所以<b>它必须在堆还没满的时候做</b>：2G 的堆 dump 只要 5~10 秒，8G 的堆要 30~60 秒，而堆满时 dump 出来的图还被大量临时对象污染。</figcaption>
+  </figure>
+
+  <h3>一条能直接粘到生产机的命令序列</h3>
+
+  <pre><code>PID=12345
+mkdir -p /tmp/leak && cd /tmp/leak
+
+for i in 1 2 3; do
+  echo "=== round $i  $(date '+%F %T') ===" &gt;&gt; info_$i.txt
+  jcmd $PID GC.heap_info &gt;&gt; info_$i.txt        # 堆 used / Metaspace
+  jmap -histo $PID | head -60 &gt;&gt; info_$i.txt    # 不触发 GC，先看粗账
+  jmap -histo:live $PID | head -60 &gt;&gt; live_$i.txt  # 触发 GC，只看活对象
+  sleep 7200                                    # 2 小时
+done
+
+# 下一段用 awk 做差：只看「增量」，不看绝对值</code></pre>
+
+  <p>更省事的是直接用 awk 做差——<b>只看「增量」，不看绝对值</b>，因为绝对值里混着 JVM 自己的常驻对象：</p>
+
+  <pre><code># 把 "  12:   12400   397120  com.foo.Session" 变成 "com.foo.Session 12400"
+norm() { awk '/^[ ]*[0-9]+:/ {print $NF, $3}' "$1" | sort &gt; /tmp/leak/$2; }
+norm live_1.txt c1
+norm live_3.txt c3
+
+# 按增量降序：负数就是有回收，正数才是嫌疑
+join -a1 -a2 -e0 -o 0,1.2,2.2 /tmp/leak/c1 /tmp/leak/c3 \
+  | awk '{d=$3-$2; if (d&gt;1000) printf "%+8d  %10d  %s\n", d, $3, $1}' | sort -rn | head -20</code></pre>
+
+  <p>输出长这样，一眼定性：</p>
+
+  <pre><code>  +4700       21800  com.foo.Session            ← 增量恒定 → 真泄漏
+  +1200       98000  java.lang.String           ← 跟着 Session 涨，是它的字段
+   +30         1200  com.foo.CacheEntry         ← 有涨但总数很小 → 不是主因
+  -8200         900  java.util.HashMap$Node     ← 负数 = 正常回收，别管它</code></pre>
+
+  <div class="good"><b>判据表（这就是第 3 步的全部内容）：</b><br>① 某个业务类实例数<b>单调增长、每次增量近似恒定</b> → 真泄漏，增量 ÷ 间隔 = 每秒泄漏对象数 × 单对象大小 = 泄漏速率；<br>② 实例数<b>涨到某个值就不再涨</b>，或与在线用户数/QPS 同步 → 容量膨胀，去查缓存上限与批量大小；<br>③ 堆里<b>所有类都平稳</b>，但 RSS 在涨 → 账外，直接跳到 L6。</div>
+
+  <h3>把「泄漏速率」算成「几天后爆炸」</h3>
+
+  <p>这一步是面试的加分项，也是判断紧急程度的唯一依据。上面那组数字：</p>
+
+  <ul>
+    <li>每 2 小时 +4700 个 <code class="inl">Session</code> → <b>2350 个/小时</b>；</li>
+    <li>每个 <code class="inl">Session</code>（含 3 个 String、1 个 <code class="inl">long[]</code>、1 个权限 Set）<b>约 1.2KB</b>；</li>
+    <li>泄漏速率 = 2350 × 1.2KB = <b>2.82 MB/小时 ≈ 66 MB/天</b>；</li>
+    <li>8G 堆，运行基线占 2G，可用 6G = 6144MB → <b>6144 ÷ 66 ≈ 93 天</b>。</li>
+  </ul>
+
+  <p><b>「93 天」这个数字，比任何定性描述都有用。</b>它说明三件事：① 这不是紧急故障，可以按版本节奏修；② 但它是<b>必然</b>故障，不修就是三个月后重演；③ 灰度/扩容都会掩盖它（堆越大，天数越长），所以「上了大堆就没再出现」是自欺欺人。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <line x1="60" y1="220" x2="850" y2="220" stroke="#dfe4ee"/>
+      <line x1="60" y1="220" x2="60" y2="40" stroke="#dfe4ee"/>
+      <text x="60" y="238" font-size="9.5" fill="#8b93a5">第 0 天</text>
+      <text x="288" y="238" font-size="9.5" fill="#8b93a5" text-anchor="middle">第 30 天</text>
+      <text x="516" y="238" font-size="9.5" fill="#8b93a5" text-anchor="middle">第 60 天</text>
+      <text x="767" y="238" font-size="9.5" fill="#8b93a5" text-anchor="middle">第 93 天</text>
+      <text x="46" y="224" font-size="9.5" fill="#8b93a5" text-anchor="end">2G</text>
+      <text x="46" y="66" font-size="9.5" fill="#8b93a5" text-anchor="end">8G</text>
+
+      <line x1="60" y1="63" x2="850" y2="63" stroke="#be123c" stroke-dasharray="5 4"/>
+      <text x="846" y="56" font-size="10" fill="#be123c" text-anchor="end">Xmx 8G → OOM</text>
+
+      <polyline points="60,220 288,169 516,119 767,63" fill="none" stroke="#0369a1" stroke-width="2.4"/>
+
+      <circle cx="288" cy="169" r="4" fill="#ffffff" stroke="#0369a1" stroke-width="2"/>
+      <text x="288" y="158" font-size="10" fill="#0369a1" text-anchor="middle">4.0G</text>
+      <circle cx="516" cy="119" r="4" fill="#ffffff" stroke="#0369a1" stroke-width="2"/>
+      <text x="516" y="108" font-size="10" fill="#0369a1" text-anchor="middle">6.0G</text>
+
+      <rect x="110" y="96" width="190" height="50" rx="7" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="124" y="116" font-size="10.5" fill="#3b4252">2.82 MB/h × 24 = 66 MB/天</text>
+      <text x="124" y="134" font-size="10.5" fill="#3b4252">6144 MB ÷ 66 ≈ 93 天</text>
+
+      <text x="620" y="150" font-size="10.5" fill="#5d6675">第 30 天：堆 4G，</text>
+      <text x="620" y="168" font-size="10.5" fill="#5d6675">只表现为「YGC 变频繁」，</text>
+      <text x="620" y="186" font-size="10.5" fill="#5d6675">没人会当故障处理。</text>
+    </svg>
+    <figcaption><b>图 5｜缓慢泄漏的全部杀伤力在于「斜率太小」。</b>93 天里它一直伪装成「业务在增长」，直到某天 YGC 从 20 分钟一次变成 20 秒一次，然后 Full GC 连发、接口超时、容器重启。<b>能在第 2 天用一个 5 秒的命令看清的斜率，不要留到第 93 天用 60 秒的 STW 去换。</b></figcaption>
+  </figure>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b4">L4</span><em>最常见的真泄漏，也是最能讲出深度的一个</em></div>
+  <h2>ThreadLocal：一条七跳引用链，和 200MB 的算术</h2>
+
+  <p>「ThreadLocal 会内存泄漏」这句话人人会说，但面试官接着问「key 不是弱引用吗，为什么还会漏」，能答完整的不超过三成。答案就藏在一条七跳的链上。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 366" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <text x="40" y="18" font-size="11.5" font-weight="700" fill="#262b36">七跳引用链：谁能断，谁断不掉</text>
+
+      <rect x="40" y="26" width="250" height="38" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="54" y="42" font-size="10.5" font-weight="700" fill="#be123c">1. Thread（Tomcat worker）</text>
+      <text x="54" y="57" font-size="10" fill="#5d6675">生命周期 = 应用生命周期</text>
+
+      <rect x="40" y="78" width="250" height="38" rx="7" fill="#fbfcfe" stroke="#dfe4ee"/>
+      <text x="54" y="94" font-size="10.5" font-weight="700" fill="#3b4252">2. Thread.threadLocals</text>
+      <text x="54" y="109" font-size="10" fill="#5d6675">类型 ThreadLocalMap</text>
+
+      <rect x="40" y="130" width="250" height="38" rx="7" fill="#fbfcfe" stroke="#dfe4ee"/>
+      <text x="54" y="146" font-size="10.5" font-weight="700" fill="#3b4252">3. table：Entry[]</text>
+      <text x="54" y="161" font-size="10" fill="#5d6675">长度 16 起，2 的幂，装载因子 2/3</text>
+
+      <rect x="40" y="182" width="250" height="38" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="54" y="198" font-size="10.5" font-weight="700" fill="#0369a1">4. Entry extends WeakReference</text>
+      <text x="54" y="213" font-size="10" fill="#5d6675">key 是弱引用 ⇒ 可以被 GC 置 null</text>
+
+      <rect x="40" y="234" width="250" height="38" rx="7" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="54" y="250" font-size="10.5" font-weight="700" fill="#b45309">5. Entry.value（强引用）</text>
+      <text x="54" y="265" font-size="10" fill="#5d6675">key 死了它也不死 —— 泄漏就在这一跳</text>
+
+      <rect x="40" y="292" width="250" height="40" rx="7" fill="#f5f2ff" stroke="#ddd3f7"/>
+      <text x="54" y="309" font-size="10.5" font-weight="700" fill="#7c3aed">6. 业务对象 / byte[] 1MB</text>
+      <text x="54" y="324" font-size="10" fill="#5d6675">本该随请求结束就回收</text>
+
+      <line x1="165" y1="64" x2="165" y2="76" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="165,78 160,69 170,69" fill="#8b93a5"/>
+      <line x1="165" y1="116" x2="165" y2="128" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="165,130 160,121 170,121" fill="#8b93a5"/>
+      <line x1="165" y1="168" x2="165" y2="180" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="165,182 160,173 170,173" fill="#8b93a5"/>
+      <line x1="165" y1="220" x2="165" y2="232" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="165,234 160,225 170,225" fill="#8b93a5"/>
+      <line x1="165" y1="272" x2="165" y2="290" stroke="#8b93a5" stroke-width="1.4"/>
+      <polygon points="165,292 160,283 170,283" fill="#8b93a5"/>
+
+      <rect x="330" y="26" width="540" height="306" rx="10" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="348" y="50" font-size="11.5" font-weight="700" fill="#262b36">为什么「key 是弱引用」救不了它</text>
+      <text x="348" y="76" font-size="10.5" fill="#3b4252">· key 弱引用：业务类卸载 / ThreadLocal 变量没人用了，</text>
+      <text x="358" y="93" font-size="10.5" fill="#3b4252">下次 GC 把 key 置为 null —— 这一步确实生效了。</text>
+      <text x="348" y="116" font-size="10.5" fill="#3b4252">· 但 Entry 对象自己还躺在 table 数组里，</text>
+      <text x="358" y="133" font-size="10.5" fill="#3b4252">它的 value 字段是强引用，于是 value 依然可达。</text>
+      <text x="348" y="156" font-size="10.5" fill="#3b4252">· 唯一的清理时机：get / set / remove 时顺带</text>
+      <text x="358" y="173" font-size="10.5" fill="#3b4252">expungeStaleEntry()。不再调用 = 永不清理。</text>
+
+      <rect x="348" y="188" width="504" height="76" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="364" y="210" font-size="11" font-weight="700" fill="#be123c">泄漏量是可以算出来的</text>
+      <text x="364" y="230" font-size="10.5" fill="#3b4252">存活线程数 × 每个 value 大小 = 净泄漏</text>
+      <text x="364" y="250" font-size="10.5" fill="#be123c" font-weight="700">200 线程 × 1MB = 200MB；漏 5 个地方 = 1GB</text>
+
+      <text x="348" y="292" font-size="10.5" fill="#5d6675">结论：ThreadLocal 的泄漏不是「key 没清」，</text>
+      <text x="348" y="310" font-size="10.5" fill="#5d6675">而是「value 没有对应的 remove」。修法只有一条 ——</text>
+      <text x="348" y="328" font-size="10.5" fill="#be123c" font-weight="700">在 finally 里 remove()，不是 set(null)。</text>
+    </svg>
+    <figcaption><b>图 6｜七跳链上的第 5 跳是全部问题的所在。</b>注意第 3 跳的细节：<code>Entry[]</code> 的长度是 2 的幂、装载因子是 2/3——这意味着即使只有 1 个漏掉的 ThreadLocal，<b>整个数组（16 个槽 = 16 × 16B 引用 + 头）也要跟着活</b>。所以泄漏的从来不只是那 1MB。</figcaption>
+  </figure>
+
+  <h3>事故代码长什么样</h3>
+
+  <pre><code>// 每天都在写的写法，异常路径上必漏
+public class UserContextFilter implements Filter {
+
+    private static final ThreadLocal&lt;UserContext&gt; CTX = new ThreadLocal&lt;&gt;();
+
+    @Override
+    public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) {
+        UserContext ctx = loadUser(req);        // 假设 1MB（含权限、组织树快照）
+        CTX.set(ctx);
+        chain.doFilter(req, res);               // ← 这里一旦抛异常……
+        CTX.remove();                           // ← ……这行就永远不执行
+    }
+}</code></pre>
+
+  <p>在「一个请求一个线程」的年代，这个 bug 的后果是<b>一次请求漏 1MB，线程死了就回收</b>，几乎无害。在 Tomcat 的 200 个 worker 线程下，后果是<b>1MB 永久驻留</b>——因为线程不死，<code class="inl">threadLocals</code> 就不死，Entry 就不死。</p>
+
+  <p>正确写法只有一种，且必须用 <code class="inl">try/finally</code>：</p>
+
+  <pre><code>@Override
+public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
+        throws IOException, ServletException {
+    UserContext ctx = loadUser(req);
+    CTX.set(ctx);
+    try {
+        chain.doFilter(req, res);
+    } finally {
+        CTX.remove();     // 不是 set(null)：set(null) 只清值，Entry 槽位还在
+    }
+}</code></pre>
+
+  <div class="trap"><b>三个必须知道的细节：</b><br>① <code>set(null)</code> 不等于 <code>remove()</code>。前者把 value 置 null 但<b>保留 Entry</b>（槽位仍被占，key 的弱引用清理逻辑也不会主动跑）；后者把整个 Entry 删掉并把槽位设成「已使用但为空」的探测标记。<br>② 拦截器/AOP/异步线程里都要成对写。跨线程传递要用 <code>InheritableThreadLocal</code>（只在<b>线程创建时</b>拷贝一次，线程池里无效）或 <code>TransmittableThreadLocal</code>。<br>③ <b>虚拟线程时代这个 bug 会自己变小</b>：ThreadLocal 存在虚拟线程的 StackChunk 里，虚拟线程结束即释放，天然不泄漏（第 13 期讲过）。但注意——<b>别把大对象放进 carrier 线程的 ThreadLocal</b>，那是 ForkJoinPool 的线程，又回到「永不结束」的老问题上。</div>
+
+  <figure>
+    <svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <text x="30" y="20" font-size="11.5" font-weight="700" fill="#262b36">同一个 bug，三种线程模型下的净泄漏（每个 value 1MB）</text>
+
+      <text x="30" y="54" font-size="10.5" fill="#3b4252">1 个漏掉的 ThreadLocal × 200 线程</text>
+      <rect x="300" y="40" width="112" height="24" rx="4" fill="#0369a1"/>
+      <text x="420" y="57" font-size="10.5" fill="#0369a1" font-weight="700">200 MB</text>
+
+      <text x="30" y="112" font-size="10.5" fill="#3b4252">再加 1 个漏掉的 UserContext</text>
+      <rect x="300" y="98" width="224" height="24" rx="4" fill="#7c3aed"/>
+      <text x="532" y="115" font-size="10.5" fill="#7c3aed" font-weight="700">400 MB</text>
+
+      <text x="30" y="170" font-size="10.5" fill="#3b4252">一个中型项目里常见的 5 处</text>
+      <rect x="300" y="156" width="520" height="24" rx="4" fill="#be123c"/>
+      <text x="828" y="173" font-size="10.5" fill="#be123c" font-weight="700">1 GB</text>
+
+      <line x1="300" y1="196" x2="860" y2="196" stroke="#dfe4ee"/>
+      <text x="300" y="210" font-size="9.5" fill="#8b93a5">0</text>
+      <text x="860" y="210" font-size="9.5" fill="#8b93a5" text-anchor="end">1000 MB</text>
+      <text x="30" y="230" font-size="10" fill="#5d6675">注意：这 1GB 不会触发 OOM，它只是让每次 YGC 的存活率上升、晋升变快 —— 表现为「GC 变慢」，不是「内存不足」。</text>
+    </svg>
+    <figcaption><b>图 7｜一个 bug，三档后果。</b>单请求线程模型下这个问题几乎不可见（线程死亡即释放）；固定线程池下它变成永久驻留；而越大的线程池、越多的 ThreadLocal，泄漏量就是<b>乘法</b>。这也是为什么「我们线上没配线程池」的年轻项目从来看不到这个 bug。</figcaption>
+  </figure>
+
+  <div class="good"><b>面试怎么讲才算过关（三层递进）：</b><br>第一层说现象：ThreadLocal 不 remove 会泄漏。<br>第二层说机制：key 弱、value 强，Entry 留在 table 里，只有 get/set/remove 才顺带清理。<br>第三层说边界：单请求线程模型下无害，线程池下才致命；虚拟线程又把它变回无害；跨线程传递是另一个问题（InheritableThreadLocal 只在线程创建时拷贝，线程池失效）。<b>能讲到第三层，这个问题就结束了。</b></div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L5</span><em>唯一会「撑爆元空间」的泄漏</em></div>
+  <h2>ClassLoader 泄漏：热部署 14 次，元空间就满了</h2>
+
+  <p>这类泄漏在业务代码里几乎见不到，但在<b>容器、插件化、热部署、字节码增强</b>这四类场景里非常典型。而且它有一个其他泄漏都没有的特征：<b>泄漏的不是堆，是元空间</b>——所以 <code class="inl">jmap -histo</code> 看着一切正常，堆也很健康，只有 Metaspace 在阶梯式上涨。</p>
+
+  <h3>为什么一个 loader 挂住 = 几万个 Class 挂住</h3>
+
+  <p>类卸载的条件有三个，缺一不可：<b>① 该类的所有实例都不可达；② 该类的 <code class="inl">Class</code> 对象不可达；③ 加载它的 ClassLoader 不可达。</b></p>
+
+  <p>条件 ③ 是死穴。一个 <code class="inl">WebappClassLoader</code> 加载了 5000 个类，每个类的元数据（方法字节码、常量池、字段描述符）平均 5~6KB，加上静态字段引用的对象——<b>只要 loader 自己被任何一个强引用挂住，这 5000 个类一个都卸载不掉</b>。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <text x="30" y="20" font-size="11.5" font-weight="700" fill="#262b36">每次热部署 +30MB，第 14 次撞上限</text>
+      <text x="560" y="20" font-size="11.5" font-weight="700" fill="#262b36">三个最常见的「挂钩」</text>
+
+      <line x1="60" y1="260" x2="510" y2="260" stroke="#dfe4ee"/>
+      <line x1="60" y1="260" x2="60" y2="46" stroke="#dfe4ee"/>
+      <line x1="60" y1="50" x2="510" y2="50" stroke="#be123c" stroke-dasharray="5 4"/>
+      <text x="506" y="44" font-size="9.5" fill="#be123c" text-anchor="end">MaxMetaspaceSize 512M</text>
+
+      <polyline points="60,210.8 115,210.8 115,198.5 170,198.5 170,186.2 225,186.2 225,173.9 280,173.9 280,161.6 335,161.6 335,149.3 390,149.3 390,137.0 445,137.0 445,124.6"
+                fill="none" stroke="#0369a1" stroke-width="2"/>
+      <polyline points="445,124.6 498,124.6 498,112.3 505,112.3"
+                fill="none" stroke="#0369a1" stroke-width="2" stroke-dasharray="5 4"/>
+      <text x="60" y="278" font-size="9.5" fill="#8b93a5">第 1 次</text>
+      <text x="280" y="278" font-size="9.5" fill="#8b93a5" text-anchor="middle">第 5 次</text>
+      <text x="445" y="278" font-size="9.5" fill="#8b93a5" text-anchor="middle">第 8 次</text>
+      <text x="54" y="214" font-size="9.5" fill="#8b93a5" text-anchor="end">120M</text>
+      <text x="54" y="129" font-size="9.5" fill="#8b93a5" text-anchor="end">360M</text>
+      <text x="150" y="100" font-size="10" fill="#0369a1">每次 +30MB（5000 类 × 6KB），从不回落</text>
+
+      <rect x="560" y="34" width="300" height="72" rx="8" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="574" y="54" font-size="10.5" font-weight="700" fill="#be123c">① 自己 new 的线程池 / 定时器</text>
+      <text x="574" y="72" font-size="10" fill="#3b4252">核心线程是 GC Root，线程的</text>
+      <text x="574" y="89" font-size="10" fill="#3b4252">contextClassLoader 指向旧 loader</text>
+
+      <rect x="560" y="118" width="300" height="72" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="574" y="138" font-size="10.5" font-weight="700" fill="#b45309">② JVM 级注册表</text>
+      <text x="574" y="156" font-size="10" fill="#3b4252">DriverManager、Logger、JMX、</text>
+      <text x="574" y="173" font-size="10" fill="#3b4252">shutdown hook 都在 JVM 根上</text>
+
+      <rect x="560" y="202" width="300" height="72" rx="8" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="574" y="222" font-size="10.5" font-weight="700" fill="#0369a1">③ ThreadLocal（线程是 Tomcat 的）</text>
+      <text x="574" y="240" font-size="10" fill="#3b4252">应用重启了，线程没重启 ——</text>
+      <text x="574" y="257" font-size="10" fill="#3b4252">value 里还握着旧 loader 的类实例</text>
+
+      <text x="560" y="292" font-size="10" fill="#5d6675">卸载三条件：实例 / Class / ClassLoader</text>
+      <text x="560" y="308" font-size="10" fill="#5d6675">三者全部不可达才卸载，任一被钉住即残留。</text>
+    </svg>
+    <figcaption><b>图 8｜元空间的阶梯，和三个不断链的钩子。</b>为什么是「阶梯」而不是「斜坡」：每次 redeploy 新增一个 loader（+30MB），旧的<b>一次都不会回收</b>，所以图形是台阶式上升——<b>「阶梯」是引用残留型泄漏的图形指纹，看到它就该去查 loader，而不是查缓存。</b></figcaption>
+  </figure>
+
+  <h3>自己在本地复现一次（面试讲这个比背定义强十倍）</h3>
+
+  <pre><code>public class LoaderLeakDemo {
+    // 关键点：这个 Timer 的线程是「应用级」的，redeploy 时不会停
+    static final ScheduledExecutorService TIMER =
+            Executors.newSingleThreadScheduledExecutor();
+
+    static {
+        // 陷阱：静态块里注册到 JVM 级注册表
+        TIMER.scheduleAtFixedRate(() -&gt; {
+            // 这里只要引用到本应用的任何一个类，loader 就被钉住了
+            System.out.println(Config.INSTANCE.getName());
+        }, 0, 1, TimeUnit.SECONDS);
+    }
+}</code></pre>
+
+  <p>复现步骤（Tomcat 里最直观）：把上面这段打进 WAR，用 <code class="inl">-XX:MaxMetaspaceSize=128m</code> 起 Tomcat，然后连续 redeploy。你会看到：</p>
+
+  <ul>
+    <li><code class="inl">jcmd &lt;pid&gt; VM.metaspace</code> 里 <code class="inl">used</code> 每次 +30MB 左右，且 <b>never decrease</b>；</li>
+    <li>第 5 次左右开始报 <code class="inl">java.lang.OutOfMemoryError: Metaspace</code>；</li>
+    <li>heap dump 里 <code class="inl">WebappClassLoader</code> 有 5 个实例——<b>正常应该只有 1 个</b>。</li>
+  </ul>
+
+  <p>最后那条是最快的判据：<b>dump 里同一个 ClassLoader 类出现多个实例，就是没卸干净。</b>不需要看引用链，数量本身就是证据。</p>
+
+  <pre><code># 更精确的判据：直接看每个 loader 挂着多少个类
+jcmd 12345 VM.classloader_stats
+# ClassLoader         Parent              CLD*         Classes   ChunkSz
+# 0x0000...Webapp    0x0000...App      0x0000...      5120      31.2M   ← 旧应用残留
+# 0x0000...App       0x0000...Plat     0x0000...       840       4.1M
+# 0x0000...Plat      null              0x0000...      1200       6.8M</code></pre>
+
+  <div class="good"><b>标准修法（四条，缺一不可）：</b><br>① 所有 <code>ExecutorService</code> 在 <code>contextDestroyed()</code> 里 <code>shutdownNow()</code> 并 <code>awaitTermination</code>；<br>② 所有 <code>ThreadLocal</code> 在线程归还前 <code>remove()</code>，或用 <code>contextDestroyed</code> 统一清；<br>③ 所有注册到 JVM 级的位置（<code>DriverManager</code>、<code>Logger</code>、<code>JMX</code>、<code>Runtime.addShutdownHook</code>）都要成对注销；<br>④ <code>MaxMetaspaceSize</code> 必须显式设置（默认无限），把它当成「泄漏的保险丝」而不是「容量参数」。</div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b3">L6</span><em>dump 打开也看不见的那些内存</em></div>
+  <h2>账外内存四本账：dump 里看不见的那 4G</h2>
+
+  <p>这是「内存泄漏」里最容易被误判的一类，因为<b>所有堆内工具都告诉你一切正常</b>：dump 干净、histo 平稳、GC 日志漂亮。可是 <code class="inl">ps</code> 里的 RSS 一直在涨，最后容器 <code class="inl">exit 137</code>。</p>
+
+  <p>四本账，各有各的记账人，各有各的取证命令：</p>
+
+  <table>
+    <tr><th style="width:150px">账目</th><th>怎么分配</th><th>谁负责释放</th><th>典型症状</th></tr>
+    <tr>
+      <td><b>DirectByteBuffer</b><br><span style="color:#8b93a5;font-size:12px">堆外直接内存</span></td>
+      <td><code>ByteBuffer.allocateDirect(n)</code>，受 <code>-XX:MaxDirectMemorySize</code> 限制（<b>默认 = 最大堆</b>）</td>
+      <td>一个虚引用 <code>Cleaner</code> 线程，<b>依赖 GC 触发</b></td>
+      <td>堆很空却报 <code>OutOfMemoryError: Direct buffer memory</code>；或容器 137 而 Java 无异常</td>
+    </tr>
+    <tr>
+      <td><b>Netty ByteBuf</b><br><span style="color:#8b93a5;font-size:12px">池化的直接内存</span></td>
+      <td><code>PooledByteBufAllocator</code> 按 chunk 预分配（默认 16MB）</td>
+      <td><b>你手动 <code>release()</code></b>，引用计数归零才归还池</td>
+      <td>跑几天才涨；<code>LEAK: ByteBuf.release() was not called</code></td>
+    </tr>
+    <tr>
+      <td><b>Metaspace</b><br><span style="color:#8b93a5;font-size:12px">类元数据</span></td>
+      <td>类加载时分配，<b>默认无上限</b></td>
+      <td>类卸载（见 L5 三条件）</td>
+      <td>阶梯上涨，<code>OutOfMemoryError: Metaspace</code></td>
+    </tr>
+    <tr>
+      <td><b>glibc arena</b><br><span style="color:#8b93a5;font-size:12px">分配器碎片</span></td>
+      <td>JVM 通过 <code>malloc</code> 申请本地内存，glibc 按 arena 管理</td>
+      <td><b>基本不还</b>，只在自己的 arena 内复用</td>
+      <td>RSS 比堆大 1~2G，NMT 里记在 "Other"/"Internal"</td>
+    </tr>
+  </table>
+
+  <h3>第一本账：Direct，为什么「堆越空，堆外越容易炸」</h3>
+
+  <p>这个反直觉的因果链值得单独讲，因为它把两个看似无关的机制串起来了：</p>
+
+  <ol>
+    <li><code>allocateDirect</code> 时，堆内只创建一个很小的 <code>DirectByteBuffer</code> 对象（约 100B），真正的 1MB 在堆外。</li>
+    <li>释放堆外内存的是挂在它上面的 <code>Cleaner</code>（一个虚引用）。<b>虚引用要被触发，前提是这个堆内对象被 GC 回收。</b></li>
+    <li>于是：<b>堆内压力小 → YGC 少 → 小对象迟迟不进老年代不被回收 → Cleaner 不跑 → 堆外只进不出。</b></li>
+  </ol>
+
+  <p>所以「<code class="inl">-Xmx8g</code> 而 <code class="inl">MaxDirectMemorySize</code> 默认也是 8g」是一件很恐怖的事：堆外可以吃到 8G，容器 limit 只有 12G，<b>你会在堆用到 4G 的时候被 cgroup 杀掉</b>，而且什么异常都看不到。</p>
+
+  <div class="good"><b>结论性配置（可直接抄）：</b><br>① 显式设 <code>-XX:MaxDirectMemorySize=512m</code>（按业务实测 × 2），让它<b>先于容器报 Java OOM</b>，至少留个 dump 和异常栈；<br>② 大量小 buffer 的场景加 <code>-Djdk.nio.maxCachedBufferSize=262144</code>，避免 ThreadLocal 缓存里攒一堆 1MB 的临时 buffer；<br>③ 一定要让「Java OOM」先于「容器 137」发生——<b>OOM 可查，137 不可查</b>，这是可观测性的最基本原则。</div>
+
+  <h3>第二本账：Netty 的引用计数，漏一次就是 16MB</h3>
+
+  <p>Netty 不用 Cleaner，它自己管引用计数。原因很实际：一条连接上每秒几千次分配，靠 GC 触发释放太慢也太随机。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 280" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <text x="30" y="20" font-size="11.5" font-weight="700" fill="#262b36">refCnt 的正常轨迹与泄漏轨迹</text>
+      <text x="580" y="20" font-size="11.5" font-weight="700" fill="#262b36">ResourceLeakDetector 四档</text>
+
+      <line x1="60" y1="210" x2="560" y2="210" stroke="#dfe4ee"/>
+      <line x1="60" y1="210" x2="60" y2="56" stroke="#dfe4ee"/>
+      <text x="52" y="214" font-size="9.5" fill="#8b93a5" text-anchor="end">0</text>
+      <text x="52" y="169" font-size="9.5" fill="#8b93a5" text-anchor="end">1</text>
+      <text x="52" y="124" font-size="9.5" fill="#8b93a5" text-anchor="end">2</text>
+
+      <polyline points="60,165 150,120 240,165 330,120 420,165" fill="none" stroke="#0369a1" stroke-width="2.2"/>
+      <polyline points="420,165 480,165 480,210" fill="none" stroke="#047857" stroke-width="2.2"/>
+      <polyline points="420,165 560,165" fill="none" stroke="#be123c" stroke-width="2.2" stroke-dasharray="6 4"/>
+
+      <text x="150" y="112" font-size="9.5" fill="#8b93a5" text-anchor="middle">retain()</text>
+      <text x="240" y="180" font-size="9.5" fill="#8b93a5" text-anchor="middle">release()</text>
+      <text x="330" y="112" font-size="9.5" fill="#8b93a5" text-anchor="middle">retain()</text>
+      <text x="486" y="204" font-size="10" fill="#047857">归零 → 归还池</text>
+      <text x="556" y="158" font-size="10" fill="#be123c" text-anchor="end">卡在 1，永不归还</text>
+
+      <rect x="140" y="228" width="420" height="34" rx="6" fill="#fbfcfe" stroke="#e3e7ef"/>
+      <text x="154" y="249" font-size="10" fill="#3b4252">每漏一次 = 一个 chunk（默认 16MB）长期不释放</text>
+
+      <rect x="580" y="34" width="280" height="52" rx="7" fill="#f3f5f9" stroke="#dfe4ee"/>
+      <text x="594" y="54" font-size="10.5" font-weight="700" fill="#5d6675">DISABLED</text>
+      <text x="594" y="72" font-size="10" fill="#8b93a5">不检测，性能最好，生产默认</text>
+
+      <rect x="580" y="94" width="280" height="52" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="594" y="114" font-size="10.5" font-weight="700" fill="#0369a1">SIMPLE</text>
+      <text x="594" y="132" font-size="10" fill="#8b93a5">约 1% 采样，只报「有没有漏」</text>
+
+      <rect x="580" y="154" width="280" height="52" rx="7" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="594" y="174" font-size="10.5" font-weight="700" fill="#b45309">ADVANCED</text>
+      <text x="594" y="192" font-size="10" fill="#8b93a5">约 1% 采样，附最近访问记录</text>
+
+      <rect x="580" y="214" width="280" height="52" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="594" y="234" font-size="10.5" font-weight="700" fill="#be123c">PARANOID</text>
+      <text x="594" y="252" font-size="10" fill="#8b93a5">100% 采样，只用于排障，别常开</text>
+    </svg>
+    <figcaption><b>图 9｜引用计数的两条岔路。</b>正常路径是 1→2→1→0（retain 与 release 必须成对），漏掉最后一次 release 就停在 1，这个 chunk 永远不归还池——<b>池化分配器的可怕之处在于它不会 OOM，只会让池子越来越大</b>，直到 RSS 顶到容器 limit。</figcaption>
+  </figure>
+
+  <pre><code>// 三种必然泄漏的写法（都是「没有 release」的变体）
+// ① 异常路径跳过 release
+ByteBuf buf = ctx.alloc().buffer();
+buf.writeBytes(data);
+channel.writeAndFlush(buf);      // writeAndFlush 会自己释放，但如果前面抛了异常，这个 buf 就漏了
+
+// ② 只 release 了一半（CompositeByteBuf 的子 buffer）
+CompositeByteBuf all = ctx.alloc().compositeBuffer();
+all.addComponent(true, head);
+all.addComponent(true, body);    // body 的 refCnt 被 +1，只 release all 是不够的
+
+// ③ SimpleChannelInboundHandler 用错基类
+// 继承 ChannelInboundHandlerAdapter 就必须自己 release；
+// 继承 SimpleChannelInboundHandler 它帮你 release —— 两者混用必漏。</code></pre>
+
+  <p><b>排障姿势：</b>把 <code class="inl">-Dio.netty.leakDetection.level=paranoid</code> 加到启动参数，复现 1~2 小时（<b>不要常开，100% 采样会拖慢 20%~30%</b>），日志里会出现：</p>
+
+  <pre><code>LEAK: ByteBuf.release() was not called before it's garbage-collected.
+Recent access records:
+  #1: io.netty.buffer.AdvancedLeakAwareByteBuf.writeBytes(...)
+      io.netty.handler.codec.http.HttpObjectEncoder.encode(...)
+      ... (完整分配栈) ...
+Created at:
+      io.netty.buffer.PooledByteBufAllocator.newDirectBuffer(...)</code></pre>
+
+  <p>这个栈里最关键的是 <b>Created at</b>——它直接告诉你哪个 handler 分配的。<b>这就是「分配栈」相对「引用链」的优势：引用链告诉你是谁抓着它，分配栈告诉你是谁生的它。</b>查泄漏时，后者往往更接近答案。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b3">L7</span><em>把 RSS 拆成能对账的六段</em></div>
+  <h2>RSS 拆账：把 12G 拆成能对账的六段</h2>
+
+  <p>面试官问「容器里堆该设多大」，标准答案是「limit 的 60%~70%」。但这个答案只有在你<b>能说出剩下 30%~40% 花在哪</b>的时候才成立，否则就是背了个数。</p>
+
+  <p>下面是一个真实的 12G 容器、<code class="inl">-Xmx8g</code> 的账单：</p>
+
+  <figure>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <text x="40" y="46" font-size="12" font-weight="700" fill="#262b36">RSS = 12.0 GB</text>
+      <text x="854" y="46" font-size="10" fill="#8b93a5" text-anchor="end">容器 limit 12G，没有余量</text>
+
+      <rect x="40" y="58" width="546" height="48" fill="#0369a1"/>
+      <rect x="586" y="58" width="34" height="48" fill="#7c3aed"/>
+      <rect x="620" y="58" width="16" height="48" fill="#b45309"/>
+      <rect x="636" y="58" width="82" height="48" fill="#be123c"/>
+      <rect x="718" y="58" width="68" height="48" fill="#6b7280"/>
+      <rect x="786" y="58" width="68" height="48" fill="#94a3b8"/>
+
+      <text x="310" y="88" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">Java 堆 committed 8.0G</text>
+      <text x="677" y="88" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">1.2G</text>
+
+      <text x="40" y="126" font-size="10" fill="#8b93a5">堆只占 67%，剩下 4G 全在账外 —— 而 dump 里只能看到左边那一段</text>
+
+      <rect x="40" y="146" width="10" height="10" fill="#0369a1"/>
+      <text x="56" y="155" font-size="10" fill="#3b4252">Java 堆 8.0G</text>
+      <rect x="180" y="146" width="10" height="10" fill="#7c3aed"/>
+      <text x="196" y="155" font-size="10" fill="#3b4252">Metaspace 0.50G</text>
+      <rect x="320" y="146" width="10" height="10" fill="#b45309"/>
+      <text x="336" y="155" font-size="10" fill="#3b4252">CodeCache 0.24G</text>
+      <rect x="460" y="146" width="10" height="10" fill="#be123c"/>
+      <text x="476" y="155" font-size="10" fill="#3b4252">Direct 1.20G</text>
+
+      <rect x="40" y="170" width="10" height="10" fill="#6b7280"/>
+      <text x="56" y="179" font-size="10" fill="#3b4252">glibc arena / 碎片 1.00G</text>
+      <rect x="240" y="170" width="10" height="10" fill="#94a3b8"/>
+      <text x="256" y="179" font-size="10" fill="#3b4252">线程栈 + JVM 自身 + 其他 1.04G</text>
+
+      <rect x="40" y="200" width="814" height="76" rx="8" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="56" y="222" font-size="10.5" font-weight="700" fill="#b45309">拆账命令（必须提前开，重启才生效）</text>
+      <text x="56" y="242" font-size="10.5" fill="#3b4252">-XX:NativeMemoryTracking=summary　→　jcmd &lt;pid&gt; VM.native_memory summary</text>
+      <text x="56" y="262" font-size="10.5" fill="#5d6675">开销约 5%~10% 内存与少量 CPU，只在对账期开，事后关掉</text>
+    </svg>
+    <figcaption><b>图 10｜12G 里只有 8G 是你能用 dump 看到的。</b>两张最大的「隐形账单」是 Direct（1.2G）和 glibc 碎片（1.0G）——<b>前者是你分配的，后者是分配器留下的</b>。前者靠改代码或配 <code>MaxDirectMemorySize</code>，后者靠 <code>MALLOC_ARENA_MAX=2</code> 抑制。</figcaption>
+  </figure>
+
+  <table>
+    <tr><th style="width:170px">账目</th><th>取值</th><th>怎么估</th><th>怎么压</th></tr>
+    <tr><td>Java 堆 committed</td><td>8.0G</td><td><code>-Xmx</code>，注意是 <b>committed</b> 不是 used</td><td>按 limit 的 60% 反推</td></tr>
+    <tr><td>Metaspace</td><td>0.50G</td><td><code>jcmd VM.metaspace</code>，看 committed</td><td>设 <code>MaxMetaspaceSize</code> 当保险丝</td></tr>
+    <tr><td>CodeCache</td><td>0.24G</td><td>JIT 编译的代码，<b>默认预留 240M</b></td><td>基本不用管，除非疯狂生成字节码</td></tr>
+    <tr><td>Direct</td><td>1.20G</td><td><code>BufferPoolMXBean</code> 的 <code>memoryUsed</code></td><td><code>MaxDirectMemorySize</code> + 查 ByteBuf 泄漏</td></tr>
+    <tr><td>线程栈</td><td>~0.04G</td><td><code>-Xss</code> × 线程数（虚拟地址），RSS 里只算真实触碰的页</td><td>控线程数，别每请求 new Thread</td></tr>
+    <tr><td>glibc arena</td><td>1.00G</td><td>NMT 归到 "Other"，RSS 减各项</td><td><code>MALLOC_ARENA_MAX=2</code></td></tr>
+  </table>
+
+  <p>实时读 Direct 用量最准的方式不是猜，是直接问 JVM：</p>
+
+  <pre><code>// 直接读 MXBean，不用重启、不用开 NMT
+for (BufferPoolMXBean p : ManagementFactory.getPlatformMXBeans(BufferPoolMXBean.class)) {
+    System.out.printf("%-12s count=%-8d used=%-12d capacity=%d%n",
+            p.getName(), p.getCount(), p.getMemoryUsed(), p.getTotalCapacity());
+}
+// 输出：direct       count=18342    used=1288490188    capacity=1342177280
+//      mapped       count=4        used=8388608       capacity=8388608</code></pre>
+
+  <div class="trap"><b>容器里的三个必设参数（缺一个都可能 137）：</b><br>① <code>-XX:MaxRAMPercentage=60</code>（<b>不要用 -Xmx 写死</b>，否则改 limit 不生效，第 12 期讲过）；<br>② <code>-XX:MaxDirectMemorySize=512m</code>（否则默认跟着堆走）；<br>③ <code>MALLOC_ARENA_MAX=2</code>（环境变量，不是 JVM 参数）。<br>三条一起用，才能保证「<b>Java 先 OOM，容器后杀</b>」——这个顺序决定了你事后有没有东西可查。</div>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b1">L8</span><em>把前七节串成一张能照着走的图</em></div>
+  <h2>五步法：从「RSS 在涨」到「改哪一行代码」</h2>
+
+  <p>排查内存问题的最大浪费不是工具不好，而是<b>顺序错了</b>：一上来就 dump，或者在堆外的病历上翻堆内的检查。下面这张决策树是本期全部内容的收束——每一步都是一个「几秒钟能做完、且能砍掉一半可能性」的动作。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <rect x="350" y="16" width="200" height="32" rx="7" fill="#f3f5f9" stroke="#c9d0dd"/>
+      <text x="450" y="37" font-size="11" font-weight="700" fill="#262b36" text-anchor="middle">第 1 步：RSS 单调上涨？</text>
+
+      <rect x="110" y="80" width="190" height="32" rx="7" fill="#f2fbf6" stroke="#cceddc"/>
+      <text x="205" y="101" font-size="10.5" fill="#047857" text-anchor="middle">否 → 正常波动，不是泄漏</text>
+
+      <rect x="560" y="80" width="230" height="32" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="675" y="101" font-size="10.5" font-weight="700" fill="#0369a1" text-anchor="middle">第 2 步：堆 committed 也涨？</text>
+
+      <rect x="330" y="150" width="200" height="32" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="430" y="171" font-size="10.5" font-weight="700" fill="#be123c" text-anchor="middle">是 → 堆内问题</text>
+
+      <rect x="610" y="150" width="220" height="32" rx="7" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="720" y="171" font-size="10.5" font-weight="700" fill="#b45309" text-anchor="middle">否 → 账外内存（L6）</text>
+
+      <rect x="130" y="222" width="210" height="32" rx="7" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="235" y="243" font-size="10.5" fill="#0369a1" text-anchor="middle">同类实例单调↑ → 真泄漏</text>
+
+      <rect x="360" y="222" width="200" height="32" rx="7" fill="#f5f2ff" stroke="#ddd3f7"/>
+      <text x="460" y="243" font-size="10.5" fill="#7c3aed" text-anchor="middle">涨到平台 → 容量膨胀</text>
+
+      <rect x="610" y="222" width="250" height="32" rx="7" fill="#fbfcfe" stroke="#dfe4ee"/>
+      <text x="735" y="243" font-size="10.5" fill="#3b4252" text-anchor="middle">NMT 拆账：Meta / Direct / Other</text>
+
+      <rect x="130" y="294" width="210" height="34" rx="7" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="235" y="309" font-size="10" fill="#be123c" text-anchor="middle" font-weight="700">dump 趁早（2G ＜ 8G）</text>
+      <text x="235" y="322" font-size="10" fill="#be123c" text-anchor="middle">+ 支配树按 Retained 降序</text>
+
+      <rect x="360" y="294" width="200" height="34" rx="7" fill="#f5f2ff" stroke="#ddd3f7"/>
+      <text x="460" y="309" font-size="10" fill="#7c3aed" text-anchor="middle">查上限：缓存 / TTL / 批量</text>
+      <text x="460" y="322" font-size="10" fill="#7c3aed" text-anchor="middle">不是引用问题，是容量问题</text>
+
+      <rect x="600" y="294" width="270" height="34" rx="7" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="735" y="309" font-size="10" fill="#b45309" text-anchor="middle">MaxDirectMemorySize / MALLOC_ARENA_MAX</text>
+      <text x="735" y="322" font-size="10" fill="#b45309" text-anchor="middle">/ MaxMetaspaceSize / ByteBuf refCnt</text>
+
+      <polyline points="450,48 450,62 205,62 205,80" fill="none" stroke="#8b93a5" stroke-width="1.3"/>
+      <polyline points="450,48 450,62 675,62 675,80" fill="none" stroke="#8b93a5" stroke-width="1.3"/>
+      <polyline points="675,112 675,132 430,132 430,150" fill="none" stroke="#8b93a5" stroke-width="1.3"/>
+      <polyline points="675,112 675,132 720,132 720,150" fill="none" stroke="#8b93a5" stroke-width="1.3"/>
+      <polyline points="430,182 430,202 235,202 235,222" fill="none" stroke="#8b93a5" stroke-width="1.3"/>
+      <polyline points="430,182 430,202 460,202 460,222" fill="none" stroke="#8b93a5" stroke-width="1.3"/>
+      <polyline points="720,182 720,222" fill="none" stroke="#8b93a5" stroke-width="1.3"/>
+      <polyline points="235,254 235,294" fill="none" stroke="#8b93a5" stroke-width="1.3"/>
+      <polyline points="460,254 460,294" fill="none" stroke="#8b93a5" stroke-width="1.3"/>
+      <polyline points="735,254 735,294" fill="none" stroke="#8b93a5" stroke-width="1.3"/>
+    </svg>
+    <figcaption><b>图 11｜五步决策树，七个分支，每步都有便宜的判据。</b>最值得注意的是左侧「否 → 正常波动」这条出口：<b>大量「内存泄漏」报案实际是 GC 抖动或流量上涨</b>，先做掉这条分支能省掉八成的无效 dump。</figcaption>
+  </figure>
+
+  <p>把它压成一张可以直接贴到故障群里的表：</p>
+
+  <table>
+    <tr><th style="width:120px">症状</th><th>最先做的三件事</th><th>成本</th></tr>
+    <tr>
+      <td>RSS 涨、堆不涨</td>
+      <td><code>NMT summary</code> → 看 Metaspace / Thread / Other 哪项涨 → <code>BufferPoolMXBean</code> 读 Direct</td>
+      <td>低，需提前开 NMT</td>
+    </tr>
+    <tr>
+      <td>堆涨、YGC 变频繁</td>
+      <td><code>GC.class_histogram</code> 三次做差 → 圈定类 → dump + 支配树</td>
+      <td>中，dump 有 STW</td>
+    </tr>
+    <tr>
+      <td>OOM 已经发生</td>
+      <td>拿 <code>HeapDumpOnOutOfMemoryError</code> 落下的文件 → 按 Retained 降序 → 只展开前三棵子树</td>
+      <td>高，但证据最全</td>
+    </tr>
+    <tr>
+      <td>Metaspace 阶梯涨</td>
+      <td><code>VM.classloader_stats</code> 看 loader 个数 → <code>VM.metaspace</code> 看 class 数</td>
+      <td>低</td>
+    </tr>
+  </table>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b1">L9</span><em>能常开的只有两个</em></div>
+  <h2>工具矩阵：哪个能常开，哪个只能救火</h2>
+
+  <table>
+    <tr><th style="width:180px">工具</th><th style="width:90px">STW</th><th>看到什么</th><th>生产可用性</th></tr>
+    <tr><td><code>jcmd GC.heap_info</code></td><td>无</td><td>堆 used / committed、Metaspace</td><td><b>可常开</b>，&lt;1s</td></tr>
+    <tr><td><code>jmap -histo</code></td><td>无</td><td>类实例数（含垃圾对象）</td><td>可随时跑，但含垃圾会误导</td></tr>
+    <tr><td><code>jmap -histo:live</code></td><td><b>有</b>（先 Full GC）</td><td>只含活对象的类直方图</td><td>低峰期，2~5s</td></tr>
+    <tr><td><code>jmap -dump:live</code></td><td><b>有</b>，30~60s（8G）</td><td>完整对象图</td><td>救火用，<b>越早越好</b></td></tr>
+    <tr><td>MAT</td><td>无（离线）</td><td>Retained、支配树、引用链</td><td>需 1.5× dump 大小的堆来打开</td></tr>
+    <tr><td><b>JFR OldObjectSample</b></td><td>无</td><td><b>老年代活对象的分配栈</b></td><td><b>可常开</b>，开销 &lt;1%</td></tr>
+    <tr><td>NMT</td><td>无</td><td>本地内存分项明细</td><td>可开，开销 5%~10%</td></tr>
+    <tr><td>async-profiler <code>-e alloc</code></td><td>无（采样）</td><td>分配热点（含堆外）</td><td>短时开，最适合「谁在疯狂分配」</td></tr>
+    <tr><td>arthas <code>vmtool</code></td><td>短暂</td><td>直接按类名取实例、看字段值</td><td>可在线用，<b>最适合验证猜想</b></td></tr>
+  </table>
+
+  <h3>JFR 的 OldObjectSample：这一段是这一期最值钱的技术点</h3>
+
+  <p>传统流程是「dump 8G → 拷回来 → MAT 打开 → 找支配树」，一套下来半小时起，还要停机。而 JFR 的 <code class="inl">OldObjectSample</code> 事件解决的是<b>同一个问题的一半，但成本差两个数量级</b>：它按自适应采样保留少量「老年代存活对象」，每条样本都带着<b>它被分配时的完整调用栈</b>。</p>
+
+  <pre><code># 1. 启动时挂上去（也可以在运行中用 jcmd 动态开）
+java -XX:StartFlightRecording=filename=/tmp/app.jfr,settings=profile,dumponexit=true ...
+
+# 2. 让它跑够一个业务周期（至少一次完整的流量高峰）
+sleep 3600
+
+# 3. 直接打老年代活对象的分配栈，不用 dump 8G
+jfr print --events jdk.OldObjectSample /tmp/app.jfr | head -120
+
+# 4. JDK 17+ 还能直接看聚合视图
+jfr view --width 160 --truncate 120 allocation-by-site /tmp/app.jfr</code></pre>
+
+  <p>输出里每一段长这样，重点看 <code class="inl">object.allocTime</code> 与栈顶：</p>
+
+  <pre><code>jdk.OldObjectSample {
+  startTime = 10:24:31.882
+  object =  com.foo.Session  (0x7f3a2c10)
+  allocationTime = 2026-11-11T08:11:02.114
+  objectAge = 8789 s              // ← 已经活了 2.4 小时，还没被回收
+  lastKnownHeapUsage = 3.2 GB
+  stackTrace = [
+    com.foo.cache.SessionCache.put(SessionCache.java:78)
+    com.foo.auth.LoginService.login(LoginService.java:132)
+    ...
+  ]
+}</code></pre>
+
+  <div class="good"><b>为什么这个栈比 MAT 的引用链更有用：</b>MAT 回答「<b>谁抓着它</b>」，JFR 回答「<b>谁生了它</b>」。而缓存/泄漏类问题的答案几乎总是「谁生了它」——因为「谁抓着它」往往是 <code>ConcurrentHashMap</code> 的 table，答了等于没答。<b>先看分配栈定位到代码行，再用 MAT 确认支配关系，是当前最快的组合。</b></div>
+
+  <h3>arthas 的用法：验证猜想，而不是大海捞针</h3>
+
+  <pre><code># 直接按类名取实例，看字段值 —— 不用 dump，不用重启
+vmtool --action getInstances --className com.foo.cache.SessionCache --limit 1 \
+       --express 'instances[0].map.size()'
+
+# 如果返回 1200000，说明缓存根本没上限，问题当场结束
+# 对比一下配置的预期上限（比如 10000），差了 120 倍</code></pre>
+
+  <p>这个命令的价值在于<b>把「怀疑」变成「数字」只要 3 秒</b>。凡是「怀疑某个静态集合在无限增长」的场合，它都比 dump 快一百倍。</p>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b0">L10</span><em>面试时能脱口而出的那批数</em></div>
+  <h2>20 个数字速查</h2>
+
+  <table>
+    <tr><th style="width:56px">#</th><th>数字</th><th>含义</th></tr>
+    <tr><td>1</td><td>12B / 4B / 8B</td><td>压缩指针下对象头 12B、引用 4B、对齐到 8B 倍数</td></tr>
+    <tr><td>2</td><td>32B</td><td>一个 <code>HashMap$Node</code> 的大小（100 万条 = 32MB）</td></tr>
+    <tr><td>3</td><td>2/3</td><td>ThreadLocalMap 的装载因子（比 HashMap 的 0.75 更高，为了省空间）</td></tr>
+    <tr><td>4</td><td>16</td><td>ThreadLocalMap 初始 table 长度</td></tr>
+    <tr><td>5</td><td>1MB</td><td>一个典型 UserContext（含权限+组织树快照）的大小量级</td></tr>
+    <tr><td>6</td><td>200MB</td><td>1 个漏掉的 1MB ThreadLocal × 200 个 worker 线程</td></tr>
+    <tr><td>7</td><td>30MB</td><td>一次热部署残留的 Metaspace（5000 个类 × 6KB 元数据 + 静态字段）</td></tr>
+    <tr><td>8</td><td>512M</td><td>推荐的 <code>MaxMetaspaceSize</code>（≈ 14 次 redeploy 的保险丝）</td></tr>
+    <tr><td>9</td><td>240M</td><td>CodeCache 默认预留大小</td></tr>
+    <tr><td>10</td><td>16MB</td><td>Netty PooledByteBufAllocator 的默认 chunk 大小</td></tr>
+    <tr><td>11</td><td>1%</td><td>Netty 泄漏检测 SIMPLE / ADVANCED 的采样率（PARANOID 为 100%）</td></tr>
+    <tr><td>12</td><td>512m</td><td>推荐的 <code>MaxDirectMemorySize</code>（<b>默认等于 -Xmx，很危险</b>）</td></tr>
+    <tr><td>13</td><td>0.6</td><td>容器里堆占 limit 的比例上限（<code>MaxRAMPercentage=60</code>）</td></tr>
+    <tr><td>14</td><td>30~60s</td><td>8G 堆做一次 <code>dump:live</code> 的 STW 时间</td></tr>
+    <tr><td>15</td><td>1.5×</td><td>MAT 打开 dump 需要的堆大小（8G dump 要 12G+）</td></tr>
+    <tr><td>16</td><td>2.82MB/h</td><td>一个真实泄漏案例的速率（2350 个 × 1.2KB / 小时）</td></tr>
+    <tr><td>17</td><td>93 天</td><td>上面那个速率撑满 8G 堆所需时间（6144MB ÷ 66MB/天）</td></tr>
+    <tr><td>18</td><td>137</td><td>容器被 cgroup 杀掉的 exit code（无异常、无 dump）</td></tr>
+    <tr><td>19</td><td>&lt;1%</td><td>JFR OldObjectSample 的开销，可以生产常开</td></tr>
+    <tr><td>20</td><td>5%~10%</td><td>NMT summary 的开销，只在对账期开</td></tr>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+      <text x="30" y="18" font-size="11.5" font-weight="700" fill="#262b36">四类泄漏的「锚点」在哪：一张图看清为什么断不掉</text>
+
+      <rect x="30" y="26" width="420" height="145" rx="9" fill="#fff5f6" stroke="#f5ccd4"/>
+      <text x="46" y="48" font-size="11.5" font-weight="800" fill="#be123c">① ThreadLocal 未 remove</text>
+      <text x="46" y="70" font-size="10" fill="#3b4252">锚点：Tomcat worker 线程（永不死）</text>
+      <text x="46" y="90" font-size="10" fill="#3b4252">断不掉的原因：Entry.value 是强引用，</text>
+      <text x="56" y="106" font-size="10" fill="#3b4252">只清理 key（弱），从不清理 value</text>
+      <text x="46" y="128" font-size="10" fill="#be123c" font-weight="700">修法：finally 里 remove()</text>
+      <text x="46" y="148" font-size="10" fill="#5d6675">判据：histo 里 value 的类型单调增长</text>
+
+      <rect x="450" y="26" width="420" height="145" rx="9" fill="#fff8f0" stroke="#f4dcc2"/>
+      <text x="466" y="48" font-size="11.5" font-weight="800" fill="#b45309">② ClassLoader 残留</text>
+      <text x="466" y="70" font-size="10" fill="#3b4252">锚点：JVM 级注册表 / 自己 new 的线程池</text>
+      <text x="466" y="90" font-size="10" fill="#3b4252">断不掉的原因：loader 不可达是类卸载的</text>
+      <text x="476" y="106" font-size="10" fill="#3b4252">必要条件，挂住 loader = 挂住 5000 个类</text>
+      <text x="466" y="128" font-size="10" fill="#b45309" font-weight="700">修法：成套注销 + MaxMetaspaceSize</text>
+      <text x="466" y="148" font-size="10" fill="#5d6675">判据：dump 里同一 loader 出现多个实例</text>
+
+      <rect x="30" y="180" width="420" height="145" rx="9" fill="#eff6fc" stroke="#bcdcf2"/>
+      <text x="46" y="202" font-size="11.5" font-weight="800" fill="#0369a1">③ DirectByteBuffer / ByteBuf</text>
+      <text x="46" y="224" font-size="10" fill="#3b4252">锚点：堆外的 native 内存，堆内只有 100B</text>
+      <text x="46" y="244" font-size="10" fill="#3b4252">断不掉的原因：Cleaner 要等 GC 才跑，</text>
+      <text x="56" y="260" font-size="10" fill="#3b4252">堆越空越不 GC —— 堆外先炸</text>
+      <text x="46" y="282" font-size="10" fill="#0369a1" font-weight="700">修法：MaxDirectMemorySize + 配对 release</text>
+      <text x="46" y="302" font-size="10" fill="#5d6675">判据：BufferPoolMXBean 的 memoryUsed</text>
+
+      <rect x="450" y="180" width="420" height="145" rx="9" fill="#f5f2ff" stroke="#ddd3f7"/>
+      <text x="466" y="202" font-size="11.5" font-weight="800" fill="#7c3aed">④ 监听器 / 回调未注销</text>
+      <text x="466" y="224" font-size="10" fill="#3b4252">锚点：被注册到的「全局单例」（事件总线、</text>
+      <text x="476" y="240" font-size="10" fill="#3b4252">MQ 消费者注册表、Spring 的 ApplicationContext）</text>
+      <text x="466" y="262" font-size="10" fill="#3b4252">断不掉的原因：注册表只加不减，</text>
+      <text x="476" y="278" font-size="10" fill="#3b4252">且每条回调都拖着调用方的一个大对象</text>
+      <text x="466" y="300" font-size="10" fill="#7c3aed" font-weight="700">修法：成对 register / unregister</text>
+    </svg>
+    <figcaption><b>图 12｜四类泄漏，四种锚点，一条共同的规律。</b>所有真泄漏都是「<b>有一个比泄漏体活得更久的东西，握着一条强引用</b>」。所以排查永远先问一句：<b>谁比它活得久？</b>——是线程、是 loader、是全局注册表、还是容器里的静态 Map。锚点找到了，代码行就在锚点旁边。</figcaption>
+  </figure>
+</section>
+<section class="card">
+  <div class="lvl"><span class="badge b2">L11</span><em>14 个真实被问过的问题</em></div>
+  <h2>高频问答：从「定义」问到「你凭什么这么说」</h2>
+
+  <div class="qa">
+    <div class="qq">线上报警内存使用率高，你怎么判断是不是泄漏？</div>
+    <p>先做一次分叉，不要直接 dump：<code class="inl">jcmd &lt;pid&gt; GC.heap_info</code> 看堆 used 与 committed，再 <code class="inl">ps -o rss= -p &lt;pid&gt;</code> 看 RSS。<b>堆涨 → 堆内问题；堆平、RSS 涨 → 账外内存</b>。堆内在涨的话，隔 2 小时取三次 <code class="inl">-histo:live</code>，只比同一个类的实例增量：增量恒定 = 真泄漏，涨到平台 = 容量膨胀。这一步能在 6 小时内定性，且几乎零成本。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">jmap -histo 和 -histo:live 有什么区别？为什么生产上慎用 live？</div>
+    <p><code class="inl">-histo</code> 不触发 GC，输出里包含<b>还没被回收的垃圾对象</b>，所以一次采样可能把临时对象也算进去，同一个类两次采样差几倍都可能；<code class="inl">-histo:live</code> 会先做一次 Full GC，只统计活对象，数据可信但<b>有 STW</b>（8G 堆通常 2~5 秒，老年代大时更久）。所以：粗看用 <code class="inl">-histo</code>，做增长对比用 <code class="inl">-histo:live</code> 且放在低峰。<b>面试如果只答「一个 GC 一个不 GC」是及格线，答出「含垃圾对象会误导对比」才是良好。</b></p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">Shallow Heap 和 Retained Heap 的区别？为什么排障要按 Retained 排序？</div>
+    <p>Shallow 是对象自身占用（头 + 字段 + 对齐）；Retained 是<b>它被回收后能一起释放的总量</b>，也就是它在支配树里整棵子树的 Shallow 之和。按 Shallow 排序只能找到「自己很大的对象」（比如一个 2GB 的 <code class="inl">byte[]</code>），而绝大多数泄漏是「自己很小、拖着几十万个孩子」的容器——<b>一个 <code class="inl">HashMap</code> 自己只有 48B，却能拖住 32MB 的 Node 数组</b>。只有 Retained 能看见这种结构。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">什么是支配树？为什么说「最长的引用链不是元凶」？</div>
+    <p>若从 GC Roots 到 Y 的<b>每一条</b>路径都经过 X，则 X 支配 Y；把支配关系画成树就是支配树，父节点就是「干掉它、子树才会释放」的那个对象。<b>「Path to GC Roots」给的是任意一条路径，不是唯一路径</b>：一个被 200 个线程引用的大对象，MAT 只会显示其中一条链，顺着它改代码毫无意义。经典反例：A 被两个 Root 引用、B 只被 A 引用、C 被 A 和 B 同时引用——此时 <code class="inl">Retained(B) = B 自己</code>，因为删掉 B 之后 C 还能从 A 直达。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">ThreadLocal 为什么会内存泄漏？key 明明是弱引用。</div>
+    <p>因为 <code class="inl">Entry extends WeakReference&lt;ThreadLocal&gt;</code> 只弱化了 key，<b>value 是普通强引用字段</b>。ThreadLocal 实例没人引用后，key 会在下次 GC 变成 null，但 <b>Entry 对象本身仍留在 <code class="inl">table</code> 数组里</b>，value 被它牢牢抓着。清理时机只有 <code class="inl">get/set/remove</code> 时顺带执行的 <code class="inl">expungeStaleEntry</code>——线程池里的 worker 线程不死、之后再也不碰这个 ThreadLocal，就永远没人来清。泄漏量 = 存活线程数 × value 大小。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">那 set(null) 和 remove() 有区别吗？</div>
+    <p>有，而且很关键。<code class="inl">set(null)</code> 会创建一个 value 为 null 的 Entry 占着槽位，<b>不会触发对陈旧条目的清理</b>；<code class="inl">remove()</code> 会真正把 Entry 从 table 里摘掉，并把槽位置为可复用状态，同时顺带做一次探测式清理。<b>正确姿势是 <code class="inl">try/finally</code> 里调 <code class="inl">remove()</code></b>——这也是唯一能保证异常路径也执行的位置。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">InheritableThreadLocal 为什么在线程池里失效？</div>
+    <p>它的复制发生在 <code class="inl">Thread</code> 构造时（<code class="inl">init()</code> 里从父线程 copy 一份），<b>一次性拷贝</b>。线程池的线程是复用的、创建时机不确定，任务提交时并不会新建线程，所以拿到的永远是「创建那个线程时」的父线程上下文——大概率是错的。解法是 <code class="inl">TransmittableThreadLocal</code>（阿里 TTL，在任务提交/执行时做 capture/replay）或显式把上下文作为参数传递。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">ClassLoader 泄漏是怎么产生的？怎么快速确认？</div>
+    <p>类卸载需要三个条件同时成立：该类所有实例不可达、<code class="inl">Class</code> 对象不可达、<b>加载它的 ClassLoader 不可达</b>。热部署时容器会 new 一个新的 <code class="inl">WebappClassLoader</code>，只要旧的被任何一个 JVM 级锚点挂住（自己 new 的线程池、<code class="inl">DriverManager</code>/<code class="inl">Logger</code> 这类注册表、<code class="inl">ThreadLocal</code>、shutdown hook），它加载的几千个类就一个都卸不掉。最快的判据不是看引用链，而是<b>数数量</b>：dump 里 <code class="inl">WebappClassLoader</code> 有多个实例，或者 <code class="inl">jcmd VM.classloader_stats</code> 里出现多个 classes 数很大的 loader——数量本身就是证据。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">堆外内存泄漏怎么查？dump 里看不到怎么办？</div>
+    <p>三条线并行：① <code class="inl">BufferPoolMXBean</code> 读 Direct 的 <code class="inl">memoryUsed</code>（最准，代码里几行就能打）；② <code class="inl">-XX:NativeMemoryTracking=summary</code> + <code class="inl">VM.native_memory summary</code> 看分项（能分出 Thread / Code / GC / Other）；③ Netty 场景把 <code class="inl">io.netty.leakDetection.level</code> 调到 <code class="inl">paranoid</code> 短时复现，让它自己报分配栈。<b>不要指望 dump——堆外的东西根本不在对象图里。</b></p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">8G 的堆，为什么容器 RSS 会到 12G？</div>
+    <p>因为 RSS 记的是进程所有内存，不只是堆：堆 committed 8G + Metaspace ~0.5G + CodeCache ~0.24G + Direct ~1.2G + glibc arena/碎片 ~1G + JVM 自身与线程栈。<b>而且 <code class="inl">-Xmx</code> 限制的是 used，不是 committed</b>——堆一旦扩到 8G 就不会还回去，即使里面只有 3G 活对象。所以「堆 dump 只有 3G」和「RSS 12G」完全不矛盾。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">一定要 dump 吗？JFR 能不能替代？</div>
+    <p>能替代一半。<b>JFR 的 <code class="inl">OldObjectSample</code> 给的是「老年代活对象的分配栈」</b>，直接回答「谁生的它」，开销 &lt;1% 可常开，这是 dump 做不到的。但 dump 能回答的「谁抓着它、支配关系如何」JFR 给不了。<b>正确组合是：JFR 定位到代码行 → dump + 支配树确认影响面</b>。而且 JFR 有个前提——<b>必须提前开</b>，泄漏发生时再开就晚了。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">OOM 时自动 dump 和 OOM 前手动 dump，哪个更有价值？</div>
+    <p>OOM 前的。原因有三：① OOM 时堆已满，dump 出来的图被大量「本该被回收的临时对象」污染，真正的泄漏体反而不显眼；② 8G 堆在 OOM 时 dump 的 STW 更长，容易把服务彻底打死；③ 泄漏的斜率在第 2 天就能算出来，没必要等到第 93 天。<b>但 <code class="inl">HeapDumpOnOutOfMemoryError</code> 仍然必须开</b>——它是兜底，不是首选。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">用 WeakHashMap 做缓存是不是就不会泄漏了？</div>
+    <p>不一定。WeakHashMap 的 key 是弱引用，<b>但它同样只在 get/set 时清理死条目</b>。一个「写一次、再也不访问」的 WeakHashMap，泄漏行为和普通 HashMap 一样；更糟的是 value 如果反过来强引用了 key（比如 <code class="inl">map.put(k, new Foo(k))</code>），那 key 永远有强引用，弱引用形同虚设——<b>这是弱引用最经典的失效方式，叫「值反向持有键」</b>。</p>
+  </div>
+
+  <div class="qa">
+    <div class="qq">虚拟线程普及之后，ThreadLocal 泄漏还存在吗？</div>
+    <p>对虚拟线程本身基本不存在：ThreadLocal 存在虚拟线程的 StackChunk 里，虚拟线程结束即整体释放，不依赖 remove。但两个残留风险：① <b>carrier 线程（ForkJoinPool）上的 ThreadLocal 依然与应用同寿</b>，把大对象放进去照样漏；② <b>线程池 + 虚拟线程混用</b>时，任务在平台线程上执行期间的上下文仍可能残留。<b>结论：默认不变坏，但也别指望它帮你擦屁股——remove 仍然要写。</b></p>
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b4">L12</span><em>四档对照，看清差距在哪一层</em></div>
+  <h2>3 道模拟面试</h2>
+
+  <div class="q">
+    <h4><span>题 1</span>订单服务上线 3 个月，每 2 个月必须重启一次。堆 8G，Full GC 后仍有 6.5G 存活。请说你的排查路径。</h4>
+    <div class="lab r">不及格</div>
+    <p>「用 jmap dump 下来用 MAT 分析，看哪个对象最多。」——没说怎么定性、没说 dump 的代价、也没说怎么从对象找到代码。</p>
+    <div class="lab">及格</div>
+    <p>「先 dump，用 MAT 看 Retained Heap 最大的对象，顺着引用链找到业务代码，加日志确认。」——方向对，但漏了最重要的一步：<b>你没有先证明它是真泄漏</b>，Full GC 后 6.5G 存活也可能只是缓存太大。</p>
+    <div class="lab g">良好</div>
+    <p>「先算斜率：连续三次 <code class="inl">-histo:live</code> 间隔 2 小时做差。如果某个业务类实例增量恒定，就是真泄漏；同时用增量算出速率和爆堆天数，决定是紧急修还是排期修。<b>dump 要在堆还没满的时候做</b>——现在 6.5G 存活、8G 上限，已经是危险区，应该先扩容或摘流再做。拿到 dump 后按 Retained 降序，只展开前三棵子树。」</p>
+    <div class="lab g">优秀</div>
+    <p>在「良好」之上补三点：① <b>先区分三种「涨」</b>——用 <code class="inl">GC.heap_info</code> 确认堆 committed 在涨（排除账外），再看 Full GC 后存活是否单调上升；② <b>用 JFR 的 OldObjectSample 直接拿分配栈</b>，比 dump 快两个数量级，能在 10 分钟内定位到 <code class="inl">SessionCache.put()</code> 这一行；③ <b>给出可验证的结论和回归方案</b>：修复后用同一套 histo 对比脚本跑 48 小时，确认该类实例数不再单调增长，并在监控上加「该类实例数」这个自定义指标做长期哨兵。<b>还要说明为什么「上了大堆就没再出现」是自欺欺人（斜率不变，只是爆堆天数变长）。</b></p>
+  </div>
+
+  <div class="q">
+    <h4><span>题 2</span>容器 limit 12G、<code>-Xmx8g</code>，进程每 5 天被 exit 137 杀掉，Java 层无任何异常，堆 dump 里只有 3G 活对象。怎么查？</h4>
+    <div class="lab r">不及格</div>
+    <p>「加大内存 / 调大 -Xmx。」——这是在给泄漏留更多空间，下次变成 7 天杀一次，问题还在。</p>
+    <div class="lab">及格</div>
+    <p>「怀疑是堆外内存泄漏，用 <code class="inl">top</code> 看 RES，用 <code class="inl">pmap</code> 看内存分布，检查是否有 DirectByteBuffer 或 Netty 没 release。」——方向对，但「用 pmap 看分布」对定位帮助很小，没有可执行的量化手段。</p>
+    <div class="lab g">良好</div>
+    <p>「先确认堆不是主因：<code class="inl">GC.heap_info</code> 看 committed 是否稳定在 8G、used 是否有周期性。然后开 NMT（<code class="inl">-XX:NativeMemoryTracking=summary</code>）拿 <code class="inl">VM.native_memory summary</code> 分项，重点看 <code class="inl">Other</code>（glibc）和 <code class="inl">Internal</code>（Direct）。用 <code class="inl">BufferPoolMXBean</code> 精确读 Direct 用量。如果是 Netty，把泄漏检测调到 paranoid 复现。」</p>
+    <div class="lab g">优秀</div>
+    <p>在「良好」之上补四点：① <b>把账先对上</b>：8G 堆 committed + 0.5G Metaspace + 0.24G CodeCache + 1.2G Direct + 1G glibc ≈ 11G，<b>在 12G limit 下本来就没有余量</b>，所以这不一定是「泄漏」，可能是「账没算对」；② <b>指出关键因果</b>：<code class="inl">MaxDirectMemorySize</code> 默认等于 <code class="inl">-Xmx</code> 8G，堆外可以吃到 8G，容器根本兜不住，且 <b>Direct 的释放依赖 Full GC</b>，堆越空越不 GC，<b>堆外先炸而 Java 层无异常</b>——这正好解释了「无异常 + 137」；③ <b>给出配置级修法</b>：<code class="inl">-XX:MaxRAMPercentage=60</code> + <code class="inl">-XX:MaxDirectMemorySize=512m</code> + <code class="inl">MALLOC_ARENA_MAX=2</code>，核心原则是<b>让 Java 先 OOM、容器后杀</b>，因为 OOM 可查、137 不可查；④ <b>排查顺序上先说「先证明它在涨」</b>：RSS 每 10 分钟采一次画斜率，斜率 > 0 才是泄漏，否则就是容量规划问题。</p>
+  </div>
+
+  <div class="q">
+    <h4><span>题 3</span>Tomcat 应用每次热部署后 Metaspace 涨 30MB，第 14 次 <code>OutOfMemoryError: Metaspace</code>。给你 dump，怎么 5 分钟内出结论？</h4>
+    <div class="lab r">不及格</div>
+    <p>「调大 <code>-XX:MaxMetaspaceSize</code>。」——把 14 次变成 28 次，问题一点没解决，而且下次还是在生产上炸。</p>
+    <div class="lab">及格</div>
+    <p>「看 dump 里的 <code class="inl">WebappClassLoader</code> 是不是有多个实例，如果有就是类加载器泄漏，检查应用里有没有未关闭的线程池。」</p>
+    <div class="lab g">良好</div>
+    <p>「dump 里搜 <code class="inl">ParallelWebappClassLoader</code>，数量 > 1 就证明旧 loader 没卸。对其中一个旧实例做「Path to GC Roots」，看是哪个锚点挂住它——通常是 <code class="inl">ThreadPoolExecutor$Worker</code>（自己 new 的线程池）、<code class="inl">DriverManager</code> 的注册表、或者某个 <code class="inl">ThreadLocalMap</code>。然后成对补齐 <code class="inl">shutdown</code>/注销逻辑。」</p>
+    <div class="lab g">优秀</div>
+    <p>在「良好」之上补三点：① <b>先讲清机制再动手</b>：类卸载三条件（实例、Class、loader 全不可达），所以<b>挂住 loader 就等于挂住它加载的全部 5000 个类和静态字段</b>，这才是「+30MB」的来源；② <b>给出比 dump 更快的判据</b>：<code class="inl">jcmd VM.classloader_stats</code> 直接列每个 loader 的 Classes 数与 ChunkSz，一眼看到两个 5120 类的 loader——<b>不用下载 dump、不用装 MAT，5 秒出结论</b>；③ <b>给出体系化修法而不是逐条打补丁</b>：把所有「注册到 JVM 级的东西」列成清单（Executor、ThreadLocal、Driver、Logger、JMX、ShutdownHook），在 <code class="inl">contextDestroyed()</code> 里逐项反注册，并把 <code class="inl">MaxMetaspaceSize</code> 显式设成 512M 当保险丝，<b>让下一次泄漏在测试环境就爆，而不是在生产爆第 17 次</b>。</p>
+  </div>
+</section>
+
+<section class="card">
+  <div class="lvl"><span class="badge b2">小结</span><em>三句话带走</em></div>
+  <h2>如果只记三句</h2>
+  <ol>
+    <li><strong>先分型，再动手。</strong> 真泄漏看斜率、容量膨胀看谷底、账外内存看「RSS 减堆」。这三个观测量对应三种病，<b>顺序错了，所有工具都是白用</b>——在堆外的病历上翻堆内的检查，是最常见的浪费。</li>
+    <li><strong>元凶由支配关系决定，不由引用链长短决定。</strong> 按 Retained 降序展开支配树，而不是顺着「Path to GC Roots」的第一条链改代码。<b>一个 <code>HashMap</code> 自己只有 48B，却能拖住 32MB</b>——只有 Retained 看得见这种结构。</li>
+    <li><strong>所有泄漏都是「有个东西活得比它久」。</strong> 线程、ClassLoader、全局注册表、容器里的静态 Map——排查永远先问「谁比它活得久」。而工程上唯一稳的防线是<b>让 Java 先 OOM、容器后杀</b>：<code>MaxDirectMemorySize</code> 写死、<code>MaxRAMPercentage</code> 留余量、<code>HeapDumpOnOutOfMemoryError</code> 兜底，因为 <b>OOM 可查，137 不可查</b>。</li>
+  </ol>
+  <div class="oneline"><b>下期预告</b>下一期往更底层走：<strong>JIT 编译与基准测试</strong>——分层编译的五层是怎么爬上去的、内联的阈值和「热点方法太大反而不优化」、逃逸分析如何把对象直接消灭在栈上（标量替换）、去优化（deopt）为什么会让你的压测数据突然变脸，以及为什么 <code>-Xcomp</code>、<code>for</code> 循环预热、<code>System.nanoTime</code> 裸测这三件事会让你得出完全错误的结论。<strong>这期会给你一套能直接跑的 JMH 骨架，和一张「我的压测数字为什么不可信」的检查清单。</strong></div>
+</section>
+
+<footer>
+  Java 面试深水区 · 第 21 期 · 内存泄漏取证与对象生命周期<br>
+  12 张手绘 SVG · 21 段源码与命令 · 20 个速查数字 · 14 问答 · 3 道模拟面试
+</footer>
+
+</div>
+<script>
+(function () {
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  var KW = /^(public|private|protected|static|final|void|class|interface|extends|implements|new|return|if|else|for|while|try|catch|finally|throw|throws|import|package|this|super|int|long|byte|boolean|char|short|double|float|null|true|false|break|continue|switch|case|default|abstract|synchronized|volatile|transient|instanceof|enum)$/;
+
+  var blocks = document.querySelectorAll('pre > code');
+  for (var i = 0; i < blocks.length; i++) {
+    var raw = blocks[i].textContent;
+    var out = esc(raw);
+    out = out.replace(/(#[^\n]*)|(\/\/[^\n]*)|("(?:[^"\\]|\\.)*")|\b(\d[\d_.]*)\b|([A-Za-z_$][\w$]*)|/g,
+      function (m, cmt1, cmt2, str, num, id) {
+        if (cmt1) return '<span class="c">' + cmt1 + '</span>';
+        if (cmt2) return '<span class="c">' + cmt2 + '</span>';
+        if (str) return '<span class="s">' + str + '</span>';
+        if (num) return '<span class="n">' + num + '</span>';
+        if (id && KW.test(id)) return '<span class="k">' + id + '</span>';
+        return m;
+      });
+    blocks[i].innerHTML = out;
+  }
+})();
+</script>
+</body>
+</html>

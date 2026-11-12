@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 面试深挖 25 · Elasticsearch 与搜索原理</title>
+<style>
+:root{
+  --ink:#1a1d21; --ink2:#3d454e; --muted:#6b7683; --line:#e4e8ed; --line2:#d4dae1;
+  --bg:#ffffff; --panel:#f7f9fb; --panel2:#eef2f6;
+  --blue:#1a5fb4; --blue-soft:#e8f0fb;
+  --red:#c62828; --red-soft:#fdeceb;
+  --green:#1e7d3c; --green-soft:#e9f5ec;
+  --amber:#9a6400; --amber-soft:#fdf4e3;
+  --purple:#6a3fa0; --purple-soft:#f2ecfb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.78; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px; margin:0 auto; padding:0 28px 80px}
+.hero{padding:56px 0 30px; border-bottom:2px solid var(--ink)}
+.hero .kicker{font-size:12.5px; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; font-weight:600}
+.hero h1{margin:14px 0 10px; font-size:36px; line-height:1.25; letter-spacing:-.5px; font-weight:800}
+.hero .sub{color:var(--ink2); font-size:16.5px; max-width:780px}
+.hero .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+.tag{font-size:12.5px; padding:4px 11px; border-radius:999px; background:var(--panel2); color:var(--ink2); font-weight:600}
+.tag.b{background:var(--blue-soft); color:var(--blue)}
+.tag.r{background:var(--red-soft); color:var(--red)}
+.tag.g{background:var(--green-soft); color:var(--green)}
+
+h2{
+  margin:56px 0 18px; padding:14px 0 14px 18px; font-size:23px; font-weight:800; letter-spacing:-.2px;
+  border-left:4px solid var(--blue); background:linear-gradient(90deg,var(--blue-soft),transparent 62%);
+  border-radius:0 6px 6px 0;
+}
+h2 .n{display:inline-block; min-width:38px; color:var(--blue); font-variant-numeric:tabular-nums}
+h3{margin:32px 0 12px; font-size:17.5px; font-weight:750; color:var(--ink)}
+h3::before{content:""; display:inline-block; width:6px; height:6px; background:var(--blue); border-radius:1px; margin-right:9px; vertical-align:2px}
+p{margin:12px 0}
+strong{font-weight:700; color:#101418}
+em{font-style:normal; background:linear-gradient(transparent 62%, #ffe9a8 62%); padding:0 1px}
+code{font-family:"JetBrains Mono",Consolas,"Courier New",monospace; font-size:13px; background:var(--panel2);
+  padding:1.5px 5px; border-radius:4px; color:#a03060}
+.lead{font-size:16px; color:var(--ink2)}
+
+ul,ol{margin:12px 0; padding-left:22px}
+li{margin:7px 0}
+li::marker{color:var(--muted)}
+
+table{width:100%; border-collapse:collapse; margin:20px 0; font-size:13.5px; background:#fff}
+th{background:var(--panel2); text-align:left; padding:10px 12px; font-weight:700; border-bottom:2px solid var(--line2); font-size:13px}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:1px solid var(--line2)}
+td code{font-size:12.5px}
+.num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum"}
+
+pre{
+  position:relative; margin:20px 0; padding:18px 18px 16px; background:#1c2128; color:#d7dde5;
+  border-radius:9px; overflow-x:auto; font-size:13px; line-height:1.68;
+  font-family:"JetBrains Mono",Consolas,"Courier New",monospace;
+}
+pre::before{content:attr(data-lang); position:absolute; top:0; right:0; font-size:10.5px; letter-spacing:.1em;
+  color:#7d8794; background:#252b33; padding:3px 10px; border-radius:0 9px 0 6px; text-transform:uppercase}
+pre code{background:none; padding:0; color:inherit; font-size:inherit}
+.k{color:#ff7b72}   /* keyword */
+.s{color:#a5d6a7}   /* string */
+.c{color:#8b949e; font-style:italic} /* comment */
+.n{color:#79c0ff}   /* number */
+
+figure{margin:26px 0; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:18px 18px 10px}
+figure svg{display:block; width:100%; height:auto}
+figcaption{margin-top:8px; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.6}
+figcaption b{color:var(--ink2)}
+
+.box{border-radius:9px; padding:14px 18px; margin:20px 0; border:1px solid var(--line2); background:var(--panel)}
+.box .h{font-weight:750; font-size:13.5px; letter-spacing:.02em; margin-bottom:6px; display:flex; align-items:center; gap:8px}
+.box p:last-child{margin-bottom:0}
+.box.blue{background:var(--blue-soft); border-color:#bcd4f2} .box.blue .h{color:var(--blue)}
+.box.red{background:var(--red-soft); border-color:#f3c9c6} .box.red .h{color:var(--red)}
+.box.green{background:var(--green-soft); border-color:#c2e2cc} .box.green .h{color:var(--green)}
+.box.amber{background:var(--amber-soft); border-color:#efd9ab} .box.amber .h{color:var(--amber)}
+.box.purple{background:var(--purple-soft); border-color:#d7c9ef} .box.purple .h{color:var(--purple)}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0}
+.card{background:#fff; border:1px solid var(--line); border-radius:9px; padding:14px 16px}
+.card .t{font-weight:750; font-size:14px; margin-bottom:5px; color:var(--ink)}
+.card .d{font-size:13px; color:var(--ink2); line-height:1.65}
+.card.r{border-top:3px solid var(--red)} .card.g{border-top:3px solid var(--green)}
+.card.b{border-top:3px solid var(--blue)} .card.a{border-top:3px solid var(--amber)}
+
+.qa{border-left:3px solid var(--line2); padding:2px 0 2px 16px; margin:18px 0}
+.qa .q{font-weight:750; color:var(--ink); font-size:14.5px}
+.qa .q::before{content:"Q "; color:var(--blue); font-weight:800}
+.qa .a{color:var(--ink2); font-size:14px; margin-top:5px}
+.qa .a::before{content:"A "; color:var(--green); font-weight:800}
+
+.mt{background:#fff; border:1px solid var(--line); border-radius:11px; padding:20px 22px; margin:24px 0}
+.mt .qh{font-weight:800; font-size:15.5px; margin-bottom:10px; color:var(--ink)}
+.mt .qh span{background:var(--ink); color:#fff; font-size:11.5px; padding:2px 8px; border-radius:4px; margin-right:9px; letter-spacing:.05em}
+.lv{margin-top:14px; padding:11px 14px; border-radius:7px; font-size:13.5px; line-height:1.7}
+.lv .lb{font-weight:750; font-size:12px; letter-spacing:.05em; margin-right:8px}
+.lv.l1{background:#fbeceb; border-left:3px solid #d9534f} .lv.l1 .lb{color:#c62828}
+.lv.l2{background:#fdf6e6; border-left:3px solid #d9a441} .lv.l2 .lb{color:#9a6400}
+.lv.l3{background:#eaf2fd; border-left:3px solid #4a86c8} .lv.l3 .lb{color:#1a5fb4}
+.lv.l4{background:#eaf6ee; border-left:3px solid #3f9b5c} .lv.l4 .lb{color:#1e7d3c}
+
+.foot{margin-top:70px; padding-top:26px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+.next{margin-top:26px; background:var(--panel2); border-radius:9px; padding:16px 20px; font-size:13.5px; color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <div class="kicker">Java 面试深挖 · 第 25 期</div>
+  <h1>Elasticsearch 与搜索原理<br><span style="font-size:23px;color:var(--ink2);font-weight:600">40MB 的 FST 与 24GB 的 posting，只差一次除法</span></h1>
+  <div class="sub">前 24 期把 JVM、并发、Spring、MySQL、Redis、MQ 都过完了，只剩搜索这一类存储没碰。这一期不做配置手册，只做一件事：把「搜索为什么快」拆成一套能算高度、算内存、算延迟、算钱的结构，再逐个换成数字。</div>
+  <div class="meta">
+    <span class="tag b">三层倒排</span>
+    <span class="tag b">refresh 1s</span>
+    <span class="tag b">BM25 可手算</span>
+    <span class="tag b">分片扇出账</span>
+    <span class="tag r">3 处静默错误</span>
+  </div>
+</div>
+
+<div class="box blue">
+  <div class="h">版本口径与取材方式</div>
+  <p>默认值全部按 <strong>Elasticsearch 8.x</strong>（Lucene 9.x）核对官方 index modules 文档：主分片 1、副本 1、<code>refresh_interval=1s</code>、<code>max_result_window=10000</code>、<code>max_terms_count=65536</code>、translog 512MB/30min。<strong>5.x / 6.x 的主分片默认是 5</strong>，说错会立刻暴露版本。体积与耗时类数字标了「估算」并给了计算过程，不是实测值；BM25 的分数表是按公式手算的，可以逐行复核。</p>
+</div>
+
+<h2><span class="n">L0</span>全景：为什么 LIKE 一定慢，倒排凭什么快</h2>
+
+<p class="lead">面试第一问通常是「为什么不用 MySQL 做搜索」。绝大多数人答「MySQL 不支持全文索引」——这是错的，MySQL 有 <code>FULLTEXT</code>，也有 <code>ngram</code> 分词器。正确答案是：<strong>B+ 树按「整行值」排序，搜索要按「词」查找，这是两个维度的排序。</strong></p>
+
+<p>先算账。一张 1 亿行的商品表，平均行长 200 字节：</p>
+
+<ul>
+  <li>表数据量 = <code>1 亿 × 200B = 20GB</code>；</li>
+  <li>执行 <code>WHERE title LIKE '%手机%'</code>，模式以 <code>%</code> 开头，B+ 树无法定位起点，退化为<strong>全表扫描</strong>；</li>
+  <li>20GB 顺序读：NVMe 按 2GB/s 约 <strong>10 秒</strong>，SATA SSD 按 500MB/s 约 <strong>40 秒</strong>，机械盘按 100MB/s 约 <strong>200 秒</strong>；</li>
+  <li>这还是单查询独占 IO 的理想情况。100 QPS 一起打进来，直接雪崩。</li>
+</ul>
+
+<p>就算改成 <code>LIKE '手机%'</code>（前缀匹配，能走索引），也只解决了「以手机开头的标题」。用户搜「小米手机」，照样命中不了「正品小米手机旗舰」。<strong>搜索的本质是包含关系，B+ 树只擅长顺序关系。</strong></p>
+
+<p>倒排索引把这个关系翻过来：不存「文档里有哪些词」，而存「词出现在哪些文档里」。</p>
+
+<figure>
+<svg viewBox="0 0 900 430" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="430" fill="#f7f9fb"/>
+  <text x="30" y="30" font-size="15" font-weight="700" fill="#1a1d21">同一个问题，两种索引：查「哪些行含手机」</text>
+
+  <!-- 左：B+树 -->
+  <rect x="24" y="48" width="404" height="330" rx="10" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="44" y="74" font-size="13" font-weight="700" fill="#3d454e">B+ 树：按整行值排序</text>
+  <text x="44" y="94" font-size="11" fill="#6b7683">索引键是「整行」，叶子挂的是行指针</text>
+
+  <rect x="150" y="112" width="150" height="34" rx="5" fill="#eef2f6" stroke="#a8b3bf"/>
+  <text x="225" y="134" font-size="11" font-weight="700" fill="#1a1d21" text-anchor="middle">根 · 20GB 表的高度 3</text>
+
+  <rect x="60" y="176" width="110" height="30" rx="4" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="115" y="196" font-size="10.5" fill="#3d454e" text-anchor="middle">id 1..400万</text>
+  <rect x="180" y="176" width="110" height="30" rx="4" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="235" y="196" font-size="10.5" fill="#3d454e" text-anchor="middle">id 4000万..8000万</text>
+  <rect x="300" y="176" width="104" height="30" rx="4" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="352" y="196" font-size="10.5" fill="#3d454e" text-anchor="middle">id 8000万+</text>
+
+  <line x1="225" y1="146" x2="225" y2="160" stroke="#a8b3bf" stroke-width="1.4"/>
+  <line x1="115" y1="160" x2="352" y2="160" stroke="#a8b3bf" stroke-width="1.4"/>
+  <line x1="115" y1="160" x2="115" y2="176" stroke="#a8b3bf" stroke-width="1.4"/>
+  <line x1="235" y1="160" x2="235" y2="176" stroke="#a8b3bf" stroke-width="1.4"/>
+  <line x1="352" y1="160" x2="352" y2="176" stroke="#a8b3bf" stroke-width="1.4"/>
+
+  <rect x="44" y="228" width="360" height="42" rx="5" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="58" y="247" font-size="11" font-weight="700" fill="#c62828">LIKE '%手机%' → 前缀未知</text>
+  <text x="58" y="263" font-size="10.5" fill="#8a4a4a">无法定位起点，退化为扫描全部 1 亿行</text>
+
+  <rect x="44" y="284" width="172" height="34" rx="5" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="130" y="305" font-size="10.5" fill="#3d454e" text-anchor="middle">顺序 IO 20GB</text>
+  <rect x="230" y="284" width="174" height="34" rx="5" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="317" y="305" font-size="10.5" fill="#3d454e" text-anchor="middle">SATA SSD 约 40 秒</text>
+
+  <text x="44" y="344" font-size="10.5" fill="#6b7683">结论：树高只有 3，但「包含」这个谓词它接不住</text>
+  <text x="44" y="362" font-size="10.5" fill="#6b7683">范围/等值/排序：3 次 IO 就能定位，这是它的主场</text>
+
+  <!-- 箭头 -->
+  <polygon points="440,210 462,210 462,203 478,217 462,231 462,224 440,224" fill="#6b7683"/>
+  <text x="459" y="196" font-size="10" fill="#6b7683" text-anchor="middle">换结构</text>
+
+  <!-- 右：倒排 -->
+  <rect x="490" y="48" width="386" height="330" rx="10" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.5"/>
+  <text x="510" y="74" font-size="13" font-weight="700" fill="#1a5fb4">倒排：按词建反查表</text>
+  <text x="510" y="94" font-size="11" fill="#6b7683">键是 term，值是文档号列表</text>
+
+  <rect x="510" y="108" width="96" height="26" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="558" y="126" font-size="10.5" font-weight="700" fill="#1a5fb4" text-anchor="middle">term</text>
+  <rect x="616" y="108" width="240" height="26" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="736" y="126" font-size="10.5" font-weight="700" fill="#1a5fb4" text-anchor="middle">posting list（文档号递增）</text>
+
+  <rect x="510" y="142" width="96" height="30" rx="4" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="558" y="162" font-size="11" fill="#1a1d21" text-anchor="middle">手机</text>
+  <rect x="616" y="142" width="240" height="30" rx="4" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="628" y="162" font-size="10.5" fill="#1e7d3c">1, 3, 7, 15, 88, 130 ... 共 500 万</text>
+
+  <rect x="510" y="180" width="96" height="30" rx="4" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="558" y="200" font-size="11" fill="#1a1d21" text-anchor="middle">钛金属</text>
+  <rect x="616" y="180" width="240" height="30" rx="4" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="628" y="200" font-size="10.5" fill="#1e7d3c">7, 88, 9012 ... 共 1000</text>
+
+  <rect x="510" y="218" width="96" height="30" rx="4" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="558" y="238" font-size="11" fill="#1a1d21" text-anchor="middle">小米</text>
+  <rect x="616" y="218" width="240" height="30" rx="4" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="628" y="238" font-size="10.5" fill="#1e7d3c">1, 42, 77 ... 共 120 万</text>
+
+  <rect x="510" y="262" width="346" height="42" rx="5" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="524" y="281" font-size="11" font-weight="700" fill="#1a5fb4">求交集 → 7, 88 命中；再按相关性排序</text>
+  <text x="524" y="297" font-size="10.5" fill="#2f5480">没有全表扫，只有一次 term 查找 + 列表归并</text>
+
+  <text x="510" y="332" font-size="10.5" fill="#6b7683">term index 40MB 常驻堆，term dict 400MB 在页缓存</text>
+  <text x="510" y="350" font-size="10.5" fill="#6b7683">posting 24GB 在磁盘 —— 一次查询 IO 个位数</text>
+  <text x="510" y="368" font-size="10.5" font-weight="700" fill="#c62828">这就是「和 1 亿行无关」的真正原因</text>
+</svg>
+<figcaption><b>图 1</b>　B+ 树按整行排序，接不住「包含」谓词；倒排按词建表，把查询变成一次 term 查找。左边是 20GB 全表扫，右边是三个整数列表求交。</figcaption>
+</figure>
+
+<p>那这个倒排结构到底多大？按 1 亿商品、每条标题加描述分词后平均 60 个 term 估：</p>
+
+<ul>
+  <li>posting 条目总数 = <code>1 亿 × 60 = 60 亿</code>；</li>
+  <li>每条 posting 用文档号差值编码（delta + VInt），平均压到 4 字节 → <code>60 亿 × 4B = 24GB</code>；</li>
+  <li>去重后词项数（term dictionary）按中文场景估 2000 万；</li>
+  <li>每个词项存「词文本 + 指向 posting 的偏移」约 20 字节 → <code>2000 万 × 20B = 400MB</code>；</li>
+  <li>词项字典之上的 term index 用 FST 压缩，约为字典的 1/10 → <strong>40MB</strong>。</li>
+</ul>
+
+<p><strong>40MB。</strong>这就是全部秘密：40MB 的 term index 常驻堆内存，400MB 的 term dict 和 24GB 的 posting 躺在磁盘上靠 page cache 兜。一次查询只读 term index（内存）+ 一个 term dict 块（4KB 一次 IO）+ 若干 posting 块，<strong>IO 次数是个位数，和 1 亿行没有关系</strong>。</p>
+
+<table>
+<thead><tr><th>维度</th><th>MySQL B+ 树</th><th>ES 倒排索引</th></tr></thead>
+<tbody>
+<tr><td>排序单位</td><td>整行（或索引列）</td><td>词项 term</td></tr>
+<tr><td>擅长</td><td>等值、范围、排序</td><td>包含、多词组合、相关性</td></tr>
+<tr><td><code>%kw%</code> 查询</td><td>全表扫 1 亿行，约 40 秒</td><td>一次 term 查找，约 10ms</td></tr>
+<tr><td>数据量增长</td><td>树高 +1，多 1~2 次 IO</td><td>posting 变长，几乎不影响查找</td></tr>
+<tr><td>更新代价</td><td>原地更新页</td><td>段不可变，只能标记删除 + 写新段</td></tr>
+<tr><td>事务</td><td>完整 ACID</td><td>无事务、无跨文档原子性</td></tr>
+</tbody>
+</table>
+
+<div class="box green">
+  <div class="h">一句话答法</div>
+  <p>B+ 树是「按值排序的目录」，倒排是「按词建的反查表」。前者解决「这一行在哪」，后者解决「哪些行含这个词」。搜索问的是后者，所以必须换结构——<strong>换的是数据结构，不是机器数量</strong>。</p>
+</div>
+
+<h2><span class="n">L1</span>倒排的三层结构：term index / term dict / posting list</h2>
+
+<p class="lead">上一节给了 40MB / 400MB / 24GB 三个数字，这一节解释为什么要分三层，而不是一个 <code>HashMap&lt;词, 文档号列表&gt;</code> 到底。</p>
+
+<p>如果只有一层，2000 万个词项全放内存要 400MB 起，而且每次查找都是随机内存访问，缓存命中率极低。Lucene 的做法是：<strong>字典按词排序后分块落盘，内存里只放一份「能快速定位到块」的目录</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 900 470" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="470" fill="#f7f9fb"/>
+  <text x="30" y="30" font-size="15" font-weight="700" fill="#1a1d21">查「钛金属」：内存里走图，磁盘上只读 1~2 个 4KB 块</text>
+
+  <!-- 层1 FST -->
+  <rect x="24" y="50" width="500" height="128" rx="9" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.5"/>
+  <rect x="24" y="50" width="6" height="128" rx="3" fill="#1a5fb4"/>
+  <text x="46" y="74" font-size="12.5" font-weight="700" fill="#1a5fb4">① term index（FST，常驻堆 40MB）</text>
+
+  <circle cx="66" cy="100" r="13" fill="#e8f0fb" stroke="#1a5fb4"/><text x="66" y="104" font-size="10" font-weight="700" fill="#1a5fb4" text-anchor="middle">s</text>
+  <circle cx="112" cy="100" r="13" fill="#e8f0fb" stroke="#1a5fb4"/><text x="112" y="104" font-size="10" font-weight="700" fill="#1a5fb4" text-anchor="middle">t</text>
+  <circle cx="158" cy="100" r="13" fill="#e8f0fb" stroke="#1a5fb4"/><text x="158" y="104" font-size="10" font-weight="700" fill="#1a5fb4" text-anchor="middle">a</text>
+  <circle cx="204" cy="100" r="13" fill="#e8f0fb" stroke="#1a5fb4"/><text x="204" y="104" font-size="10" font-weight="700" fill="#1a5fb4" text-anchor="middle">r</text>
+  <line x1="79" y1="100" x2="99" y2="100" stroke="#8fb4e0" stroke-width="1.4"/>
+  <line x1="125" y1="100" x2="145" y2="100" stroke="#8fb4e0" stroke-width="1.4"/>
+  <line x1="171" y1="100" x2="191" y2="100" stroke="#8fb4e0" stroke-width="1.4"/>
+
+  <line x1="204" y1="113" x2="204" y2="128" stroke="#8fb4e0" stroke-width="1.4"/>
+  <line x1="180" y1="128" x2="330" y2="128" stroke="#8fb4e0" stroke-width="1.4"/>
+  <line x1="180" y1="128" x2="180" y2="140" stroke="#8fb4e0" stroke-width="1.4"/>
+  <line x1="240" y1="128" x2="240" y2="140" stroke="#8fb4e0" stroke-width="1.4"/>
+  <line x1="330" y1="128" x2="330" y2="140" stroke="#8fb4e0" stroke-width="1.4"/>
+  <text x="180" y="154" font-size="9.5" fill="#3d454e" text-anchor="middle">r t</text>
+  <text x="240" y="154" font-size="9.5" fill="#3d454e" text-anchor="middle">ted</text>
+  <text x="330" y="154" font-size="9.5" fill="#3d454e" text-anchor="middle">ting</text>
+
+  <text x="370" y="98" font-size="10.5" fill="#6b7683">前缀 star 只存一份，</text>
+  <text x="370" y="115" font-size="10.5" fill="#6b7683">后缀 ted / ting 共享主干</text>
+  <text x="370" y="140" font-size="10.5" font-weight="700" fill="#1a5fb4">压缩率约 1/10</text>
+  <text x="370" y="158" font-size="10" fill="#8a949f">4 词 17 节点 → 主干 + 3 分支</text>
+
+  <text x="46" y="172" font-size="10" fill="#8a949f">作用：这个词大概在第几个块，不存原文</text>
+
+  <!-- 层2 term dict -->
+  <rect x="24" y="196" width="500" height="118" rx="9" fill="#ffffff" stroke="#d4dae1"/>
+  <rect x="24" y="196" width="6" height="118" rx="3" fill="#3d454e"/>
+  <text x="46" y="220" font-size="12.5" font-weight="700" fill="#3d454e">② term dictionary（按词有序分块，400MB，磁盘+页缓存）</text>
+
+  <rect x="46" y="232" width="76" height="56" rx="4" fill="#f7f9fb" stroke="#c2cad3"/>
+  <text x="84" y="252" font-size="9.5" fill="#6b7683" text-anchor="middle">块 1</text>
+  <text x="84" y="268" font-size="9.5" fill="#6b7683" text-anchor="middle">a..h</text>
+  <rect x="132" y="232" width="76" height="56" rx="4" fill="#f7f9fb" stroke="#c2cad3"/>
+  <text x="170" y="252" font-size="9.5" fill="#6b7683" text-anchor="middle">块 2</text>
+  <text x="170" y="268" font-size="9.5" fill="#6b7683" text-anchor="middle">i..p</text>
+  <rect x="218" y="232" width="76" height="56" rx="4" fill="#e8f0fb" stroke="#1a5fb4" stroke-width="1.4"/>
+  <text x="256" y="252" font-size="9.5" fill="#1a5fb4" text-anchor="middle">块 3</text>
+  <text x="256" y="268" font-size="9.5" font-weight="700" fill="#1a5fb4" text-anchor="middle">q..z</text>
+  <rect x="304" y="232" width="76" height="56" rx="4" fill="#f7f9fb" stroke="#c2cad3"/>
+  <text x="342" y="252" font-size="9.5" fill="#6b7683" text-anchor="middle">块 4</text>
+  <text x="342" y="268" font-size="9.5" fill="#6b7683" text-anchor="middle">数字</text>
+
+  <text x="398" y="250" font-size="10" fill="#6b7683">块间有跳跃索引，</text>
+  <text x="398" y="266" font-size="10" fill="#6b7683">块内二分 → 1~2 次 IO</text>
+  <text x="398" y="284" font-size="10" font-weight="700" fill="#c62828">每块约 4KB</text>
+  <text x="46" y="306" font-size="10" fill="#8a949f">这里才存词文本，找到「钛金属」后拿到 posting 的偏移</text>
+
+  <!-- 层3 posting -->
+  <rect x="24" y="332" width="500" height="118" rx="9" fill="#ffffff" stroke="#d4dae1"/>
+  <rect x="24" y="332" width="6" height="118" rx="3" fill="#1e7d3c"/>
+  <text x="46" y="356" font-size="12.5" font-weight="700" fill="#1e7d3c">③ posting list（文档号递增，24GB，磁盘）</text>
+
+  <text x="46" y="382" font-size="10.5" fill="#3d454e">docId：</text>
+  <rect x="96" y="368" width="34" height="20" rx="3" fill="#e9f5ec" stroke="#c2e2cc"/><text x="113" y="382" font-size="10" fill="#1e7d3c" text-anchor="middle">7</text>
+  <rect x="134" y="368" width="34" height="20" rx="3" fill="#e9f5ec" stroke="#c2e2cc"/><text x="151" y="382" font-size="10" fill="#1e7d3c" text-anchor="middle">88</text>
+  <rect x="172" y="368" width="46" height="20" rx="3" fill="#e9f5ec" stroke="#c2e2cc"/><text x="195" y="382" font-size="10" fill="#1e7d3c" text-anchor="middle">9012</text>
+  <rect x="222" y="368" width="46" height="20" rx="3" fill="#e9f5ec" stroke="#c2e2cc"/><text x="245" y="382" font-size="10" fill="#1e7d3c" text-anchor="middle">9400</text>
+  <text x="278" y="382" font-size="10.5" fill="#6b7683">…</text>
+
+  <text x="46" y="408" font-size="10.5" fill="#3d454e">差值：</text>
+  <rect x="96" y="394" width="34" height="20" rx="3" fill="#ffffff" stroke="#c2cad3"/><text x="113" y="408" font-size="10" fill="#3d454e" text-anchor="middle">7</text>
+  <rect x="134" y="394" width="34" height="20" rx="3" fill="#ffffff" stroke="#c2cad3"/><text x="151" y="408" font-size="10" fill="#3d454e" text-anchor="middle">+81</text>
+  <rect x="172" y="394" width="46" height="20" rx="3" fill="#ffffff" stroke="#c2cad3"/><text x="195" y="408" font-size="10" fill="#3d454e" text-anchor="middle">+8924</text>
+  <rect x="222" y="394" width="46" height="20" rx="3" fill="#ffffff" stroke="#c2cad3"/><text x="245" y="408" font-size="10" fill="#3d454e" text-anchor="middle">+388</text>
+  <text x="278" y="408" font-size="10.5" fill="#6b7683">小差值 1 字节即可</text>
+
+  <text x="390" y="382" font-size="10" fill="#6b7683">每 128 个设跳点</text>
+  <text x="390" y="398" font-size="10" fill="#6b7683">100 万 posting</text>
+  <text x="390" y="414" font-size="10" font-weight="700" fill="#1e7d3c">→ 约 130 次比较</text>
+  <text x="46" y="438" font-size="10" fill="#8a949f">还存 tf（打分）与 position（短语查询），position 可选</text>
+
+  <!-- 右侧账本 -->
+  <rect x="546" y="50" width="330" height="400" rx="9" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="566" y="76" font-size="13" font-weight="700" fill="#1a1d21">三层各管什么（1 亿文档估）</text>
+
+  <rect x="566" y="92" width="290" height="58" rx="6" fill="#e8f0fb"/>
+  <text x="580" y="112" font-size="11" font-weight="700" fill="#1a5fb4">term index ｜ 40MB ｜ 堆</text>
+  <text x="580" y="130" font-size="10.5" fill="#2f5480">内存遍历状态机，零 IO</text>
+  <text x="580" y="144" font-size="10" fill="#5a7599">少了它：每次查词都要磁盘二分</text>
+
+  <rect x="566" y="158" width="290" height="58" rx="6" fill="#eef2f6"/>
+  <text x="580" y="178" font-size="11" font-weight="700" fill="#3d454e">term dict ｜ 400MB ｜ 磁盘</text>
+  <text x="580" y="196" font-size="10.5" fill="#3d454e">按块二分，1~2 次 4KB IO</text>
+  <text x="580" y="210" font-size="10" fill="#6b7683">少了它：无法定位 posting</text>
+
+  <rect x="566" y="224" width="290" height="58" rx="6" fill="#e9f5ec"/>
+  <text x="580" y="244" font-size="11" font-weight="700" fill="#1e7d3c">posting ｜ 24GB ｜ 磁盘</text>
+  <text x="580" y="262" font-size="10.5" fill="#1e7d3c">跳表归并求交集</text>
+  <text x="580" y="276" font-size="10" fill="#3f7a52">少了它：不知道哪些文档命中</text>
+
+  <line x1="566" y1="298" x2="856" y2="298" stroke="#e4e8ed" stroke-width="1"/>
+
+  <text x="566" y="320" font-size="11" font-weight="700" fill="#c62828">还有两个常被漏掉的结构</text>
+  <text x="566" y="342" font-size="10.5" fill="#3d454e">_source（stored fields）60GB</text>
+  <text x="576" y="358" font-size="10" fill="#6b7683">→ 按文档号随机读，负责「返回内容」</text>
+  <text x="566" y="380" font-size="10.5" fill="#3d454e">doc_values（列式）10GB</text>
+  <text x="576" y="396" font-size="10" fill="#6b7683">→ 列式顺序读，负责「排序与聚合」</text>
+
+  <rect x="566" y="408" width="290" height="30" rx="5" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="580" y="428" font-size="10.5" fill="#9a6400">text 默认关 doc_values → 不能排序聚合</text>
+</svg>
+<figcaption><b>图 2</b>　三层倒排：内存里只有 FST 导航（40MB），字典按 4KB 分块落盘，posting 用差值编码压到 24GB。另外 <code>_source</code> 与 <code>doc_values</code> 是两套独立结构，分别负责「返回内容」和「排序聚合」。</figcaption>
+</figure>
+
+<p>三层之上有三个性质值得单独讲，因为它们各自对应一道面试题。</p>
+
+<h3>跳表为什么能把 100 万次比较压到 130 次</h3>
+
+<p>posting list 严格按文档号递增，这个性质极值钱，带来两个优化。第一是<strong>差值编码</strong>：存 <code>[3, 8, 12, 900]</code> 不如存 <code>[3, +5, +4, +888]</code>，小的差值用 1 字节甚至几位就够，24GB 就是这么省出来的。第二是<strong>跳表</strong>：多个词求交集时，朴素归并是 O(N)，加跳点后可以整段跳过。</p>
+
+<p>算一下收益。查「手机 AND 钛金属」，「手机」的 posting 长 100 万，「钛金属」长 1000。朴素归并要扫 100 万次比较。加跳表后：</p>
+
+<ul>
+  <li>一级跳点：<code>100 万 / 128 ≈ 7813</code> 个；</li>
+  <li>二级跳点：<code>7813 / 128 ≈ 61</code> 个；</li>
+  <li>从 61 个二级跳点二分定位，再下探两级 → 比较次数从 100 万降到 <strong>约 130 次</strong>。</li>
+</ul>
+
+<p><strong>差三个数量级。</strong> 这就是为什么「两个高频词组合查询」不会因为 posting 太长而变慢——慢的从来不是 posting 的长度，而是段的数量和分片的扇出。</p>
+
+<h3>为什么 text 字段不能排序和聚合</h3>
+
+<p>因为 text 被分词了。<code>"Apple iPhone 15"</code> 变成了 <code>[apple, iphone, 15]</code> 三个词，按哪个排？按哪个聚合？所以 text 默认关闭 doc_values；要排序聚合必须用 <code>keyword</code>（整串一个 term），或者开 <code>fielddata</code>——后者是把倒排临时转成正排塞进堆内存，<strong>是生产 OOM 的头号常客</strong>，能不开就别开。</p>
+
+<div class="box amber">
+  <div class="h">一个能立刻用的判断法</div>
+  <p>面试官问「这个字段怎么配」时，先问自己三句话：<strong>要搜吗</strong>（要 → text）、<strong>要精确匹配/排序/聚合吗</strong>（要 → keyword）、<strong>两个都要吗</strong>（用 <code>fields</code> 多字段，主字段 text 负责搜，<code>.raw</code> 负责排）。三句话能覆盖 90% 的 mapping 决策。</p>
+</div>
+
+<h2><span class="n">L2</span>分词决定一切：analyzer 三件套与「索引期必须等于查询期」</h2>
+
+<p class="lead">倒排索引的前提是「词」。中文没有空格，所以「什么算一个词」直接决定了索引里存的是什么。<strong>分词器不一致，是 ES 里排查成本最高的 bug 之一</strong>——因为两边都不报错，只是查不到。</p>
+
+<figure>
+<svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="400" fill="#f7f9fb"/>
+  <text x="30" y="30" font-size="15" font-weight="700" fill="#1a1d21">analyzer 是一条流水线：原文 → 字符过滤 → 切词 → 词元加工 → term</text>
+
+  <rect x="24" y="50" width="150" height="70" rx="8" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="99" y="76" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">原始文本</text>
+  <text x="99" y="96" font-size="9.5" fill="#6b7683" text-anchor="middle">iPhone15 Pro Max</text>
+  <text x="99" y="110" font-size="9.5" fill="#6b7683" text-anchor="middle">手机壳</text>
+
+  <polygon points="180,85 196,85 196,80 210,88 196,96 196,91 180,91" fill="#8a949f"/>
+
+  <rect x="216" y="50" width="150" height="70" rx="8" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="291" y="76" font-size="10.5" font-weight="700" fill="#1a5fb4" text-anchor="middle">char_filter</text>
+  <text x="291" y="96" font-size="9.5" fill="#2f5480" text-anchor="middle">去 HTML、&amp; 转 &amp;、</text>
+  <text x="291" y="110" font-size="9.5" fill="#2f5480" text-anchor="middle">全角转半角</text>
+
+  <polygon points="372,85 388,85 388,80 402,88 388,96 388,91 372,91" fill="#8a949f"/>
+
+  <rect x="408" y="50" width="150" height="70" rx="8" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="483" y="76" font-size="10.5" font-weight="700" fill="#1a5fb4" text-anchor="middle">tokenizer</text>
+  <text x="483" y="96" font-size="9.5" fill="#2f5480" text-anchor="middle">standard / ik / ngram</text>
+  <text x="483" y="110" font-size="9.5" fill="#2f5480" text-anchor="middle">切成 token 并记 position</text>
+
+  <polygon points="564,85 580,85 580,80 594,88 580,96 580,91 564,91" fill="#8a949f"/>
+
+  <rect x="600" y="50" width="150" height="70" rx="8" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="675" y="76" font-size="10.5" font-weight="700" fill="#1a5fb4" text-anchor="middle">token_filter</text>
+  <text x="675" y="96" font-size="9.5" fill="#2f5480" text-anchor="middle">lowercase / 停用词 /</text>
+  <text x="675" y="110" font-size="9.5" fill="#2f5480" text-anchor="middle">同义词 / 词干 / 拼音</text>
+
+  <polygon points="756,85 772,85 772,80 786,88 772,96 772,91 756,91" fill="#8a949f"/>
+
+  <rect x="792" y="50" width="84" height="70" rx="8" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="834" y="76" font-size="10.5" font-weight="700" fill="#1e7d3c" text-anchor="middle">term 列表</text>
+  <text x="834" y="96" font-size="9.5" fill="#3f7a52" text-anchor="middle">写入倒排</text>
+  <text x="834" y="110" font-size="9.5" fill="#3f7a52" text-anchor="middle">+ position</text>
+
+  <!-- 三种分词器对比 -->
+  <text x="30" y="158" font-size="13" font-weight="700" fill="#1a1d21">同一段文本，三种切法：这就是「搜不到」的一半答案</text>
+
+  <rect x="24" y="172" width="252" height="132" rx="8" fill="#ffffff" stroke="#f3c9c6"/>
+  <rect x="24" y="172" width="252" height="26" rx="8" fill="#fdeceb"/>
+  <rect x="24" y="190" width="252" height="8" fill="#fdeceb"/>
+  <text x="40" y="190" font-size="11" font-weight="700" fill="#c62828">standard（默认）</text>
+  <text x="40" y="218" font-size="10" fill="#3d454e">iphone15 · pro · max</text>
+  <text x="40" y="236" font-size="10" font-weight="700" fill="#c62828">手 · 机 · 壳</text>
+  <text x="40" y="262" font-size="9.5" fill="#8a949f">中文逐字切，没有「手机壳」</text>
+  <text x="40" y="280" font-size="9.5" fill="#c62828">搜「手机壳」零结果</text>
+  <text x="40" y="296" font-size="9.5" fill="#8a949f">体积 1×</text>
+
+  <rect x="292" y="172" width="252" height="132" rx="8" fill="#ffffff" stroke="#bcd4f2"/>
+  <rect x="292" y="172" width="252" height="26" rx="8" fill="#e8f0fb"/>
+  <rect x="292" y="190" width="252" height="8" fill="#e8f0fb"/>
+  <text x="308" y="190" font-size="11" font-weight="700" fill="#1a5fb4">ik_max_word（细）</text>
+  <text x="308" y="218" font-size="10" fill="#3d454e">iphone15 · pro · max</text>
+  <text x="308" y="236" font-size="10" font-weight="700" fill="#1a5fb4">手机 · 手机壳 · 机壳 · 壳</text>
+  <text x="308" y="262" font-size="9.5" fill="#8a949f">覆盖最全，搜什么都命中</text>
+  <text x="308" y="280" font-size="9.5" fill="#1e7d3c">推荐用于索引期</text>
+  <text x="308" y="296" font-size="9.5" fill="#8a949f">体积 1.5~2×</text>
+
+  <rect x="560" y="172" width="316" height="132" rx="8" fill="#ffffff" stroke="#efd9ab"/>
+  <rect x="560" y="172" width="316" height="26" rx="8" fill="#fdf4e3"/>
+  <rect x="560" y="190" width="316" height="8" fill="#fdf4e3"/>
+  <text x="576" y="190" font-size="11" font-weight="700" fill="#9a6400">ik_smart（粗）</text>
+  <text x="576" y="218" font-size="10" fill="#3d454e">iphone15 · pro · max</text>
+  <text x="576" y="236" font-size="10" font-weight="700" fill="#9a6400">手机壳</text>
+  <text x="576" y="262" font-size="9.5" fill="#8a949f">最省空间，但搜「手机」不命中</text>
+  <text x="576" y="280" font-size="9.5" fill="#1e7d3c">推荐用于查询期</text>
+  <text x="576" y="296" font-size="9.5" fill="#8a949f">体积 1×</text>
+
+  <!-- 致命错配 -->
+  <rect x="24" y="322" width="852" height="58" rx="8" fill="#1a1d21"/>
+  <text x="44" y="344" font-size="11.5" font-weight="700" fill="#ff7b72">最常见的致命错配</text>
+  <text x="44" y="364" font-size="10.5" fill="#d7dde5">索引期 ik_smart（只存「手机壳」）＋ 查询期用户输入「手机」→ 切成「手机」→ 两个 term 对不上 → 零结果，且两边都不报错</text>
+</svg>
+<figcaption><b>图 3</b>　analyzer 的四段流水线，以及 standard / ik_max_word / ik_smart 对同一段文本的三种切法。<b>索引期细粒度、查询期粗粒度</b>是覆盖最广的组合。</figcaption>
+</figure>
+
+<p>这三行就是「为什么搜不到」的一半答案。索引期用 <code>ik_smart</code> 只存了 <code>手机壳</code>，查询期用户输入「手机」被切成 <code>手机</code>，两个 term 对不上，零结果。反过来索引期 <code>ik_max_word</code>、查询期 <code>ik_smart</code>，搜「手机壳」能命中（索引里有 <code>手机壳</code>），搜「手机」也能命中（索引里有 <code>手机</code>）——这就是推荐配置。</p>
+
+<p>面试里能加分的实操细节是用 <code>_analyze</code> 现场验证，而不是靠猜：</p>
+
+<pre data-lang="json"><code>POST /goods/_analyze
+{
+  "field": "title",
+  "text": "iPhone15 Pro Max 手机壳"
+}
+// 返回 tokens[]：token / start_offset / end_offset / position / type
+// 索引期与查询期各跑一次，diff 一下两个 token 列表，就知道是不是分词问题</code></pre>
+
+<p>返回里 <code>position</code> 这个字段很关键，它是短语查询的基础。如果某个 filter（比如 <code>stop</code>）把停用词直接删掉而不留空位，<code>"a quick fox"</code> 就匹配不到 <code>a quick brown fox</code>——因为位置被压缩了，<code>quick</code> 和 <code>fox</code> 变成了相邻。</p>
+
+<h3>字段类型只有三条规则</h3>
+
+<table>
+<thead><tr><th>类型</th><th>是否分词</th><th>能排序/聚合</th><th>典型用途</th><th>常见误用</th></tr></thead>
+<tbody>
+<tr><td><code>text</code></td><td>是</td><td><strong>否</strong></td><td>标题、正文、描述、评论</td><td>拿它排序 → 报 <code>Fielddata is disabled</code></td></tr>
+<tr><td><code>keyword</code></td><td>否，整串一个 term</td><td>是</td><td>ID、状态、标签、枚举、邮箱</td><td>拿它搜长文本 → term 太大、无法模糊匹配</td></tr>
+<tr><td><code>text</code> + <code>fields.raw</code></td><td>两者兼得</td><td>是（用 <code>.raw</code>）</td><td>既要搜又要排的字段</td><td>忘了加 <code>ignore_above</code>，长文本撑爆 doc_values</td></tr>
+</tbody>
+</table>
+
+<pre data-lang="json"><code>"title": {
+  "type": "text",
+  "analyzer": "ik_max_word",        // 索引期：切细
+  "search_analyzer": "ik_smart",    // 查询期：切粗
+  "fields": {
+    "raw": { "type": "keyword", "ignore_above": 256 }   // 排序/聚合走 .raw
+  }
+}</code></pre>
+
+<p><code>ignore_above: 256</code> 的意思是超过 256 字符的值不进 keyword 索引。<strong>这是 mapping 里最便宜的一道保险</strong>：一个本该是短标签的字段被塞进 10KB 长文本时，没有它就是把 doc_values 直接撑爆。</p>
+
+<p>还有一个必须提的概念：<strong>归一化（normalization）</strong>。<code>iPhone</code> / <code>iphone</code> / <code>IPHONE</code> 在用户眼里是一个词，在倒排里是三个 term。<code>lowercase</code> 解决大小写，<code>asciifolding</code> 解决 <code>café → cafe</code>，同义词过滤器解决 <code>手机 → mobile → 移动电话</code>。</p>
+
+<p>同义词有个容易被问到的细节：<strong>索引期展开会让 posting 膨胀，查询期展开只影响当次查询</strong>。所以同义词通常配在 <code>search_analyzer</code> 上——改词表不用重建索引，这是运维上巨大的差别。</p>
+
+<div class="box red">
+  <div class="h">排查口诀</div>
+  <p>「搜不到」先分三种，不要一上来就重启：<strong>文档不在</strong>（查 <code>_doc/{id}</code>）→ <strong>term 不一致</strong>（用 <code>_analyze</code> 双向比对）→ <strong>被过滤掉</strong>（<code>explain=true</code> 看是不是 <code>filter</code> 里的 <code>status</code> 没更新）。三种的修复动作完全不同，第一种要查写入链路，第二种要改 mapping 并重建索引，第三种是一次数据订正。</p>
+</div>
+
+<h2><span class="n">L3</span>段、refresh、flush、merge：近实时的那 1 秒从哪来</h2>
+
+<p class="lead">这是 ES 面试的<strong>分水岭题</strong>。「ES 是近实时的」这句话谁都会说，但能不能说清 1 秒里发生了什么，直接区分「用过」和「懂」。</p>
+
+<p>核心事实：<strong>Lucene 的段（segment）一旦写成就是不可变的</strong>。不可变带来三个好处（无锁读、可缓存、可压缩），也带来一个代价——不能原地更新，只能「标记删除 + 写新段」。整条写入链就是围绕这个约束设计的。</p>
+
+<figure>
+<svg viewBox="0 0 900 470" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="470" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">一条文档的四种状态：可搜 ≠ 已落盘，这是两个独立问题</text>
+
+  <!-- 时间轴 -->
+  <line x1="60" y1="76" x2="860" y2="76" stroke="#c2cad3" stroke-width="1.6"/>
+  <circle cx="90" cy="76" r="5" fill="#3d454e"/><circle cx="300" cy="76" r="5" fill="#1a5fb4"/>
+  <circle cx="560" cy="76" r="5" fill="#9a6400"/><circle cx="810" cy="76" r="5" fill="#1e7d3c"/>
+  <text x="90" y="64" font-size="10" fill="#3d454e" text-anchor="middle">T+0ms</text>
+  <text x="300" y="64" font-size="10" fill="#1a5fb4" text-anchor="middle">T+1s</text>
+  <text x="560" y="64" font-size="10" fill="#9a6400" text-anchor="middle">512MB / 30min</text>
+  <text x="810" y="64" font-size="10" fill="#1e7d3c" text-anchor="middle">后台持续</text>
+
+  <!-- 四阶段卡片 -->
+  <rect x="24" y="94" width="196" height="112" rx="8" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="40" y="116" font-size="11.5" font-weight="700" fill="#1a1d21">① 写 buffer + translog</text>
+  <text x="40" y="136" font-size="10" fill="#3d454e">文档进内存缓冲</text>
+  <text x="40" y="152" font-size="10" fill="#3d454e">同时追加 translog 记录</text>
+  <text x="40" y="174" font-size="10" font-weight="700" fill="#c62828">不可搜</text>
+  <text x="96" y="174" font-size="10" fill="#1e7d3c">宕机可恢复</text>
+  <text x="40" y="192" font-size="9.5" fill="#8a949f">磁盘只多了一条 translog</text>
+
+  <rect x="232" y="94" width="196" height="112" rx="8" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.5"/>
+  <text x="248" y="116" font-size="11.5" font-weight="700" fill="#1a5fb4">② refresh（1s）</text>
+  <text x="248" y="136" font-size="10" fill="#3d454e">buffer → 新 segment</text>
+  <text x="248" y="152" font-size="10" fill="#3d454e">写页缓存，<tspan font-weight="700">不 fsync</tspan></text>
+  <text x="248" y="174" font-size="10" font-weight="700" fill="#1e7d3c">可搜 ✓</text>
+  <text x="304" y="174" font-size="10" fill="#1e7d3c">宕机可恢复</text>
+  <text x="248" y="192" font-size="9.5" fill="#8a949f">这 1 秒就是「近实时」全部来源</text>
+
+  <rect x="440" y="94" width="196" height="112" rx="8" fill="#ffffff" stroke="#9a6400" stroke-width="1.5"/>
+  <text x="456" y="116" font-size="11.5" font-weight="700" fill="#9a6400">③ flush</text>
+  <text x="456" y="136" font-size="10" fill="#3d454e">段文件 fsync 落盘</text>
+  <text x="456" y="152" font-size="10" fill="#3d454e">写 commit point</text>
+  <text x="456" y="174" font-size="10" font-weight="700" fill="#1e7d3c">可搜 ✓</text>
+  <text x="512" y="174" font-size="10" font-weight="700" fill="#1e7d3c">已落盘 ✓</text>
+  <text x="456" y="192" font-size="9.5" fill="#8a949f">translog 被清空，重放起点前移</text>
+
+  <rect x="648" y="94" width="228" height="112" rx="8" fill="#ffffff" stroke="#1e7d3c" stroke-width="1.5"/>
+  <text x="664" y="116" font-size="11.5" font-weight="700" fill="#1e7d3c">④ merge（后台）</text>
+  <text x="664" y="136" font-size="10" fill="#3d454e">多个小段 → 一个大段</text>
+  <text x="664" y="152" font-size="10" fill="#3d454e">物理删除标记删除的文档</text>
+  <text x="664" y="174" font-size="10" font-weight="700" fill="#1e7d3c">段数下降</text>
+  <text x="742" y="174" font-size="10" font-weight="700" fill="#1e7d3c">磁盘变小</text>
+  <text x="664" y="192" font-size="9.5" fill="#8a949f">写入放大 3~5 倍的来源</text>
+
+  <!-- 连接箭头 -->
+  <polygon points="220,150 224,150 224,146 234,152 224,158 224,154 220,154" fill="#8a949f"/>
+  <polygon points="428,150 432,150 432,146 442,152 432,158 432,154 428,154" fill="#8a949f"/>
+  <polygon points="636,150 640,150 640,146 650,152 640,158 640,154 636,154" fill="#8a949f"/>
+
+  <!-- 状态矩阵 -->
+  <text x="30" y="238" font-size="13" font-weight="700" fill="#1a1d21">四种状态对照：面试问「数据丢不丢」时，先问「哪个状态」</text>
+  <rect x="24" y="252" width="852" height="26" rx="0" fill="#eef2f6"/>
+  <text x="40" y="270" font-size="10.5" font-weight="700" fill="#3d454e">时刻</text>
+  <text x="216" y="270" font-size="10.5" font-weight="700" fill="#3d454e">数据在哪</text>
+  <text x="470" y="270" font-size="10.5" font-weight="700" fill="#3d454e">可搜</text>
+  <text x="560" y="270" font-size="10.5" font-weight="700" fill="#3d454e">宕机可恢复</text>
+  <text x="700" y="270" font-size="10.5" font-weight="700" fill="#3d454e">磁盘占用</text>
+
+  <rect x="24" y="278" width="852" height="34" fill="#f7f9fb"/>
+  <text x="40" y="300" font-size="10" fill="#3d454e">写入瞬间</text>
+  <text x="216" y="300" font-size="10" fill="#3d454e">buffer + translog</text>
+  <text x="470" y="300" font-size="10" font-weight="700" fill="#c62828">否</text>
+  <text x="560" y="300" font-size="10" fill="#1e7d3c">是（重放 translog）</text>
+  <text x="700" y="300" font-size="10" fill="#6b7683">仅 translog</text>
+
+  <rect x="24" y="312" width="852" height="34" fill="#ffffff"/>
+  <text x="40" y="334" font-size="10" fill="#1a5fb4">+1s（refresh）</text>
+  <text x="216" y="334" font-size="10" fill="#3d454e">新 segment（页缓存）+ translog</text>
+  <text x="470" y="334" font-size="10" font-weight="700" fill="#1e7d3c">是</text>
+  <text x="560" y="334" font-size="10" fill="#1e7d3c">是</text>
+  <text x="700" y="334" font-size="10" fill="#6b7683">段 + translog</text>
+
+  <rect x="24" y="346" width="852" height="34" fill="#f7f9fb"/>
+  <text x="40" y="368" font-size="10" fill="#9a6400">flush 后</text>
+  <text x="216" y="368" font-size="10" fill="#3d454e">segment（已 fsync）+ 空 translog</text>
+  <text x="470" y="368" font-size="10" font-weight="700" fill="#1e7d3c">是</text>
+  <text x="560" y="368" font-size="10" fill="#1e7d3c">是</text>
+  <text x="700" y="368" font-size="10" fill="#6b7683">段</text>
+
+  <rect x="24" y="380" width="852" height="34" fill="#ffffff"/>
+  <text x="40" y="402" font-size="10" fill="#1e7d3c">merge 后</text>
+  <text x="216" y="402" font-size="10" fill="#3d454e">合并后的大段</text>
+  <text x="470" y="402" font-size="10" font-weight="700" fill="#1e7d3c">是</text>
+  <text x="560" y="402" font-size="10" fill="#1e7d3c">是</text>
+  <text x="700" y="402" font-size="10" font-weight="700" fill="#1e7d3c">变小（删的彻底删了）</text>
+
+  <rect x="24" y="424" width="852" height="34" rx="6" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="40" y="446" font-size="10.5" fill="#c62828">关键：refresh 只解决「可见性」，flush 才解决「持久性」。所以「refresh 了」不等于「安全了」，只是「能搜了」。</text>
+</svg>
+<figcaption><b>图 4</b>　写入四阶段与状态对照。<b>可搜</b>由 refresh 决定（1s），<b>持久</b>由 translog + flush 决定。两个问题被绝大多数人混成一个。</figcaption>
+</figure>
+
+<p>三个阶段各自解决的问题不同，混淆它们就会答错：「为什么刚写的数据查不到」问的是 refresh，「为什么断电丢数据」问的是 flush 和 translog——而 ES 默认 <code>translog.durability=request</code>（每次请求都 fsync），所以断电其实不丢，丢的是「还没 refresh」的那部分可见性。</p>
+
+<p>几个能直接换算的数字：</p>
+
+<ul>
+  <li><strong>写入放大</strong>：一条文档被 refresh 写成段，又被 merge 重写 2~3 次，实际磁盘写入量是原始大小的 <strong>3~5 倍</strong>。这是 ES 写吞吐不如 Kafka 的根本原因，不是「分布式开销」。</li>
+  <li><strong>段数控制</strong>：默认 tiered 策略下，一个分片的段数稳定在几十个量级。如果 <code>_segments</code> 看到某分片有上百个段，说明 merge 跟不上写入，通常意味着磁盘 IO 已经打满。</li>
+  <li><strong>删除不释放空间</strong>：<code>_delete_by_query</code> 只是打删除标记，空间要等 merge 才回收。批量删数据后 <code>df</code> 不变是正常的，要 <code>_forcemerge</code>——且只能对只读索引做，否则和写入抢 IO。</li>
+</ul>
+
+<p>所以「我刚写入的数据查不到」的标准答案三级递进：</p>
+
+<table>
+<thead><tr><th>解法</th><th>延迟</th><th>代价</th><th>适用</th></tr></thead>
+<tbody>
+<tr><td>什么都不做</td><td>0~1s</td><td>无</td><td>绝大多数场景，产品上容忍 1 秒</td></tr>
+<tr><td><code>?refresh=wait_for</code></td><td>1~2s</td><td>请求挂起等下一次 refresh，不额外产生段</td><td>写入后要立刻能搜到的关键数据</td></tr>
+<tr><td><code>?refresh=true</code></td><td>~0</td><td><strong>每条产生一个新段，写入吞吐掉一个数量级</strong></td><td>仅调试、单条补数据</td></tr>
+</tbody>
+</table>
+
+<p>反过来，<strong>批量导入的标准姿势是全部关掉</strong>：</p>
+
+<pre data-lang="json"><code>// 导入前
+PUT /goods/_settings
+{ "index": { "refresh_interval": -1, "number_of_replicas": 0 } }
+PUT /goods/_settings
+{ "index": { "translog": { "durability": "async" } } }
+
+// 导入完成后改回来，再合并段
+PUT /goods/_settings
+{ "index": { "refresh_interval": "1s", "number_of_replicas": 1 } }
+POST /goods/_forcemerge?max_num_segments=1</code></pre>
+
+<p>这一套能让导入速度提升 3~5 倍，代价是导入期间不可搜、无副本、宕机丢数据——<strong>只能在业务低峰、且数据可从源头重放时用</strong>。面试里能把「代价」说出来，比只背「关 refresh 提速」高一档。</p>
+
+<h2><span class="n">L4</span>写入链路：routing、primary、replica 与 ack 的代价</h2>
+
+<p class="lead">单机写入讲完了，集群写入多两件事：<strong>这条文档去哪个分片</strong>，以及<strong>什么时候算写成功</strong>。</p>
+
+<p>分片路由是一行代码：</p>
+
+<pre data-lang="text"><code>shard = hash(routing) % number_of_primary_shards</code></pre>
+
+<p>默认 <code>routing</code> 就是文档 <code>_id</code>，哈希用 Murmur3。这个公式解释了两个经典现象。</p>
+
+<p>第一，<strong>主分片数创建后不能改</strong>。改了 <code>%</code> 的结果全变，已存在的文档全部「搬错家」，所以 ES 只允许 <code>_reindex</code>、<code>_split</code>、<code>_shrink</code> 三种方式，没有「改分片数」这个 API。</p>
+
+<p>第二，<strong>自定义 routing 能让相关数据落在同一分片</strong>。按 <code>user_id</code> 路由，某个用户的所有订单在同一个分片上，查询时只打一个分片（叫 routing 裁剪），延迟直接除以分片数。代价是<strong>数据倾斜</strong>——一个大卖家一个 <code>user_id</code> 可能占半个分片。</p>
+
+<figure>
+<svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="400" fill="#f7f9fb"/>
+  <text x="30" y="28" font-size="15" font-weight="700" fill="#1a1d21">一次 index 请求：2 次网络往返，最慢副本决定延迟</text>
+
+  <!-- 客户端 -->
+  <rect x="24" y="56" width="130" height="58" rx="8" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="89" y="80" font-size="11" font-weight="700" fill="#3d454e" text-anchor="middle">客户端</text>
+  <text x="89" y="98" font-size="9.5" fill="#6b7683" text-anchor="middle">index 请求</text>
+
+  <!-- 协调节点 -->
+  <rect x="196" y="56" width="180" height="58" rx="8" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="286" y="76" font-size="11" font-weight="700" fill="#1a5fb4" text-anchor="middle">协调节点（任意一个）</text>
+  <text x="286" y="94" font-size="9.5" fill="#2f5480" text-anchor="middle">hash(_id) % 分片数 → 目标</text>
+  <text x="286" y="108" font-size="9.5" fill="#2f5480" text-anchor="middle">本身不存数据，只转发和归并</text>
+
+  <polygon points="154,85 168,85 168,80 180,88 168,96 168,91 154,91" fill="#8a949f"/>
+
+  <!-- primary -->
+  <rect x="418" y="56" width="180" height="58" rx="8" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.5"/>
+  <text x="508" y="76" font-size="11" font-weight="700" fill="#1a5fb4" text-anchor="middle">P0（primary，节点 A）</text>
+  <text x="508" y="94" font-size="9.5" fill="#3d454e" text-anchor="middle">写 translog + buffer</text>
+  <text x="508" y="108" font-size="9.5" fill="#3d454e" text-anchor="middle">并行转发给所有副本</text>
+
+  <polygon points="376,85 390,85 390,80 402,88 390,96 390,91 376,91" fill="#8a949f"/>
+
+  <!-- replicas -->
+  <rect x="640" y="34" width="150" height="46" rx="7" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="715" y="53" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">R0（节点 B）</text>
+  <text x="715" y="69" font-size="9.5" fill="#6b7683" text-anchor="middle">写本地 translog</text>
+
+  <rect x="640" y="90" width="150" height="46" rx="7" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="715" y="109" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">R0（节点 C）</text>
+  <text x="715" y="125" font-size="9.5" fill="#6b7683" text-anchor="middle">写本地 translog</text>
+
+  <polygon points="632,53 641,57 632,61" fill="#8a949f"/>
+  <line x1="598" y1="72" x2="641" y2="57" stroke="#a8b3bf" stroke-width="1.3"/>
+  <line x1="598" y1="86" x2="641" y2="113" stroke="#a8b3bf" stroke-width="1.3"/>
+  <polygon points="632,110 641,114 633,118" fill="#8a949f"/>
+
+  <!-- ack 回流 -->
+  <path d="M715,136 L715,158 L508,158" fill="none" stroke="#1e7d3c" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <polygon points="508,158 516,154 516,162" fill="#1e7d3c"/>
+  <text x="612" y="152" font-size="9.5" fill="#1e7d3c" text-anchor="middle">全部 ack（wait_for_active_shards）</text>
+
+  <path d="M508,158 L300,158 L300,116" fill="none" stroke="#1e7d3c" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <polygon points="300,116 296,124 304,124" fill="#1e7d3c"/>
+
+  <path d="M196,100 L120,100 L120,116" fill="none" stroke="#1e7d3c" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <polygon points="120,116 116,108 124,108" fill="#1e7d3c"/>
+  <text x="96" y="136" font-size="9.5" fill="#1e7d3c" text-anchor="middle">200 OK</text>
+
+  <!-- 三个参数说明 -->
+  <rect x="24" y="190" width="272" height="118" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="40" y="212" font-size="11.5" font-weight="700" fill="#1a5fb4">wait_for_active_shards</text>
+  <text x="40" y="232" font-size="10" fill="#3d454e">默认 <tspan font-weight="700">1</tspan>：只等 primary 写完</text>
+  <text x="40" y="250" font-size="10" fill="#3d454e">all：等全部副本，最强一致</text>
+  <text x="40" y="268" font-size="10" fill="#3d454e">quorum：等多数副本，折中</text>
+  <text x="40" y="290" font-size="9.5" fill="#c62828">默认值意味着：副本挂了写入照样成功</text>
+
+  <rect x="314" y="190" width="272" height="118" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="330" y="212" font-size="11.5" font-weight="700" fill="#9a6400">延迟账</text>
+  <text x="330" y="232" font-size="10" fill="#3d454e">同机房 RTT 0.2ms → 约 <tspan font-weight="700">0.5ms</tspan></text>
+  <text x="330" y="250" font-size="10" fill="#3d454e">跨机房 RTT 3ms → 约 <tspan font-weight="700">6ms</tspan></text>
+  <text x="330" y="268" font-size="10" fill="#3d454e">副本越多，越受最慢者拖累</text>
+  <text x="330" y="290" font-size="9.5" fill="#c62828">副本提高读吞吐，不提高写吞吐</text>
+
+  <rect x="604" y="190" width="272" height="118" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="620" y="212" font-size="11.5" font-weight="700" fill="#1e7d3c">一致性边界</text>
+  <text x="620" y="232" font-size="10" fill="#3d454e">无跨文档事务、无原子自减</text>
+  <text x="620" y="250" font-size="10" fill="#3d454e">并发更新靠 version 乐观锁</text>
+  <text x="620" y="268" font-size="10" fill="#3d454e">冲突返回 409，不是排队</text>
+  <text x="620" y="290" font-size="9.5" fill="#c62828">所以 ES 不能做库存扣减</text>
+
+  <!-- bulk 陷阱 -->
+  <rect x="24" y="324" width="852" height="58" rx="8" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="44" y="346" font-size="11" font-weight="700" fill="#c62828">_bulk 不是原子的：HTTP 200 不代表全成功</text>
+  <text x="44" y="366" font-size="10" fill="#8a4a4a">一批 1000 条里 3 条 mapping 冲突 → 返回 200，但 items[] 里有 3 个 status:400。必须逐条解析 items，只看 HTTP 码等于什么都没检查。</text>
+</svg>
+<figcaption><b>图 5</b>　集群写入的三步往返。<code>wait_for_active_shards</code> 默认 1，所以「写入成功」只保证主分片写了，副本可能落后——这是读不到新数据的第二个原因（第一个是 refresh）。</figcaption>
+</figure>
+
+<p>延迟账：一次写入至少 <code>2 × RTT</code>（协调 → primary → replica 的 ack 回传）。同机房 RTT 0.2ms 时约 0.5ms，跨机房 3ms 时就是 6ms 起步。<strong>副本越多，写延迟越受最慢那个副本拖累</strong>——这就是「副本提高读吞吐但不提高写吞吐」的原因。</p>
+
+<p>还有一个隐形坑：<code>version</code> 和 <code>if_seq_no + if_primary_term</code> 是 ES 的乐观锁。并发更新同一文档时，后到的会拿到 <code>409 Conflict</code>。<strong>这就是为什么 ES 不适合做库存扣减</strong>——它没有 <code>UPDATE ... SET stock = stock - 1 WHERE stock &gt; 0</code> 这种原子自减。</p>
+
+<table>
+<thead><tr><th>操作</th><th>是否原子</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>单文档 index / update</td><td>是（文档级）</td><td>靠 version 做乐观锁</td></tr>
+<tr><td><code>_bulk</code> 批量</td><td><strong>否</strong></td><td>部分成功部分失败，逐条返回 status</td></tr>
+<tr><td><code>_update_by_query</code></td><td>否</td><td>逐条读改写，无事务</td></tr>
+<tr><td>跨文档事务</td><td><strong>不支持</strong></td><td>要事务请回 MySQL</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">L5</span>两阶段查询：query then fetch 与深分页的堆账</h2>
+
+<p class="lead">一次搜索要访问所有分片，但结果只能有一份，所以 ES 把它拆成两个阶段。拆的原因很实在：<strong>如果第一阶段就返回全文，网络会被候选集撑爆。</strong></p>
+
+<figure>
+<svg viewBox="0 0 900 430" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="430" fill="#f7f9fb"/>
+  <text x="30" y="26" font-size="15" font-weight="700" fill="#1a1d21">query then fetch：先比分数（只传 ID），再取内容（只取 top N）</text>
+
+  <!-- Phase 1 -->
+  <rect x="24" y="42" width="852" height="170" rx="9" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.4"/>
+  <rect x="24" y="42" width="852" height="26" rx="9" fill="#e8f0fb"/>
+  <rect x="24" y="58" width="852" height="10" fill="#e8f0fb"/>
+  <text x="44" y="61" font-size="11.5" font-weight="700" fill="#1a5fb4">① Query 阶段：广播到每个分片，各返回 from+size 条「docId + score」</text>
+
+  <rect x="44" y="80" width="130" height="50" rx="7" fill="#f7f9fb" stroke="#c2cad3"/>
+  <text x="109" y="101" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">协调节点</text>
+  <text x="109" y="118" font-size="9.5" fill="#6b7683" text-anchor="middle">广播查询</text>
+
+  <line x1="174" y1="92" x2="250" y2="92" stroke="#a8b3bf" stroke-width="1.3"/><polygon points="250,92 242,88 242,96" fill="#a8b3bf"/>
+  <line x1="174" y1="105" x2="250" y2="105" stroke="#a8b3bf" stroke-width="1.3"/><polygon points="250,105 242,101 242,109" fill="#a8b3bf"/>
+  <line x1="174" y1="118" x2="250" y2="118" stroke="#a8b3bf" stroke-width="1.3"/><polygon points="250,118 242,114 242,122" fill="#a8b3bf"/>
+
+  <rect x="256" y="80" width="196" height="22" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="354" y="95" font-size="9.5" fill="#1a5fb4" text-anchor="middle">P0 本地查询 → top 10000 条</text>
+  <rect x="256" y="106" width="196" height="22" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="354" y="121" font-size="9.5" fill="#1a5fb4" text-anchor="middle">P1 本地查询 → top 10000 条</text>
+  <rect x="256" y="132" width="196" height="22" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="354" y="147" font-size="9.5" fill="#1a5fb4" text-anchor="middle">P2 ... P9 各 10000 条</text>
+
+  <line x1="452" y1="92" x2="520" y2="112" stroke="#1a5fb4" stroke-width="1.3"/><polygon points="520,112 511,110 514,103" fill="#1a5fb4"/>
+  <line x1="452" y1="143" x2="520" y2="118" stroke="#1a5fb4" stroke-width="1.3"/><polygon points="520,118 511,120 514,127" fill="#1a5fb4"/>
+
+  <rect x="526" y="88" width="330" height="66" rx="7" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="542" y="108" font-size="10.5" font-weight="700" fill="#c62828">全局归并排序：10 分片 × 10000 = 10 万条</text>
+  <text x="542" y="125" font-size="10" fill="#8a4a4a">每条 100 字节 → 约 10MB 堆 / 单次查询</text>
+  <text x="542" y="142" font-size="10" fill="#8a4a4a">只取真正需要的 size 条（比如 10 条）</text>
+
+  <text x="44" y="180" font-size="9.5" fill="#6b7683">关键：这一阶段<tspan font-weight="700">不传 _source</tspan>。传内容的话 10 × 10000 × 2KB = 200MB 要过网络，而最终只要 10 条。</text>
+  <text x="44" y="198" font-size="9.5" fill="#8a949f">「先比分数再取内容」= 把网络传输从「候选集大小」降到「结果集大小」。</text>
+
+  <!-- Phase 2 -->
+  <rect x="24" y="226" width="852" height="126" rx="9" fill="#ffffff" stroke="#1e7d3c" stroke-width="1.4"/>
+  <rect x="24" y="226" width="852" height="26" rx="9" fill="#e9f5ec"/>
+  <rect x="24" y="242" width="852" height="10" fill="#e9f5ec"/>
+  <text x="44" y="245" font-size="11.5" font-weight="700" fill="#1e7d3c">② Fetch 阶段：拿 top 10 的 docId 回分片取 _source</text>
+
+  <rect x="44" y="262" width="176" height="50" rx="7" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="132" y="282" font-size="10.5" font-weight="700" fill="#1e7d3c" text-anchor="middle">top 10 的 docId</text>
+  <text x="132" y="299" font-size="9.5" fill="#3f7a52" text-anchor="middle">+ 所属 shard 索引</text>
+
+  <line x1="220" y1="287" x2="292" y2="287" stroke="#1e7d3c" stroke-width="1.3"/><polygon points="292,287 284,283 284,291" fill="#1e7d3c"/>
+  <text x="256" y="279" font-size="9" fill="#1e7d3c" text-anchor="middle">multiget</text>
+
+  <rect x="298" y="262" width="212" height="50" rx="7" fill="#ffffff" stroke="#c2e2cc"/>
+  <text x="404" y="282" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">相关分片读 _source</text>
+  <text x="404" y="299" font-size="9.5" fill="#6b7683" text-anchor="middle">随机读，按 docId 定位</text>
+
+  <line x1="510" y1="287" x2="560" y2="287" stroke="#1e7d3c" stroke-width="1.3"/><polygon points="560,287 552,283 552,291" fill="#1e7d3c"/>
+
+  <rect x="566" y="262" width="290" height="50" rx="7" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="582" y="282" font-size="10.5" font-weight="700" fill="#1e7d3c">拼装 hits[] 返回客户端</text>
+  <text x="582" y="299" font-size="9.5" fill="#3f7a52">_source 裁剪 + 高亮 + 聚合结果</text>
+
+  <text x="44" y="332" font-size="9.5" fill="#6b7683">两次网络往返。所以「搜索延迟」= query 阶段最慢分片 + 归并 + fetch 阶段一次随机读。</text>
+
+  <rect x="24" y="352" width="852" height="30" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="44" y="372" font-size="10.5" fill="#9a6400">推论：分片越多，query 阶段要等的分片越多，fetch 阶段要访问的分片也越多 —— 扇出成本是两头收的。</text>
+</svg>
+<figcaption><b>图 6</b>　两阶段查询。第一阶段只传 <code>docId + score</code>，第二阶段才取 <code>_source</code>——这个设计把网络传输量从「候选集」降到「结果集」。</figcaption>
+</figure>
+
+<p>现在算深分页的账，这是 ES 最经典的一道计算题。设 10 个主分片，每页 10 条：</p>
+
+<table>
+<thead><tr><th>请求</th><th>每分片返回</th><th>协调节点堆排总量</th><th>堆内存（100B/条）</th><th>相对第 1 页</th></tr></thead>
+<tbody>
+<tr><td><code>from=0, size=10</code></td><td>10</td><td>100 条</td><td>10KB</td><td>1×</td></tr>
+<tr><td><code>from=100, size=10</code></td><td>110</td><td>1,100 条</td><td>110KB</td><td>11×</td></tr>
+<tr><td><code>from=1000, size=10</code></td><td>1,010</td><td>10,100 条</td><td>1MB</td><td>101×</td></tr>
+<tr><td><code>from=9990, size=10</code></td><td>10,000</td><td><strong>100,000 条</strong></td><td><strong>10MB</strong></td><td><strong>1000×</strong></td></tr>
+</tbody>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="340" fill="#f7f9fb"/>
+  <text x="30" y="26" font-size="15" font-weight="700" fill="#1a1d21">翻到第几页，就要重算前面所有页：协调节点堆排量（对数刻度，每格 10 倍）</text>
+
+  <!-- 刻度 -->
+  <line x1="200" y1="60" x2="200" y2="282" stroke="#c2cad3" stroke-width="1.2"/>
+  <text x="196" y="66" font-size="9" fill="#8a949f" text-anchor="end">10 万</text>
+  <text x="196" y="140" font-size="9" fill="#8a949f" text-anchor="end">1 万</text>
+  <text x="196" y="214" font-size="9" fill="#8a949f" text-anchor="end">1 千</text>
+  <text x="196" y="288" font-size="9" fill="#8a949f" text-anchor="end">1 百</text>
+  <line x1="200" y1="64" x2="820" y2="64" stroke="#e4e8ed" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="200" y1="138" x2="820" y2="138" stroke="#e4e8ed" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="200" y1="212" x2="820" y2="212" stroke="#e4e8ed" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="200" y1="282" x2="820" y2="282" stroke="#c2cad3" stroke-width="1.2"/>
+
+  <!-- bars: log scale, 1 decade = 74px -->
+  <rect x="204" y="272" width="6" height="10" fill="#1e7d3c"/>
+  <text x="222" y="282" font-size="10" fill="#3d454e">第 1 页　100 条　10KB</text>
+
+  <rect x="204" y="212" width="78" height="70" fill="#4a86c8"/>
+  <text x="292" y="236" font-size="10" fill="#3d454e">第 11 页　1,100 条　110KB</text>
+  <text x="292" y="252" font-size="9.5" fill="#8a949f">每片返 110 条</text>
+
+  <rect x="204" y="140" width="152" height="142" fill="#d9a441"/>
+  <text x="366" y="176" font-size="10" fill="#3d454e">第 101 页　10,100 条　1MB</text>
+  <text x="366" y="192" font-size="9.5" fill="#8a949f">每片返 1,010 条</text>
+
+  <rect x="204" y="66" width="226" height="216" fill="#c62828"/>
+  <text x="440" y="106" font-size="10" fill="#3d454e">第 1000 页　100,000 条　10MB</text>
+  <text x="440" y="122" font-size="9.5" fill="#8a949f">每片返 10,000 条（撞上默认上限）</text>
+  <text x="440" y="142" font-size="9.5" fill="#c62828">QPS 100 → 1GB/s 分配速率 → YGC 抖动</text>
+
+  <!-- 对比：search_after -->
+  <line x1="200" y1="302" x2="820" y2="302" stroke="#1e7d3c" stroke-width="2"/>
+  <rect x="204" y="296" width="6" height="12" fill="#1e7d3c"/>
+  <text x="222" y="306" font-size="10" font-weight="700" fill="#1e7d3c">search_after：无论第几页，恒定 100 条（每片只返 size 条）</text>
+  <text x="222" y="322" font-size="9.5" fill="#3f7a52">与页深无关。这就是它存在的全部理由。</text>
+
+  <rect x="590" y="180" width="270" height="86" rx="7" fill="#ffffff" stroke="#1e7d3c"/>
+  <text x="606" y="200" font-size="10.5" font-weight="700" fill="#1e7d3c">为什么上限是 10000</text>
+  <text x="606" y="218" font-size="9.5" fill="#3d454e">不是产品限制，是内存保护。</text>
+  <text x="606" y="234" font-size="9.5" fill="#3d454e">每个候选要存 docId + score +</text>
+  <text x="606" y="250" font-size="9.5" fill="#3d454e">shardIndex + 对象头 ≈ 100 字节</text>
+</svg>
+<figcaption><b>图 7</b>　<i>纵轴为对数刻度</i>。翻到第 1000 页时协调节点要堆排 10 万条，是第 1 页的 1000 倍；<code>search_after</code> 恒定 100 条，与页深无关。</figcaption>
+</figure>
+
+<p><strong>关键不是「翻到第 1000 页才慢」，而是「翻到第 1000 页时，前 999 页的数据要重新算一遍」。</strong> 每条候选要存 <code>docId(8B) + score(8B) + shardIndex(4B) + 对象头</code>，粗算 100 字节；10 万条 = 10MB 堆，单查询。QPS 100 时就是 <strong>1 秒 1GB 的分配速率</strong>，Young GC 立刻开始抖动。这就是 <code>index.max_result_window = 10000</code> 存在的原因——它不是产品限制，是内存保护。</p>
+
+<p>三种翻页方案，代价完全不同：</p>
+
+<table>
+<thead><tr><th>方案</th><th>原理</th><th>优点</th><th>代价 / 限制</th><th>适用</th></tr></thead>
+<tbody>
+<tr><td><code>from + size</code></td><td>每页重算</td><td>简单，可跳页</td><td><code>from+size ≤ 10000</code>；成本随页深线性涨</td><td>前几十页</td></tr>
+<tr><td><code>scroll</code></td><td>生成快照，按 <code>scroll_id</code> 分批拉</td><td>全量遍历稳定</td><td><strong>快照占堆和文件句柄</strong>，默认保活 1 分钟</td><td>后台导出，<strong>绝不给用户翻页</strong></td></tr>
+<tr><td><code>search_after</code></td><td>用上一页最后一条的排序值当游标</td><td>无状态，成本与页深无关</td><td>不能跳页，排序字段必须唯一</td><td>无限下拉、深度遍历</td></tr>
+</tbody>
+</table>
+
+<p><code>scroll</code> 为什么不能给用户翻页？因为每个 scroll 是一份<strong>活着的快照</strong>——它持有段引用，阻止 merge 回收，占堆占句柄。1000 个用户各持一个 scroll 且都保活 1 分钟，集群就躺了。<strong>「scroll 是给人翻页用的」是这道题最常见的错误答案。</strong></p>
+
+<p><code>search_after</code> 的收益可以量化：翻到第 1000 页，<code>from+size</code> 要堆排 10 万条，<code>search_after</code> 恒定 100 条——<strong>差 1000 倍，且不随页深增长</strong>。8.x 推荐配 PIT（Point In Time）使用，保证翻页期间数据视图一致，同时避免每次请求都重新解析索引。</p>
+
+<pre data-lang="json"><code>GET /goods/_search
+{
+  "size": 10,
+  "sort": [{ "price": "asc" }, { "_id": "asc" }],   // _id 兜底，保证组合唯一
+  "search_after": [2999, "doc_88213"],              // 上一页最后一条的排序值
+  "track_total_hits": false                          // 不算总数，省一次全量计数
+}</code></pre>
+
+<p><code>track_total_hits: false</code> 是另一个省钱开关：不算总数就不用遍历全部命中，<code>total</code> 变成 <code>gte 10000</code> 的估计值——<strong>电商列表页只要「1 万+」，不需要精确 87342，这一句省掉一次全量计数</strong>。如果确实要精确值，也只在第一页开，翻页时关掉。</p>
+
+<h2><span class="n">L6</span>BM25：一个能算出饱和点的公式</h2>
+
+<p class="lead">相关性打分是 ES 最「玄学」的部分，但它的核心公式是可以手算的。能把「为什么这条排第一」算出来，和只能说「相关性调参」的人，是两个层次。</p>
+
+<pre data-lang="text"><code>score(D, Q) = Σ IDF(qi) × [ tf × (k1 + 1) ] / [ tf + k1 × (1 - b + b × dl / avgdl) ]
+
+k1 = 1.2   控制词频饱和速度
+b  = 0.75  控制长度归一化强度
+tf    = 该词在本文档中的出现次数
+dl    = 本文档长度（term 数）
+avgdl = 全库平均文档长度</code></pre>
+
+<p>先看<strong>词频饱和</strong>。固定 <code>dl = avgdl</code>（此时长度因子 <code>1-b+b×dl/avgdl = 1</code>），代入 <code>k1=1.2</code>：</p>
+
+<figure>
+<svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="400" fill="#f7f9fb"/>
+  <text x="30" y="26" font-size="15" font-weight="700" fill="#1a1d21">BM25 的词频因子：上界 k1+1 = 2.2，tf=1 就拿到 45%</text>
+
+  <!-- 坐标 -->
+  <line x1="120" y1="320" x2="660" y2="320" stroke="#3d454e" stroke-width="1.4"/>
+  <line x1="120" y1="320" x2="120" y2="60" stroke="#3d454e" stroke-width="1.4"/>
+  <text x="110" y="324" font-size="9" fill="#8a949f" text-anchor="end">0</text>
+  <text x="110" y="267" font-size="9" fill="#8a949f" text-anchor="end">0.5</text>
+  <text x="110" y="213" font-size="9" fill="#8a949f" text-anchor="end">1.0</text>
+  <text x="110" y="158" font-size="9" fill="#8a949f" text-anchor="end">1.5</text>
+  <text x="110" y="104" font-size="9" fill="#8a949f" text-anchor="end">2.0</text>
+  <text x="110" y="84" font-size="9" font-weight="700" fill="#c62828" text-anchor="end">2.2</text>
+  <text x="66" y="190" font-size="10" fill="#3d454e" text-anchor="middle" transform="rotate(-90 66 190)">得分因子</text>
+
+  <line x1="120" y1="265" x2="660" y2="265" stroke="#e4e8ed" stroke-width="1"/>
+  <line x1="120" y1="211" x2="660" y2="211" stroke="#e4e8ed" stroke-width="1"/>
+  <line x1="120" y1="156" x2="660" y2="156" stroke="#e4e8ed" stroke-width="1"/>
+  <line x1="120" y1="102" x2="660" y2="102" stroke="#e4e8ed" stroke-width="1"/>
+  <line x1="120" y1="80" x2="660" y2="80" stroke="#c62828" stroke-width="1.2" stroke-dasharray="5 3"/>
+  <text x="666" y="84" font-size="9.5" font-weight="700" fill="#c62828">渐近线 2.2</text>
+
+  <!-- 曲线 -->
+  <polyline points="120,211 172,170 241,126 293,106 345,94 413,86 466,83 640,80"
+            fill="none" stroke="#1a5fb4" stroke-width="2.2"/>
+  <circle cx="120" cy="211" r="4" fill="#1a5fb4"/>
+  <circle cx="293" cy="106" r="4" fill="#1a5fb4"/>
+  <circle cx="466" cy="83" r="4" fill="#1a5fb4"/>
+  <circle cx="640" cy="80" r="4" fill="#1a5fb4"/>
+
+  <!-- x 轴刻度 -->
+  <text x="120" y="338" font-size="9" fill="#6b7683" text-anchor="middle">1</text>
+  <text x="172" y="338" font-size="9" fill="#6b7683" text-anchor="middle">2</text>
+  <text x="241" y="338" font-size="9" fill="#6b7683" text-anchor="middle">5</text>
+  <text x="293" y="338" font-size="9" fill="#6b7683" text-anchor="middle">10</text>
+  <text x="345" y="338" font-size="9" fill="#6b7683" text-anchor="middle">20</text>
+  <text x="413" y="338" font-size="9" fill="#6b7683" text-anchor="middle">50</text>
+  <text x="466" y="338" font-size="9" fill="#6b7683" text-anchor="middle">100</text>
+  <text x="640" y="338" font-size="9" fill="#6b7683" text-anchor="middle">1000</text>
+  <text x="390" y="358" font-size="10" fill="#3d454e" text-anchor="middle">tf（词在本文档出现次数，对数刻度）</text>
+
+  <!-- 标注 -->
+  <text x="132" y="200" font-size="9.5" font-weight="700" fill="#1a5fb4">1.000（45%）</text>
+  <text x="304" y="96" font-size="9.5" font-weight="700" fill="#1a5fb4">1.964（89%）</text>
+  <text x="476" y="74" font-size="9.5" font-weight="700" fill="#1a5fb4">2.174（99%）</text>
+
+  <rect x="560" y="96" width="310" height="60" rx="7" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="576" y="116" font-size="10" font-weight="700" fill="#c62828">tf 从 100 → 1000，只涨 1.1%</text>
+  <text x="576" y="134" font-size="9.5" fill="#8a4a4a">这就是「堆关键词」在 BM25 下失效的</text>
+  <text x="576" y="148" font-size="9.5" fill="#8a4a4a">数学原因，不是玄学。</text>
+
+  <!-- 右侧表 -->
+  <rect x="686" y="176" width="186" height="216" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="702" y="196" font-size="10.5" font-weight="700" fill="#3d454e">手算对照（dl=avgdl）</text>
+  <line x1="702" y1="204" x2="856" y2="204" stroke="#e4e8ed"/>
+  <text x="702" y="222" font-size="9.5" fill="#6b7683">tf</text><text x="740" y="222" font-size="9.5" fill="#6b7683">分子</text><text x="800" y="222" font-size="9.5" fill="#6b7683">分母</text><text x="850" y="222" font-size="9.5" fill="#6b7683" text-anchor="end">分</text>
+  <text x="702" y="242" font-size="9.5" fill="#3d454e">1</text><text x="740" y="242" font-size="9.5" fill="#3d454e">2.2</text><text x="800" y="242" font-size="9.5" fill="#3d454e">2.2</text><text x="850" y="242" font-size="9.5" font-weight="700" fill="#1a5fb4" text-anchor="end">1.00</text>
+  <text x="702" y="262" font-size="9.5" fill="#3d454e">2</text><text x="740" y="262" font-size="9.5" fill="#3d454e">4.4</text><text x="800" y="262" font-size="9.5" fill="#3d454e">3.2</text><text x="850" y="262" font-size="9.5" font-weight="700" fill="#1a5fb4" text-anchor="end">1.38</text>
+  <text x="702" y="282" font-size="9.5" fill="#3d454e">5</text><text x="740" y="282" font-size="9.5" fill="#3d454e">11.0</text><text x="800" y="282" font-size="9.5" fill="#3d454e">6.2</text><text x="850" y="282" font-size="9.5" font-weight="700" fill="#1a5fb4" text-anchor="end">1.77</text>
+  <text x="702" y="302" font-size="9.5" fill="#3d454e">10</text><text x="740" y="302" font-size="9.5" fill="#3d454e">22.0</text><text x="800" y="302" font-size="9.5" fill="#3d454e">11.2</text><text x="850" y="302" font-size="9.5" font-weight="700" fill="#1a5fb4" text-anchor="end">1.96</text>
+  <text x="702" y="322" font-size="9.5" fill="#3d454e">100</text><text x="740" y="322" font-size="9.5" fill="#3d454e">220</text><text x="800" y="322" font-size="9.5" fill="#3d454e">101.2</text><text x="850" y="322" font-size="9.5" font-weight="700" fill="#1a5fb4" text-anchor="end">2.17</text>
+  <text x="702" y="342" font-size="9.5" fill="#3d454e">1000</text><text x="740" y="342" font-size="9.5" fill="#3d454e">2200</text><text x="800" y="342" font-size="9.5" fill="#3d454e">1001.2</text><text x="850" y="342" font-size="9.5" font-weight="700" fill="#1a5fb4" text-anchor="end">2.20</text>
+  <text x="702" y="368" font-size="9" fill="#8a949f">上界 k1+1 = 2.2，与 tf 无关</text>
+  <text x="702" y="382" font-size="9" fill="#8a949f">k1 越小，饱和越快</text>
+</svg>
+<figcaption><b>图 8</b>　BM25 词频因子的饱和曲线与手算表。tf=1 拿到上界的 45%，tf=10 到 89%，此后几乎不再增长——「堆关键词」在数学上就是无效的。</figcaption>
+</figure>
+
+<p>这张图说明了两件事。第一，<strong>出现 1 次就到上界的 45%</strong>，10 次到 89%，之后几乎不再增长（100→1000 只涨 1.1%）。这就是「堆关键词」这一 SEO 手段在 BM25 下失效的原因——第 100 次出现和第 1000 次出现，分数几乎一样。第二，上界是 <code>k1 + 1 = 2.2</code>，与 tf 无关；<code>k1</code> 越小饱和越快，<code>k1=0</code> 时完全退化为「出现即满分」。</p>
+
+<p>再看<strong>长度归一化</strong>。<code>b=0.75</code> 时，长度因子 = <code>0.25 + 0.75 × dl/avgdl</code>：</p>
+
+<table>
+<thead><tr><th>文档长度 dl</th><th>长度因子</th><th>分母变化</th><th>效果</th><th>直觉</th></tr></thead>
+<tbody>
+<tr><td>0.5 × avgdl（短文档）</td><td>0.625</td><td>tf + 0.75</td><td><strong>加分</strong></td><td>100 字里提 3 次「手机」更专注</td></tr>
+<tr><td>1.0 × avgdl（平均）</td><td>1.000</td><td>tf + 1.2</td><td>中性</td><td>基准</td></tr>
+<tr><td>2.0 × avgdl（长文档）</td><td>1.750</td><td>tf + 2.1</td><td><strong>减分</strong></td><td>1 万字里提 3 次，可能只是顺带一提</td></tr>
+</tbody>
+</table>
+
+<p>最后是 <strong>IDF</strong>，它才是权重的主宰：</p>
+
+<pre data-lang="text"><code>IDF(q) = ln(1 + (N - n + 0.5) / (n + 0.5))
+N = 文档总数，n = 含该词的文档数</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#f7f9fb"/>
+  <text x="30" y="26" font-size="15" font-weight="700" fill="#1a1d21">IDF 才是权重的主宰：N = 1 亿，稀有词是常见词的 16.6 倍</text>
+
+  <text x="150" y="76" font-size="11" font-weight="700" fill="#1a5fb4" text-anchor="end">钛金属</text>
+  <text x="150" y="92" font-size="9" fill="#8a949f" text-anchor="end">n=1,000</text>
+  <rect x="164" y="62" width="420" height="34" rx="4" fill="#1a5fb4"/>
+  <text x="596" y="85" font-size="12" font-weight="700" fill="#1a5fb4">11.51</text>
+  <text x="644" y="85" font-size="9.5" fill="#6b7683">← 主导排序</text>
+
+  <text x="150" y="136" font-size="11" font-weight="700" fill="#4a86c8" text-anchor="end">手机</text>
+  <text x="150" y="152" font-size="9" fill="#8a949f" text-anchor="end">n=500 万</text>
+  <rect x="164" y="122" width="168" height="34" rx="4" fill="#4a86c8"/>
+  <text x="344" y="145" font-size="12" font-weight="700" fill="#2f5480">4.61</text>
+
+  <text x="150" y="196" font-size="11" font-weight="700" fill="#8a949f" text-anchor="end">的</text>
+  <text x="150" y="212" font-size="9" fill="#8a949f" text-anchor="end">n=5000 万</text>
+  <rect x="164" y="182" width="25" height="34" rx="4" fill="#b8c4d0"/>
+  <text x="201" y="205" font-size="12" font-weight="700" fill="#6b7683">0.69</text>
+  <text x="246" y="205" font-size="9.5" fill="#8a949f">几乎不影响排序 → 去停用词收益远小于想象</text>
+
+  <line x1="164" y1="238" x2="820" y2="238" stroke="#e4e8ed" stroke-width="1"/>
+  <text x="164" y="258" font-size="10" fill="#3d454e">结论：真正决定排序的是<tspan font-weight="700">领域内的高 IDF 词</tspan>。</text>
+  <text x="164" y="276" font-size="10" fill="#3d454e">所以「钛金属 手机」的召回结果会被「钛金属」主导，而不是「手机」。</text>
+  <text x="600" y="258" font-size="9.5" fill="#c62828">11.51 / 0.69 = 16.6×</text>
+</svg>
+<figcaption><b>图 9</b>　同一查询里不同词的权重差。<b>去停用词在 BM25 下收益很小</b>（「的」的 IDF 只有 0.69），真正影响排序的是高 IDF 的领域词。</figcaption>
+</figure>
+
+<p><code>11.51 / 0.69 ≈ 16.6</code> 倍。一个稀有词的价值是一个常见词的 16 倍——这就是为什么「去停用词」在 BM25 下其实收益不大（「的」的 IDF 只有 0.69，几乎不影响排序），真正影响排序的是<strong>领域内的高 IDF 词</strong>。也是为什么 <code>match</code> 查询「钛金属 手机」会被「钛金属」主导。</p>
+
+<p>工程上还有三个杠杆，按「投入产出比」排序：</p>
+
+<div class="grid3">
+  <div class="card b">
+    <div class="t">boost · 字段加权</div>
+    <div class="d"><code>title^3</code> 标题命中算 3 倍，<code>description^0.5</code> 降权。标题通常比正文更「关于」这篇文档，<code>title^2~3</code> 是常见起点。</div>
+  </div>
+  <div class="card a">
+    <div class="t">function_score · 业务因子</div>
+    <div class="d">销量、好评率、上架时间、是否自营，都是 BM25 算不出来的。<strong>「搜索结果不相关」的投诉，八成是业务因子没接进排序，不是 BM25 参数不对。</strong></div>
+  </div>
+  <div class="card g">
+    <div class="t">multi_match · 三种类型</div>
+    <div class="d"><code>best_fields</code>（取最佳字段，默认）、<code>most_fields</code>（累加）、<code>cross_fields</code>（多字段当一个大字段）。选错的典型症状：搜品牌名搜不到。</div>
+  </div>
+</div>
+
+<div class="box green">
+  <div class="h">一句话答法</div>
+  <p>BM25 = <strong>IDF</strong>（这词有多稀有）× <strong>饱和的 TF</strong>（出现多有用，但会封顶在 k1+1）× <strong>长度惩罚</strong>（短文档更专注）。三个因子都能手算，所以「为什么这条排第一」是可以解释的，不是玄学。<strong>而业务排序（销量、时效）必须靠 <code>function_score</code> 外挂，不要指望调 k1。</strong></p>
+</div>
+
+<h2><span class="n">L7</span>分片设计：唯一一个创建后改不了的参数</h2>
+
+<p class="lead"><code>number_of_shards</code> 是 ES 里最像「一次性决定」的配置——建索引时定下，之后不能改。原因就是上一节的哈希公式：<code>hash(routing) % shards</code>，改了模数，所有文档的路由结果全变。所以面试问「分片数怎么定」，本质是在问<strong>你有没有算过账</strong>。</p>
+
+<p>先给目标值：<strong>单分片 10~30GB（搜索场景）、30~50GB（日志场景）</strong>。低于 10GB 是浪费（每个分片都有固定开销：一个 Lucene 索引、线程、文件句柄、段元数据），高于 50GB 是灾难（恢复时要重放 translog + 重建段，故障恢复时间从分钟级变成小时级）。</p>
+
+<p>于是分片数就是一个除法：</p>
+
+<pre data-lang="text"><code>分片数 ≈ 数据总量 / 目标分片大小
+
+1TB 数据，按 30GB/分片 → 1024 / 30 ≈ 34 → 取 32（2 的幂，为 _split 留余地）</code></pre>
+
+<p>但还有第二个约束，<strong>堆内存视角</strong>，很多人不知道：</p>
+
+<pre data-lang="text"><code>每个 1GB 堆内存最多承载 20~25 个分片
+
+3 数据节点 × 16GB 堆 = 48GB 堆 → 上限 48 × 20 ≈ 960 个分片（副本也算）</code></pre>
+
+<p>这个经验值的来源是分片的固定开销：每个分片在堆里要维护段元数据、词典、缓存过滤器、<code>IndexReader</code>，大约「每分片几 MB 到十几 MB」。<strong>注意 960 是「副本也算」的总数</strong>，1 主 1 副时实际数据分片只有 480 个。两个约束取小值，所以正确顺序是：先按数据量算，再用堆上限校验，最后取 2 的幂。</p>
+
+<p>那分片多了到底慢在哪？不是「元数据大」这么含糊，而是<strong>查询扇出（fan-out）</strong>。每次搜索都要打所有分片，而每个节点处理分片的线程数是固定的：</p>
+
+<pre data-lang="text"><code>search 线程池大小 = (CPU 核数 × 3) / 2 + 1
+8 核 → 13 个线程，队列 1000</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="340" fill="#f7f9fb"/>
+  <text x="30" y="26" font-size="15" font-weight="700" fill="#1a1d21">数据量不变，只改分片数：单分片 10ms、13 个查询线程的估算延迟</text>
+
+  <!-- 轴 -->
+  <line x1="130" y1="60" x2="130" y2="286" stroke="#c2cad3" stroke-width="1.2"/>
+  <line x1="130" y1="286" x2="820" y2="286" stroke="#c2cad3" stroke-width="1.2"/>
+  <text x="126" y="292" font-size="9" fill="#8a949f" text-anchor="end">0</text>
+  <text x="126" y="212" font-size="9" fill="#8a949f" text-anchor="end">200</text>
+  <text x="126" y="138" font-size="9" fill="#8a949f" text-anchor="end">400</text>
+  <text x="126" y="64" font-size="9" fill="#8a949f" text-anchor="end">800ms</text>
+  <line x1="130" y1="212" x2="820" y2="212" stroke="#e4e8ed" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="130" y1="138" x2="820" y2="138" stroke="#e4e8ed" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="130" y1="64" x2="820" y2="64" stroke="#e4e8ed" stroke-width="1" stroke-dasharray="3 3"/>
+
+  <!-- bars -->
+  <text x="140" y="90" font-size="10" fill="#3d454e">6 分片</text>
+  <rect x="210" y="78" width="8" height="20" rx="2" fill="#1e7d3c"/>
+  <text x="228" y="93" font-size="10" font-weight="700" fill="#1e7d3c">10ms</text>
+  <text x="278" y="93" font-size="9.5" fill="#8a949f">2 片/节点，1 轮完成</text>
+
+  <text x="140" y="150" font-size="10" fill="#3d454e">30 分片</text>
+  <rect x="210" y="138" width="11" height="20" rx="2" fill="#1e7d3c"/>
+  <text x="231" y="153" font-size="10" font-weight="700" fill="#1e7d3c">15ms</text>
+  <text x="281" y="153" font-size="9.5" fill="#8a949f">10 片/节点，仍在 1 轮内（13 线程）</text>
+
+  <text x="140" y="210" font-size="10" fill="#3d454e">300 分片</text>
+  <rect x="210" y="200" width="59" height="20" rx="2" fill="#9a6400"/>
+  <text x="279" y="215" font-size="10" font-weight="700" fill="#9a6400">80ms</text>
+  <text x="330" y="215" font-size="9.5" fill="#8a949f">100 片/节点 → 8 轮</text>
+
+  <text x="140" y="272" font-size="10" fill="#3d454e">3000 分片</text>
+  <rect x="210" y="258" width="566" height="20" rx="2" fill="#c62828"/>
+  <text x="784" y="273" font-size="10" font-weight="700" fill="#c62828">770ms</text>
+  <text x="210" y="300" font-size="9.5" fill="#c62828">1000 片/节点 → 77 轮 → 770ms，性能掉 77 倍，而数据量一个字节没变</text>
+
+  <rect x="600" y="72" width="220" height="86" rx="7" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="616" y="92" font-size="10.5" font-weight="700" fill="#3d454e">算式的来源</text>
+  <text x="616" y="110" font-size="9.5" fill="#6b7683">耗时 ≈ 分片数 / 线程数 × 单片耗时</text>
+  <text x="616" y="126" font-size="9.5" fill="#6b7683">= 3000 / 13 × 10ms ≈ 2.3s</text>
+  <text x="616" y="144" font-size="9" fill="#8a949f">实际有并行与缓存，估 770ms 偏保守</text>
+
+  <rect x="24" y="312" width="852" height="22" rx="4" fill="#e8f0fb"/>
+  <text x="38" y="327" font-size="9.5" fill="#1a5fb4">推论：分片数不是「越多越分散越快」，而是「越多每个查询要等的队列越长」。分片数应该由数据量决定，不是由节点数决定。</text>
+</svg>
+<figcaption><b>图 10</b>　扇出账：分片从 30 涨到 3000，延迟涨 50 倍以上，而数据量没变。分片数该由<b>数据量</b>定，不是由节点数定。</figcaption>
+</figure>
+
+<p>反过来，分片太少也慢。1TB 只给 3 个分片，单分片 340GB，查询时单线程扫一个大段，既慢又无法水平扩展。所以正确的心智模型是：<strong>分片是「数据切分单位」和「并行单位」的绑定，切太细管理成本爆炸，切太粗并行度不够。</strong></p>
+
+<p>副本是另一个维度，它的作用经常被误解：</p>
+
+<table>
+<thead><tr><th>配置</th><th>读吞吐</th><th>写吞吐</th><th>可用性</th><th>磁盘</th></tr></thead>
+<tbody>
+<tr><td>1 主 0 副</td><td>1×</td><td>1×</td><td>节点挂 = 数据不可用</td><td>1×</td></tr>
+<tr><td>1 主 1 副</td><td><strong>2×</strong></td><td><strong>1×（不变）</strong></td><td>挂 1 个副本节点无感</td><td>2×</td></tr>
+<tr><td>1 主 2 副</td><td>3×</td><td>1×</td><td>挂 2 个无感</td><td>3×</td></tr>
+</tbody>
+</table>
+
+<p><strong>副本只加读吞吐，不加写吞吐。</strong>因为写入必须所有副本都写完才 ack，副本越多，最慢副本的延迟越是瓶颈。<strong>「加副本能不能提高写入性能」是一道高频陷阱题，答「能」就废了。</strong></p>
+
+<p>再补一个实用技巧：<code>index.number_of_routing_shards</code> 可以在建索引时设成主分片数的整数倍（比如主分片 8、routing shards 32），将来就能 <code>_split</code> 成 16、32 个分片而不用 <code>_reindex</code>。<strong>这是「预留扩展性」的唯一低成本手段</strong>，代价只是留了一点元数据。</p>
+
+<h2><span class="n">L8</span>集群与颜色：yellow 不一定是故障</h2>
+
+<p class="lead">单机跑过 ES 的人都见过这一幕：刚建完索引，<code>GET _cluster/health</code> 返回 <code>"status": "yellow"</code>，然后开始慌。其实这是<strong>完全正常</strong>的——单节点集群 + 默认 <code>replicas: 1</code>，副本无处安放，只能是 yellow。</p>
+
+<figure>
+<svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="400" fill="#f7f9fb"/>
+  <text x="30" y="26" font-size="15" font-weight="700" fill="#1a1d21">三种颜色：差的是「副本」，不是「数据」</text>
+
+  <!-- green -->
+  <rect x="24" y="44" width="276" height="196" rx="9" fill="#ffffff" stroke="#1e7d3c" stroke-width="1.5"/>
+  <rect x="24" y="44" width="276" height="34" rx="9" fill="#e9f5ec"/>
+  <rect x="24" y="62" width="276" height="16" fill="#e9f5ec"/>
+  <circle cx="46" cy="61" r="7" fill="#1e7d3c"/>
+  <text x="62" y="66" font-size="13" font-weight="800" fill="#1e7d3c">green</text>
+  <text x="124" y="66" font-size="9.5" fill="#3f7a52">主 + 副本全部分配</text>
+
+  <rect x="44" y="92" width="52" height="34" rx="4" fill="#1e7d3c"/><text x="70" y="113" font-size="9.5" fill="#ffffff" text-anchor="middle">P0</text>
+  <rect x="104" y="92" width="52" height="34" rx="4" fill="#7fbf94"/><text x="130" y="113" font-size="9.5" fill="#ffffff" text-anchor="middle">R0</text>
+  <rect x="172" y="92" width="52" height="34" rx="4" fill="#1e7d3c"/><text x="198" y="113" font-size="9.5" fill="#ffffff" text-anchor="middle">P1</text>
+  <rect x="232" y="92" width="52" height="34" rx="4" fill="#7fbf94"/><text x="258" y="113" font-size="9.5" fill="#ffffff" text-anchor="middle">R1</text>
+
+  <text x="44" y="152" font-size="10" fill="#3d454e">数据完整：<tspan font-weight="700" fill="#1e7d3c">是</tspan></text>
+  <text x="44" y="170" font-size="10" fill="#3d454e">可读可写：是</text>
+  <text x="44" y="188" font-size="10" fill="#3d454e">能容忍：任意 1 个节点宕机</text>
+  <text x="44" y="212" font-size="9.5" fill="#8a949f">生产目标态。副本数 ≥ 1 且有</text>
+  <text x="44" y="228" font-size="9.5" fill="#8a949f">至少 2 个数据节点才能达到。</text>
+
+  <!-- yellow -->
+  <rect x="312" y="44" width="276" height="196" rx="9" fill="#ffffff" stroke="#9a6400" stroke-width="1.5"/>
+  <rect x="312" y="44" width="276" height="34" rx="9" fill="#fdf4e3"/>
+  <rect x="312" y="62" width="276" height="16" fill="#fdf4e3"/>
+  <circle cx="334" cy="61" r="7" fill="#d9a441"/>
+  <text x="350" y="66" font-size="13" font-weight="800" fill="#9a6400">yellow</text>
+  <text x="418" y="66" font-size="9.5" fill="#8a6a2a">部分副本未分配</text>
+
+  <rect x="332" y="92" width="52" height="34" rx="4" fill="#1e7d3c"/><text x="358" y="113" font-size="9.5" fill="#ffffff" text-anchor="middle">P0</text>
+  <rect x="392" y="92" width="52" height="34" rx="4" fill="#ffffff" stroke="#c2cad3" stroke-dasharray="4 3"/><text x="418" y="113" font-size="9" fill="#b0b8c1" text-anchor="middle">R0</text>
+  <rect x="460" y="92" width="52" height="34" rx="4" fill="#1e7d3c"/><text x="486" y="113" font-size="9.5" fill="#ffffff" text-anchor="middle">P1</text>
+  <rect x="520" y="92" width="52" height="34" rx="4" fill="#ffffff" stroke="#c2cad3" stroke-dasharray="4 3"/><text x="546" y="113" font-size="9" fill="#b0b8c1" text-anchor="middle">R1</text>
+
+  <text x="332" y="152" font-size="10" fill="#3d454e">数据完整：<tspan font-weight="700" fill="#1e7d3c">是（主分片都在）</tspan></text>
+  <text x="332" y="170" font-size="10" fill="#3d454e">可读可写：是</text>
+  <text x="332" y="188" font-size="10" fill="#3d454e">能容忍：<tspan font-weight="700" fill="#c62828">0 个节点宕机</tspan></text>
+  <text x="332" y="212" font-size="9.5" fill="#8a949f">单节点集群 + replicas:1 = 必然 yellow，</text>
+  <text x="332" y="228" font-size="9.5" fill="#8a949f">不是故障，是「副本无处安放」。</text>
+
+  <!-- red -->
+  <rect x="600" y="44" width="276" height="196" rx="9" fill="#ffffff" stroke="#c62828" stroke-width="1.5"/>
+  <rect x="600" y="44" width="276" height="34" rx="9" fill="#fdeceb"/>
+  <rect x="600" y="62" width="276" height="16" fill="#fdeceb"/>
+  <circle cx="622" cy="61" r="7" fill="#c62828"/>
+  <text x="638" y="66" font-size="13" font-weight="800" fill="#c62828">red</text>
+  <text x="676" y="66" font-size="9.5" fill="#8a4a4a">主分片未分配</text>
+
+  <rect x="620" y="92" width="52" height="34" rx="4" fill="#c62828"/><text x="646" y="113" font-size="9.5" fill="#ffffff" text-anchor="middle">P0</text>
+  <rect x="680" y="92" width="52" height="34" rx="4" fill="#ffffff" stroke="#c62828" stroke-dasharray="4 3"/><text x="706" y="113" font-size="9" fill="#c62828" text-anchor="middle">P1?</text>
+  <rect x="748" y="92" width="52" height="34" rx="4" fill="#ffffff" stroke="#c62828" stroke-dasharray="4 3"/><text x="774" y="113" font-size="9" fill="#c62828" text-anchor="middle">R1?</text>
+
+  <text x="620" y="152" font-size="10" fill="#3d454e">数据完整：<tspan font-weight="700" fill="#c62828">否，该分片不可用</tspan></text>
+  <text x="620" y="170" font-size="10" fill="#3d454e">可读可写：部分索引异常</text>
+  <text x="620" y="188" font-size="10" fill="#3d454e">动作：<tspan font-weight="700" fill="#c62828">先 explain，别重启</tspan></text>
+  <text x="620" y="212" font-size="9.5" fill="#8a949f">GET _cluster/allocation/explain</text>
+  <text x="620" y="228" font-size="9.5" fill="#8a949f">比「重启试试」有用一万倍。</text>
+
+  <!-- unassigned 原因 -->
+  <text x="30" y="274" font-size="13" font-weight="700" fill="#1a1d21">分片不分配的四个原因（按发生频率）</text>
+  <rect x="24" y="288" width="204" height="96" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="40" y="308" font-size="10.5" font-weight="700" fill="#3d454e">① 节点数不够</text>
+  <text x="40" y="326" font-size="9.5" fill="#6b7683">主分片所在节点宕机，</text>
+  <text x="40" y="342" font-size="9.5" fill="#6b7683">没有其他节点能承接。</text>
+  <text x="40" y="364" font-size="9.5" fill="#c62828">副本数 > 数据节点数时必现</text>
+
+  <rect x="240" y="288" width="204" height="96" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="256" y="308" font-size="10.5" font-weight="700" fill="#3d454e">② 磁盘水位</text>
+  <text x="256" y="326" font-size="9.5" fill="#6b7683">low 85% / high 90% /</text>
+  <text x="256" y="342" font-size="9.5" fill="#6b7683">flood_stage 95%</text>
+  <text x="256" y="364" font-size="9.5" fill="#c62828">95% 时索引变只读</text>
+
+  <rect x="456" y="288" width="204" height="96" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="472" y="308" font-size="10.5" font-weight="700" fill="#3d454e">③ 分配规则冲突</text>
+  <text x="472" y="326" font-size="9.5" fill="#6b7683">require._name 指定的</text>
+  <text x="472" y="342" font-size="9.5" fill="#6b7683">节点不存在 / 标签不符。</text>
+  <text x="472" y="364" font-size="9.5" fill="#8a949f">迁移时最容易踩</text>
+
+  <rect x="672" y="288" width="204" height="96" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="688" y="308" font-size="10.5" font-weight="700" fill="#3d454e">④ 版本不兼容</text>
+  <text x="688" y="326" font-size="9.5" fill="#6b7683">跨大版本升级时，</text>
+  <text x="688" y="342" font-size="9.5" fill="#6b7683">旧节点无法加入集群。</text>
+  <text x="688" y="364" font-size="9.5" fill="#8a949f">滚动升级要求单向兼容</text>
+</svg>
+<figcaption><b>图 11</b>　三色语义：green/yellow 差在副本，red 才是数据问题。单节点 + <code>replicas:1</code> 必然是 yellow——这是配置的必然结果，不是故障。</figcaption>
+</figure>
+
+<p>判断标准一句话：<strong>yellow 只影响高可用（副本缺失），不影响数据完整性；red 才是数据问题。</strong> 面试里问「集群 red 了怎么办」，第一步永远是 <code>GET _cluster/allocation/explain</code>，看那个分片为什么没分配，而不是急着重启节点。</p>
+
+<p><code>flood_stage</code> 这一条值得单独记：磁盘到 95% 时所有索引变只读，<strong>业务表现为「写入全部失败」，但日志里只有一行 <code>blocked by: [FORBIDDEN/12/index read-only / allow delete (api)]</code></strong>，非常容易被误判成权限问题。处理方法是删数据或扩盘后 <code>PUT _all/_settings {"index.blocks.read_only_allow_delete": null}</code>。</p>
+
+<p>master 节点的选举也常被问，要点两个：</p>
+
+<ul>
+  <li><strong>master-eligible 节点数建议 ≥ 3 且为奇数。</strong>3 个节点时 quorum = <code>3/2 + 1 = 2</code>，能容忍 1 个挂；<strong>2 个节点时 quorum 也是 2，挂任何一个都无法选主</strong>——所以 2 个 master 比 1 个更糟。</li>
+  <li>ES 7.0 起移除了 <code>discovery.zen.minimum_master_nodes</code> 手动配置，改为<strong>基于投票的自动选主</strong>。这条演进的面试价值是：能说明「脑裂在 7.x+ 已经不是靠人配置防的了」，而不是继续背 <code>minimum_master_nodes = N/2+1</code> 这个 6.x 的旧知识。</li>
+</ul>
+
+<p>节点角色拆分是另一个高频设计题：</p>
+
+<table>
+<thead><tr><th>角色</th><th>职责</th><th>什么时候必须独立</th></tr></thead>
+<tbody>
+<tr><td><code>master</code></td><td>集群状态、分片分配</td><td>集群 &gt; 10 节点，避免 master 被查询拖死</td></tr>
+<tr><td><code>data_hot / warm / cold</code></td><td>存数据、执行查询</td><td>冷热分层（日志场景）</td></tr>
+<tr><td><code>ingest</code></td><td>写入前预处理（pipeline）</td><td>有复杂 ingest pipeline 时</td></tr>
+<tr><td><code>coordinating</code>（空角色）</td><td>只做请求分发和结果归并</td><td>大聚合场景，防打爆数据节点</td></tr>
+</tbody>
+</table>
+
+<p><code>coordinating</code> 节点的价值可以用数字说明：一个大聚合要归并 100 个分片的结果，归并过程吃 CPU 和堆。如果这个工作落在数据节点上，就会和查询、写入抢资源；单独给两个 coordinating 节点，数据节点只负责「算局部」，归并压力被隔离。<strong>这是「搜索集群 CPU 高但数据节点都很闲」这种怪现象的正解。</strong></p>
+
+<h2><span class="n">L9</span>内存、mapping 与 nested：三处静默的数据错误</h2>
+
+<p class="lead">这一节讲三个「不报错但结果错」的地方。它们比性能问题更可怕，因为监控全绿。</p>
+
+<h3>内存：32GB 是一条硬线</h3>
+
+<p>JVM 堆设置有一条几乎绝对的规则：<strong>不要超过 32GB</strong>。原因是压缩普通对象指针（Compressed OOPs）——堆 ≤ 32GB 时对象引用可以用 32 位表示（4 字节 × 8 = 32GB 寻址），一旦超过，引用从 4 字节变 8 字节，<strong>同样的对象占用直接涨约 1.5 倍</strong>，指针膨胀吃掉的堆比多给的那点还多。所以 64GB 的机器配 40GB 堆，实际可用对象空间可能还不如 31GB。</p>
+
+<p>第二条规则：<strong>堆最多占物理内存的 50%</strong>，剩下留给文件系统缓存。因为 Lucene 的段文件读写全走 page cache，堆再大也缓存不了 term dict 和 posting——那是操作系统的事。</p>
+
+<pre data-lang="text"><code>64GB 机器的标准分法：
+
+堆         = 31GB   (-Xms31g -Xmx31g，两者必须相等，避免动态扩缩引发 Full GC)
+page cache = 31GB   (装 term dict 400MB + 热点 posting，绰绰有余)
+
+31GB 堆里还要再分：
+  fielddata 缓存     默认 40% 堆
+  各类 breaker 合计  默认 70% 堆
+  → 真正可用于「段元数据 + 聚合中间结果」的只有 20GB 左右</code></pre>
+
+<h3>mapping：dynamic 是便利也是炸弹</h3>
+
+<p><code>dynamic: true</code>（默认）会在遇到新字段时自动建 mapping。日志场景很方便，但一旦 JSON 里出现随机 key，就是灾难：</p>
+
+<pre data-lang="json"><code>{"metric": {"cpu_10.1.2.3": 0.5, "cpu_10.1.2.4": 0.7, ...}}
+// 每个 IP 都会变成一个字段</code></pre>
+
+<p>字段数上限 <code>index.mapping.total_fields.limit</code> 默认 <strong>1000</strong>，撞到就报 <code>Limit of total fields [1000] has been exceeded</code>，<strong>写入全部失败</strong>。而 mapping 变大还会导致集群状态膨胀——每个节点都要同步整份 mapping，master 每次更新集群状态都要广播，几千字段的索引能让状态更新耗时从毫秒级涨到秒级。</p>
+
+<p>三道防线：<code>dynamic: "strict"</code>（未知字段直接报错，推荐生产用）、<code>dynamic: "false"</code>（忽略未知字段，存 <code>_source</code> 但不索引）、把随机 key 改成 <code>flattened</code> 类型（整个对象当一个字段）。字段类型还有一条铁律：<strong>不能改</strong>。<code>text</code> 改成 <code>keyword</code> 的唯一方法是新建索引 + <code>_reindex</code>。所以 mapping 要当 DDL 对待，上线前评审。</p>
+
+<h3>nested：数组对象的关联丢失</h3>
+
+<p>这是最隐蔽的一个。ES 的 <code>object</code> 类型会把嵌套对象<strong>扁平化</strong>成「字段 → 值数组」：</p>
+
+<figure>
+<svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="400" fill="#f7f9fb"/>
+  <text x="30" y="26" font-size="15" font-weight="700" fill="#1a1d21">object 会把数组拍平，关联关系就丢了 —— 查「姓张且名四」会命中错误文档</text>
+
+  <!-- 原始 -->
+  <text x="30" y="56" font-size="11.5" font-weight="700" fill="#3d454e">原始文档（两个不同的人）</text>
+  <rect x="24" y="66" width="252" height="96" rx="7" fill="#ffffff" stroke="#c2cad3"/>
+  <text x="40" y="88" font-size="10" fill="#3d454e">user: [</text>
+  <text x="52" y="108" font-size="10" fill="#1a1d21">{ first: <tspan fill="#1e7d3c">"张"</tspan>, last: <tspan fill="#1a5fb4">"三"</tspan> },</text>
+  <text x="52" y="128" font-size="10" fill="#1a1d21">{ first: <tspan fill="#1e7d3c">"李"</tspan>, last: <tspan fill="#1a5fb4">"四"</tspan> }</text>
+  <text x="40" y="148" font-size="10" fill="#3d454e">]</text>
+
+  <polygon points="282,114 296,114 296,109 308,117 296,125 296,120 282,120" fill="#8a949f"/>
+
+  <!-- 扁平化 -->
+  <text x="316" y="56" font-size="11.5" font-weight="700" fill="#c62828">索引后（object 扁平化）</text>
+  <rect x="316" y="66" width="270" height="96" rx="7" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="332" y="90" font-size="10" fill="#8a4a4a">user.first: [<tspan fill="#1e7d3c">"张"</tspan>, <tspan fill="#1e7d3c">"李"</tspan>]</text>
+  <text x="332" y="112" font-size="10" fill="#8a4a4a">user.last:  [<tspan fill="#1a5fb4">"三"</tspan>, <tspan fill="#1a5fb4">"四"</tspan>]</text>
+  <text x="332" y="138" font-size="9.5" fill="#c62828">两个数组，元素之间没有对应关系</text>
+  <text x="332" y="154" font-size="9.5" fill="#8a949f">「谁和谁是一对」这个信息彻底丢失</text>
+
+  <!-- 错误查询 -->
+  <rect x="614" y="66" width="262" height="96" rx="7" fill="#ffffff" stroke="#c62828" stroke-width="1.4"/>
+  <text x="630" y="86" font-size="10.5" font-weight="700" fill="#c62828">查询：first=张 AND last=四</text>
+  <text x="630" y="106" font-size="10" fill="#3d454e">user.first 含「张」✓</text>
+  <text x="630" y="124" font-size="10" fill="#3d454e">user.last 含「四」✓</text>
+  <text x="630" y="148" font-size="11" font-weight="700" fill="#c62828">→ 命中！但这是错的</text>
+
+  <line x1="436" y1="162" x2="436" y2="196" stroke="#1e7d3c" stroke-width="1.4"/>
+  <polygon points="436,196 432,188 440,188" fill="#1e7d3c"/>
+
+  <!-- nested 解法 -->
+  <text x="30" y="222" font-size="12.5" font-weight="700" fill="#1e7d3c">解法：nested 类型 —— 每个对象独立成一个隐藏文档</text>
+
+  <rect x="24" y="236" width="200" height="70" rx="7" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="40" y="258" font-size="10.5" font-weight="700" fill="#1e7d3c">主文档 doc#100</text>
+  <text x="40" y="278" font-size="9.5" fill="#3f7a52">title: ...</text>
+  <text x="40" y="294" font-size="9.5" fill="#3f7a52">user: nested</text>
+
+  <line x1="224" y1="258" x2="264" y2="258" stroke="#1e7d3c" stroke-width="1.3"/>
+  <polygon points="264,258 256,254 256,262" fill="#1e7d3c"/>
+  <text x="244" y="250" font-size="8.5" fill="#1e7d3c" text-anchor="middle">block join</text>
+
+  <rect x="270" y="236" width="180" height="28" rx="5" fill="#ffffff" stroke="#c2e2cc"/>
+  <text x="284" y="255" font-size="9.5" fill="#1a1d21">nested#1：张 / 三</text>
+  <rect x="270" y="270" width="180" height="28" rx="5" fill="#ffffff" stroke="#c2e2cc"/>
+  <text x="284" y="289" font-size="9.5" fill="#1a1d21">nested#2：李 / 四</text>
+  <text x="270" y="318" font-size="9" fill="#6b7683">每个 nested 文档内部才有完整关联</text>
+
+  <!-- 成本 -->
+  <rect x="470" y="236" width="406" height="112" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="486" y="256" font-size="10.5" font-weight="700" fill="#3d454e">代价：不是免费的</text>
+  <text x="486" y="276" font-size="9.5" fill="#3d454e">· 文档数 = 主文档数 × 数组长度（100 元素 = 100 个隐藏文档）</text>
+  <text x="486" y="294" font-size="9.5" fill="#3d454e">· 写入量、段大小、查询成本都乘这个倍数</text>
+  <text x="486" y="312" font-size="9.5" fill="#3d454e">· 查询必须用 nested query 包住，不能用普通 bool</text>
+  <text x="486" y="334" font-size="9.5" fill="#c62828">能用 keyword 数组 + term 解决的，别上 nested</text>
+
+  <rect x="24" y="362" width="852" height="26" rx="5" fill="#e8f0fb"/>
+  <text x="38" y="380" font-size="10" fill="#1a5fb4">判断标准：如果业务会问「同一个对象里的 A 和 B」，就必须 nested；如果只是「文档里有 A 也有 B」，object 足够。</text>
+</svg>
+<figcaption><b>图 12</b>　<code>object</code> 扁平化会丢失「谁和谁是一对」的关联，导致错误命中；<code>nested</code> 用隐藏文档保留关联，代价是文档数乘以数组长度。</figcaption>
+</figure>
+
+<p><strong>数据没错，索引没错，查询结果错了。</strong> 因为 <code>user.first</code> 里有「张」，<code>user.last</code> 里有「四」，两个条件各自满足——但这两个值根本不来自同一个对象。</p>
+
+<p>解法是 <code>nested</code> 类型：每个嵌套对象独立成一个隐藏 Lucene 文档，父子通过 block join 关联，查询必须用 <code>nested</code> query 包起来：</p>
+
+<pre data-lang="json"><code>// mapping
+"user": { "type": "nested" }
+
+// 查询
+{ "nested": { "path": "user", "query": { "bool": { "must": [
+  { "term": { "user.first": "张" } },
+  { "term": { "user.last": "四" } }
+]}}}}</code></pre>
+
+<p>代价是：<strong>nested 文档数 = 主文档数 × 数组长度</strong>，一个 100 元素的数组就是 100 个隐藏文档，写入量、段大小、查询成本都乘 100。所以 <code>nested</code> 只给「确实需要对象内关联」的字段用，能用 <code>keyword</code> 数组 + <code>term</code> 解决的别上 nested。</p>
+
+<div class="box purple">
+  <div class="h">这三处静默错误的共同点</div>
+  <p>它们都<strong>不报错、不告警、监控全绿</strong>：堆超 32GB 只是「慢一点」，dynamic mapping 撞 1000 才炸，nested 丢关联是「结果不对但看起来正常」。<strong>所以面试里能主动提这三条的人，明显比只会讲性能调优的人更像做过生产。</strong></p>
+</div>
+
+<h2><span class="n">L10</span>生产十坑</h2>
+
+<p class="lead">这一节把前面所有原理落成「线上会怎么炸」。每条都给了触发条件和数字——<strong>面试里说「我知道要用 search_after」不如说「from=9990 时协调节点要堆排 10 万条，约 10MB 堆」</strong>。</p>
+
+<table>
+<thead><tr><th>#</th><th>坑</th><th>触发条件</th><th>后果</th><th>正解</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>深分页</td><td><code>from + size &gt; 10000</code></td><td>堆暴涨、GC 抖动、<code>CircuitBreakingException</code></td><td><code>search_after</code> + PIT</td></tr>
+<tr><td>2</td><td>每写必 refresh</td><td>循环里 <code>?refresh=true</code></td><td>段数爆炸，写入吞吐掉 10 倍</td><td>批量导入设 <code>refresh_interval: -1</code></td></tr>
+<tr><td>3</td><td><code>terms</code> 过大</td><td>一次传 &gt; 65536 个值</td><td><code>too_many_clauses</code></td><td>拆批、改用 <code>terms lookup</code></td></tr>
+<tr><td>4</td><td><code>wildcard</code> 前置通配</td><td><code>*手机</code></td><td>无法用 term index，退化为全字典扫</td><td>用 <code>ngram</code> 或 <code>edge_ngram</code></td></tr>
+<tr><td>5</td><td><code>fielddata</code> 开在 text</td><td>对 text 排序聚合</td><td>堆被吃满，OOM</td><td>用 <code>keyword</code> 子字段</td></tr>
+<tr><td>6</td><td>大聚合桶爆炸</td><td>高基数字段多级 <code>terms</code> 聚合</td><td>桶数爆炸、breaker 触发</td><td>加 <code>size</code>、改用 <code>composite</code></td></tr>
+<tr><td>7</td><td><code>cardinality</code> 精度</td><td>去重计数</td><td>误差 1%~5%，非精确值</td><td>需精确就别用 ES 算</td></tr>
+<tr><td>8</td><td>单条 bulk 过大</td><td>一批 100MB</td><td>节点 OOM、请求超时</td><td>5~15MB / 批，几千条</td></tr>
+<tr><td>9</td><td>删除不释放磁盘</td><td><code>_delete_by_query</code> 后</td><td><code>df</code> 不变，磁盘继续涨</td><td>只读索引 <code>_forcemerge</code></td></tr>
+<tr><td>10</td><td>副本设 0 上线</td><td>导入后忘了改回</td><td>节点挂 = 数据丢失</td><td>上线检查清单</td></tr>
+</tbody>
+</table>
+
+<p>挑三条数字最有说服力的展开。</p>
+
+<p><strong>坑 7 的精度账。</strong><code>cardinality</code> 用 HyperLogLog++ 实现，<code>precision_threshold</code> 默认 3000。低于 3000 时基本精确，超过后误差随基数增长，官方口径是 <strong>1%~5%</strong>。所以「日活 100 万」的统计结果可能是 96 万或 104 万。<strong>如果业务要精确 UV（比如计费），ES 不是正确工具</strong>——这是选型问题，不是调参问题。</p>
+
+<p><strong>坑 6 的桶爆炸。</strong><code>terms</code> 聚合默认返回 10 个桶，但如果做多级聚合（<code>terms</code> 里套 <code>terms</code>），中间桶数是<strong>乘积</strong>：10 个品牌 × 100 个型号 = 1000 个中间桶还行；1000 个品牌 × 10000 个 SKU = <strong>1000 万桶</strong>，每个桶占几十到几百字节，直接触发 <code>CircuitBreakingException: [parent] Data too large</code>。正解是 <code>composite</code> 聚合——支持分页，每次只算一页桶。</p>
+
+<p><strong>坑 1 的 breaker 账。</strong><code>indices.breaker.total.limit</code> 默认 <strong>70%</strong> 堆，<code>request</code> breaker 默认 <strong>60%</strong>。31GB 堆下单请求最多用 <code>31 × 0.6 ≈ 18.6GB</code>。一个 <code>from=100000</code> 的查询，10 分片归并 100 万条候选，按 100 字节/条 = 100MB，还没炸；但 5 个字段排序 + 高亮 + 聚合叠加，很容易冲到 GB 级。<strong>breaker 是最后一道保险，触发时请求直接 429，不会拖死整个节点——但业务上表现就是「偶发搜索失败」，很难复现，所以要在设计期就禁掉深分页。</strong></p>
+
+<h2><span class="n">L11</span>与 MySQL 的一致性：为什么不能双写</h2>
+
+<p class="lead">第 17 期算过「双写失败率是乘法」：写 DB 99.95% × 写缓存 99.9% = 99.85%，一天 10 万次写就有 150 条不一致。ES 和 MySQL 的双写是同一个问题，而且更严重——<strong>ES 没有事务、没有重试补偿，写失败就永久丢</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="900" height="420" fill="#f7f9fb"/>
+  <text x="30" y="26" font-size="15" font-weight="700" fill="#1a1d21">单一写入口：MySQL 是唯一真相，ES 只是可重放的投影</text>
+
+  <!-- 链路 -->
+  <rect x="24" y="48" width="150" height="76" rx="8" fill="#ffffff" stroke="#1a5fb4" stroke-width="1.5"/>
+  <text x="99" y="72" font-size="11" font-weight="700" fill="#1a5fb4" text-anchor="middle">业务服务</text>
+  <text x="99" y="92" font-size="9.5" fill="#3d454e" text-anchor="middle">只写 MySQL</text>
+  <text x="99" y="110" font-size="9.5" fill="#6b7683" text-anchor="middle">事务内完成</text>
+
+  <polygon points="174,86 190,86 190,81 202,89 190,97 190,92 174,92" fill="#8a949f"/>
+
+  <rect x="208" y="48" width="150" height="76" rx="8" fill="#ffffff" stroke="#1e7d3c" stroke-width="1.5"/>
+  <text x="283" y="72" font-size="11" font-weight="700" fill="#1e7d3c" text-anchor="middle">MySQL</text>
+  <text x="283" y="92" font-size="9.5" fill="#3d454e" text-anchor="middle">唯一真相</text>
+  <text x="283" y="110" font-size="9.5" fill="#6b7683" text-anchor="middle">binlog 严格有序</text>
+
+  <polygon points="358,86 374,86 374,81 386,89 374,97 374,92 358,92" fill="#8a949f"/>
+  <text x="372" y="76" font-size="8.5" fill="#8a949f" text-anchor="middle">binlog</text>
+
+  <rect x="392" y="48" width="150" height="76" rx="8" fill="#ffffff" stroke="#9a6400" stroke-width="1.5"/>
+  <text x="467" y="72" font-size="11" font-weight="700" fill="#9a6400" text-anchor="middle">Canal / Debezium</text>
+  <text x="467" y="92" font-size="9.5" fill="#3d454e" text-anchor="middle">伪装成 slave 拉 binlog</text>
+  <text x="467" y="110" font-size="9.5" fill="#6b7683" text-anchor="middle">不用业务改代码</text>
+
+  <polygon points="542,86 558,86 558,81 570,89 558,97 558,92 542,92" fill="#8a949f"/>
+
+  <rect x="576" y="48" width="150" height="76" rx="8" fill="#ffffff" stroke="#6a3fa0" stroke-width="1.5"/>
+  <text x="651" y="72" font-size="11" font-weight="700" fill="#6a3fa0" text-anchor="middle">Kafka</text>
+  <text x="651" y="92" font-size="9.5" fill="#3d454e" text-anchor="middle">按主键分区</text>
+  <text x="651" y="110" font-size="9.5" fill="#6b7683" text-anchor="middle">同文档必落同分区</text>
+
+  <polygon points="726,86 742,86 742,81 754,89 742,97 742,92 726,92" fill="#8a949f"/>
+
+  <rect x="760" y="48" width="116" height="76" rx="8" fill="#e8f0fb" stroke="#1a5fb4" stroke-width="1.5"/>
+  <text x="818" y="72" font-size="11" font-weight="700" fill="#1a5fb4" text-anchor="middle">ES 消费者</text>
+  <text x="818" y="92" font-size="9.5" fill="#2f5480" text-anchor="middle">bulk 攒批</text>
+  <text x="818" y="110" font-size="9.5" fill="#2f5480" text-anchor="middle">重试 + 死信</text>
+
+  <!-- 三个性质 -->
+  <rect x="24" y="146" width="272" height="112" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="40" y="168" font-size="11.5" font-weight="700" fill="#1a5fb4">① 顺序有保证</text>
+  <text x="40" y="188" font-size="9.5" fill="#3d454e">binlog 严格有序</text>
+  <text x="40" y="206" font-size="9.5" fill="#3d454e">Kafka 按主键分区 → 同文档变更有序</text>
+  <text x="40" y="224" font-size="9.5" fill="#c62828">但扩分区 / rebalance 会破坏顺序</text>
+  <text x="40" y="244" font-size="9.5" fill="#8a949f">→ 必须再加版本号兜底</text>
+
+  <rect x="314" y="146" width="272" height="112" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="330" y="168" font-size="11.5" font-weight="700" fill="#1e7d3c">② 可重放</text>
+  <text x="330" y="188" font-size="9.5" fill="#3d454e">索引写坏了，从 offset 重放即可</text>
+  <text x="330" y="206" font-size="9.5" fill="#3d454e">不用回 MySQL 全量导</text>
+  <text x="330" y="224" font-size="9.5" fill="#3d454e">mapping 改错也能重放修复</text>
+  <text x="330" y="244" font-size="9.5" fill="#8a949f">这是双写永远做不到的能力</text>
+
+  <rect x="604" y="146" width="272" height="112" rx="8" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="620" y="168" font-size="11.5" font-weight="700" fill="#9a6400">③ 失败可观测</text>
+  <text x="620" y="188" font-size="9.5" fill="#3d454e">消费者 lag、死信队列</text>
+  <text x="620" y="206" font-size="9.5" fill="#3d454e">_bulk items 逐条检查</text>
+  <text x="620" y="224" font-size="9.5" fill="#3d454e">都能做成告警指标</text>
+  <text x="620" y="244" font-size="9.5" fill="#c62828">双写是一个黑盒，只能靠对账</text>
+
+  <!-- 延迟分解 -->
+  <text x="30" y="288" font-size="12.5" font-weight="700" fill="#1a1d21">端到端延迟分解：为什么是「100ms ~ 2s」而不是「实时」</text>
+
+  <rect x="24" y="300" width="852" height="30" rx="0" fill="#eef2f6"/>
+  <rect x="24" y="330" width="70" height="34" fill="#1a5fb4"/>
+  <text x="59" y="352" font-size="9" fill="#ffffff" text-anchor="middle">binlog</text>
+  <rect x="94" y="330" width="190" height="34" fill="#4a86c8"/>
+  <text x="189" y="352" font-size="9" fill="#ffffff" text-anchor="middle">采集 + 转消息（ms 级）</text>
+  <rect x="284" y="330" width="330" height="34" fill="#9a6400"/>
+  <text x="449" y="352" font-size="9" fill="#ffffff" text-anchor="middle">消费者攒批（百 ms ~ 秒，最大头）</text>
+  <rect x="614" y="330" width="150" height="34" fill="#1e7d3c"/>
+  <text x="689" y="352" font-size="9" fill="#ffffff" text-anchor="middle">bulk 写入 + refresh 1s</text>
+  <rect x="764" y="330" width="112" height="34" fill="#c62828"/>
+  <text x="820" y="352" font-size="9" fill="#ffffff" text-anchor="middle">对账兜底</text>
+
+  <text x="24" y="384" font-size="9.5" fill="#6b7683">合计 100ms~2s。产品必须接受「刚发布的商品 1 秒内搜不到」，否则就要为那一条加 refresh=wait_for，代价是写入延迟 +1s。</text>
+
+  <rect x="24" y="394" width="852" height="22" rx="4" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="38" y="409" font-size="9.5" fill="#c62828">不要双写：99.95% × 99.9% = 99.85%，一天 10 万次写就有 150 条永久不一致，且没有任何手段能发现它们。</text>
+</svg>
+<figcaption><b>图 13</b>　binlog 单一写入口的四段链路，与端到端延迟分解。真正的大头是<b>消费者攒批</b>——想更快就把批调小，代价是写入放大。</figcaption>
+</figure>
+
+<p>这条链路的价值不在「解耦」这个虚词，而在三个具体性质：顺序有保证、可重放、失败可观测。即使这样，仍然是<strong>最终一致</strong>，延迟由 <code>binlog 采集(ms) + MQ(ms) + bulk 攒批(百 ms~秒) + refresh(1s)</code> 组成，通常 100ms~2s。</p>
+
+<p>还有两个必须做的兜底：</p>
+
+<ul>
+  <li><strong>版本号防乱序。</strong>文档里带 <code>update_time</code> 或 <code>version</code>，写入时用 <code>version_type=external</code> 或 <code>if_seq_no</code>，让旧版本无法覆盖新版本。<strong>光靠 MQ 分区不够</strong>——扩分区、rebalance 时仍可能乱序。</li>
+  <li><strong>对账。</strong>定时抽样比对 MySQL 与 ES 的 <code>count</code> 和若干文档的 <code>update_time</code>，发现漂移就触发单条重推。这是唯一能发现「静默丢失」的手段。</li>
+</ul>
+
+<div class="box green">
+  <div class="h">面试答法</div>
+  <p>不要说「双写 + 定时同步」，要说「<strong>binlog 单一写入口 + 按主键分区保序 + 版本号防覆盖 + 对账兜底</strong>」，并明确「最终一致，延迟 100ms~2s，产品需接受」。<strong>能主动说出「为什么不能双写」的失败率乘法，比背链路图更有说服力。</strong></p>
+</div>
+
+<h2><span class="n">L12</span>数字速查</h2>
+
+<p class="lead">面试前扫一眼这张表，比看十页笔记有用。加粗的是最容易被问、也最容易记错的。</p>
+
+<table>
+<thead><tr><th>项</th><th>默认值 / 经验值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>主分片数</td><td><strong>1</strong>（7.0+）</td><td>5.x / 6.x 是 5，说错暴露版本</td></tr>
+<tr><td>副本数</td><td><strong>1</strong></td><td>单节点集群必然 yellow</td></tr>
+<tr><td><code>refresh_interval</code></td><td><strong>1s</strong></td><td>近实时的全部来源</td></tr>
+<tr><td><code>max_result_window</code></td><td><strong>10000</strong></td><td>内存保护，不是产品限制</td></tr>
+<tr><td>translog flush</td><td><strong>512MB 或 30min</strong></td><td>触发 fsync + 清空 translog</td></tr>
+<tr><td><code>max_terms_count</code></td><td><strong>65536</strong></td><td>terms 查询上限</td></tr>
+<tr><td><code>max_clause_count</code></td><td><strong>1024</strong></td><td>bool 子句上限</td></tr>
+<tr><td><code>total_fields.limit</code></td><td><strong>1000</strong></td><td>撞到写入全失败</td></tr>
+<tr><td>堆上限</td><td><strong>31GB</strong></td><td>32GB 是压缩指针硬线</td></tr>
+<tr><td>堆 : 内存</td><td><strong>1 : 1</strong></td><td>剩一半给 page cache</td></tr>
+<tr><td>单分片大小</td><td>10~30GB（搜索）/ 30~50GB（日志）</td><td>超过 50GB 故障恢复慢</td></tr>
+<tr><td>每 GB 堆分片数</td><td><strong>20~25</strong></td><td>副本也算</td></tr>
+<tr><td>search 线程池</td><td><code>(核数×3)/2+1</code>，队列 1000</td><td>决定扇出耗时</td></tr>
+<tr><td>BM25 k1 / b</td><td><strong>1.2 / 0.75</strong></td><td>饱和速度 / 长度惩罚</td></tr>
+<tr><td>BM25 因子上界</td><td><strong>k1+1 = 2.2</strong></td><td>tf 再大也不超过</td></tr>
+<tr><td><code>precision_threshold</code></td><td><strong>3000</strong></td><td>超过后误差 1%~5%</td></tr>
+<tr><td>breaker total / request</td><td><strong>70% / 60%</strong></td><td>超了返回 429</td></tr>
+<tr><td>磁盘水位</td><td>85% / 90% / 95%</td><td>95% 索引变只读</td></tr>
+<tr><td>bulk 批次</td><td><strong>5~15MB</strong></td><td>条数几千</td></tr>
+<tr><td>master-eligible</td><td><strong>≥3 且奇数</strong></td><td>2 个比 1 个更糟</td></tr>
+<tr><td>写入放大</td><td><strong>3~5 倍</strong></td><td>段 + merge 重写</td></tr>
+<tr><td>跳表间隔</td><td><strong>128</strong></td><td>1M posting → 约 130 次比较</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">L13</span>十四问答</h2>
+
+<div class="qa"><div class="q">为什么 ES 比 MySQL 快？</div><div class="a">不是因为分布式。B+ 树按整行值排序，只能做等值和范围；倒排按词建反查表，<code>%kw%</code> 这种包含查询在 MySQL 上必然全表扫（1 亿行 20GB，SATA SSD 约 40 秒），在 ES 上是一次 term index 查找 + posting 归并（个位数 IO）。<strong>换的是数据结构，不是机器数量。</strong></div></div>
+
+<div class="qa"><div class="q">倒排索引的三层是什么，为什么要分三层？</div><div class="a">term index（FST，40MB，常驻内存）→ term dictionary（400MB，按块有序落盘）→ posting list（24GB，差值编码 + 跳表）。分三层是为了让「内存只放导航、磁盘放数据」：字典全放内存要 400MB 且全是随机访问，分块后一次查找只读 1~2 个 4KB 块。</div></div>
+
+<div class="qa"><div class="q">refresh、flush、merge 的区别？</div><div class="a">refresh（1s）把 buffer 写成新段、<strong>不做 fsync</strong>、让数据可搜；flush（512MB/30min）把段 fsync 落盘并清空 translog；merge 是后台把小段合并成大段并物理删除标记删除的文档。<strong>refresh 解决可见性，flush 解决持久性，merge 解决段数量和空间回收。</strong></div></div>
+
+<div class="qa"><div class="q">为什么刚写入的数据查不到？</div><div class="a">refresh 还没发生，默认有 1 秒窗口。三种解法：容忍 1 秒、<code>refresh=wait_for</code>（等下一次，不额外产生段）、<code>refresh=true</code>（立即 refresh，批量场景禁用，每条一个段）。</div></div>
+
+<div class="qa"><div class="q">ES 是强一致的吗？</div><div class="a">不是。写入默认 <code>wait_for_active_shards=1</code>，只等主分片，副本异步；读默认在副本间轮询，可能读到旧数据。没有跨文档事务，<code>_bulk</code> 部分成功。<strong>要强一致回 MySQL。</strong></div></div>
+
+<div class="qa"><div class="q">主分片数为什么不能改？</div><div class="a">路由是 <code>hash(routing) % 主分片数</code>，改模数会让所有文档「搬错家」。只能 <code>_reindex</code>、<code>_split</code>（需 <code>number_of_routing_shards</code> 支持）、<code>_shrink</code>。</div></div>
+
+<div class="qa"><div class="q">分片数怎么定？</div><div class="a">两个约束取小：数据量 / 30GB，和 堆GB × 20。1TB → 34 → 取 32；3 节点 16GB 堆 → 上限 960（含副本）。分片过多会因查询扇出使延迟线性增长（3000 分片、13 线程、单分片 10ms → 约 770ms）。</div></div>
+
+<div class="qa"><div class="q">副本能提高写入性能吗？</div><div class="a">不能。写入要所有副本 ack 才算成功，副本越多越受最慢副本拖累。副本只提高<strong>读吞吐</strong>和<strong>可用性</strong>。</div></div>
+
+<div class="qa"><div class="q">深分页为什么慢，怎么解？</div><div class="a">query 阶段每个分片都要返回 <code>from+size</code> 条候选，10 分片 × 10000 = 10 万条进协调节点堆排，约 10MB 堆/查询，QPS 100 就是 1GB/s 分配速率。解法 <code>search_after</code>（无状态、每片只返 size 条、与页深无关）+ PIT；导出用 <code>scroll</code>，但绝不给用户翻页。</div></div>
+
+<div class="qa"><div class="q">BM25 里 k1 和 b 各管什么？</div><div class="a"><code>k1=1.2</code> 管词频饱和——tf=1 就到上界 2.2 的 45%，tf=10 到 89%，tf=1000 到 99.9%，所以堆关键词无效。<code>b=0.75</code> 管长度归一化——短文档加分、长文档减分。</div></div>
+
+<div class="qa"><div class="q">为什么搜「手机」搜不到「手机壳」？</div><div class="a">分词不一致。索引期 <code>ik_smart</code> 只存了 <code>手机壳</code> 一个 term，查询期「手机」被切成 <code>手机</code>，两个 term 对不上。正解：索引期 <code>ik_max_word</code>（细）、查询期 <code>ik_smart</code>（粗），或加 <code>ngram</code> 兜底。用 <code>_analyze</code> 现场验证。</div></div>
+
+<div class="qa"><div class="q">object 和 nested 的区别？</div><div class="a">object 会被扁平化成「字段→值数组」，丢失对象内关联——两个对象 <code>{张,三}</code> 和 <code>{李,四}</code> 会被「姓张且名四」命中。nested 每个对象是独立隐藏文档，必须用 <code>nested</code> query，代价是文档数 × 数组长度、查询成本成倍。</div></div>
+
+<div class="qa"><div class="q">集群 yellow 要紧吗？</div><div class="a">不要紧。yellow = 主分片全在、部分副本未分配，数据完整、读写正常。单节点 + <code>replicas: 1</code> 必然是 yellow。<strong>red 才是数据问题</strong>，先用 <code>_cluster/allocation/explain</code> 查原因。</div></div>
+
+<div class="qa"><div class="q">ES 和 MySQL 怎么同步？</div><div class="a">binlog → Canal/Debezium → Kafka（按主键分区保序）→ bulk 写入 + 重试 + 死信。最终一致，延迟 100ms~2s。必须配版本号防乱序（扩分区/rebalance 会破坏顺序）和对账（唯一能发现静默丢失的手段）。<strong>不要双写</strong>，失败率是乘法。</div></div>
+
+<h2><span class="n">L14</span>三道模拟面试题</h2>
+
+<p class="lead">每题给四档回答。判断标准不是「说得多」，而是<strong>有没有数字、有没有代价、有没有边界</strong>。</p>
+
+<div class="mt">
+  <div class="qh"><span>题 1</span>1 亿商品，QPS 5000，P99 要求 50ms，索引怎么设计？</div>
+  <p style="font-size:13.5px;color:var(--ink2)"><strong>考察点</strong>：分片 / 副本 / 字段 / 查询四层是否都算过，而不是只会说「多建几个分片」。</p>
+
+  <div class="lv l1"><span class="lb">不及格</span>说「多分片、加副本、上集群」，一个数字都没有。这是把 ES 当 MySQL 答。</div>
+  <div class="lv l2"><span class="lb">及格</span>按 30GB/分片算出 32 个主分片，副本 1，用 <code>ik_max_word</code> 建索引、<code>ik_smart</code> 查询，<code>title</code> 加 <code>keyword</code> 子字段。能说出 <code>search_after</code> 和 <code>track_total_hits</code>。</div>
+  <div class="lv l3"><span class="lb">良好</span>补上扇出账：32 主 32 副共 64 分片，5 台 16GB 堆节点，每节点 12.8 个分片，远低于 20/GB 上限；search 线程池 13，一次查询 1 轮完成，单分片 10ms → P99 约 30ms，留了余量。再补 <code>_source</code> 只存必要字段、<code>stored_fields</code> 裁剪、禁用深分页。</div>
+  <div class="lv l4"><span class="lb">优秀</span>指出 5000 QPS 下<strong>真正的瓶颈不是查询而是归并和网络</strong>，并给出三条：① 用 routing 按 <code>category_id</code> 路由，类目查询只打 1/32 分片，延迟除以 32；② 冷热分离，热数据 7 天，历史走 <code>cold</code> 层；③ 前置一层本地缓存（Caffeine）挡 60% 重复查询——按 17 期的账，命中率 90% 就能把 ES QPS 从 5000 压到 500。最后点明「50ms P99 要靠压测验证，不能靠算」，并说明压测时要看的是 GC 而不是平均延迟。</div>
+</div>
+
+<div class="mt">
+  <div class="qh"><span>题 2</span>用户反馈「刚上架的商品搜不到」，怎么排查？</div>
+  <p style="font-size:13.5px;color:var(--ink2)"><strong>考察点</strong>：能不能按链路二分，而不是一上来就重启。</p>
+
+  <div class="lv l1"><span class="lb">不及格</span>「清缓存、重启 ES」。重启解决不了 refresh 窗口，也解决不了分词错配。</div>
+  <div class="lv l2"><span class="lb">及格</span>先确认是不是 refresh 的 1 秒窗口：用 <code>GET /goods/_doc/{id}</code> 查文档在不在，在就等 1 秒再搜。</div>
+  <div class="lv l3"><span class="lb">良好</span>给出一条有序排查链：① <code>_doc/{id}</code> 确认文档是否存在（不存在 → 写入链路，查 <code>_bulk</code> 的 <code>items</code> 里有没有 400）；② 存在但搜不到 → 用 <code>_analyze</code> 分别跑索引期和查询期分词，比对 term 是否一致（最常见：索引用 <code>ik_smart</code>，用户搜的词没被切出来）；③ term 一致仍搜不到 → <code>_search?explain=true</code>，看是不是被 <code>filter</code>（<code>status: on_sale</code> 没更新）或 <code>routing</code> 打到了别的分片；④ 全都不对 → 检查别名 <code>_alias</code> 是否指向旧索引（双写切换时漏切）。</div>
+  <div class="lv l4"><span class="lb">优秀</span>补上「为什么这类问题会反复发生」——把排查点前置成监控与测试：<code>_bulk</code> 逐条解析 <code>items</code>、关键商品写入后 <code>refresh=wait_for</code>、别名切换用 <code>_aliases</code> 一次请求完成 remove + add（原子）、分词一致性用集成测试固定住（同一批 query 在 CI 里跑召回率）。<strong>并指出根因往往是「索引期和查询期用了不同的 analyzer」，这是设计问题不是运维问题</strong>——修复要重建索引，而不是改配置重启。</div>
+</div>
+
+<div class="mt">
+  <div class="qh"><span>题 3</span>搜索集群 CPU 打到 90%，怎么定位？</div>
+  <p style="font-size:13.5px;color:var(--ink2)"><strong>考察点</strong>：知不知道该看哪些接口，以及能不能区分「真在算」和「在 GC」。</p>
+
+  <div class="lv l1"><span class="lb">不及格</span>「扩容」。CPU 高可能是 merge，扩容只会把钱花在同一个瓶颈上。</div>
+  <div class="lv l2"><span class="lb">及格</span><code>GET _nodes/hot_threads</code> 看热点线程，<code>GET _nodes/stats</code> 看 search / write 线程池的 <code>rejected</code> 和 <code>queue</code>。</div>
+  <div class="lv l3"><span class="lb">良好</span>分三类定位：① <strong>慢查询</strong>：开 slowlog（<code>index.search.slowlog.threshold.query.warn: 1s</code>），看是不是深分页或高基数聚合；② <strong>分片过多</strong>：<code>GET _cat/shards</code> 数分片，若单节点「分片数 / 堆GB &gt; 25」，扇出就是主因；③ <strong>fielddata</strong>：<code>GET _nodes/stats/indices/fielddata</code>，看是不是对 text 排序聚合把堆吃了，连带 GC 把 CPU 打高。</div>
+  <div class="lv l4"><span class="lb">优秀</span>给出「先看 GC 再看查询」的顺序——CPU 90% 有两种完全不同的成因：<strong>真在算</strong>（查询 / 聚合 / merge）和<strong>在 GC</strong>（堆压力）。先 <code>GET _nodes/stats/jvm</code> 看 <code>gc.collectors.old.collection_time_in_millis</code> 是否在涨：old GC 频繁说明这不是查询问题而是内存问题，优化查询无用。再区分 merge 线程（<code>_cat/thread_pool/force_merge</code>）——批量导入后的 merge 会把 IO 和 CPU 一起打满，此时「什么都不做，等 merge 完」就是正确答案。最后给治理：coordinating 节点独立、<code>search_after</code> 替代深分页、高基数聚合改 <code>composite</code>、<code>wildcard *xx</code> 换 <code>ngram</code>。</div>
+</div>
+
+<h2><span class="n">L15</span>全 25 期知识地图</h2>
+
+<table>
+<thead><tr><th>板块</th><th>期号 · 主题</th><th>一句话抓手</th></tr></thead>
+<tbody>
+<tr><td rowspan="3">语言与集合</td><td>01 · HashMap → CHM</td><td>扰动函数、树化 8/6/64、扩容 2 次幂</td></tr>
+<tr><td>23 · 泛型擦除 · 反射 · 代理</td><td>桥方法、inflation 15、稳态反射只慢 7 倍</td></tr>
+<tr><td>14 · 集合并发容器</td><td>ArrayList 1.5 倍、CHM 锁粒度轴</td></tr>
+<tr><td rowspan="5">JVM</td><td>02 · 内存模型与 GC</td><td>三色标记、CMS→G1→ZGC</td></tr>
+<tr><td>12 · 调优与压测</td><td>Eden = 分配速率 × YGC 间隔</td></tr>
+<tr><td>21 · 内存泄漏取证</td><td>支配树、ThreadLocal 七跳链</td></tr>
+<tr><td>22 · JIT 与基准测试</td><td>内联 35/325、逃逸分析、JMH 七坑</td></tr>
+<tr><td>13 · 类加载与新特性</td><td>双亲委派四次被打破、虚拟线程 pinning</td></tr>
+<tr><td rowspan="3">并发</td><td>03 · 锁升级 · AQS · 线程池</td><td>Mark Word 三位、CLH 队列</td></tr>
+<tr><td>20 · 线程池深水区</td><td>ctl 3+29 位、依赖栈 LIFO</td></tr>
+<tr><td>19 · NIO 与 Netty</td><td>epoll 红黑树、ByteBuf 双指针</td></tr>
+<tr><td rowspan="3">框架</td><td>04 · Spring 核心</td><td>refresh 十二步、三级缓存</td></tr>
+<tr><td>15 · Boot 自动配置</td><td>153→60→40 六阶段</td></tr>
+<tr><td>24 · MyBatis 与持久层</td><td>九站执行链、CacheKey 37 进制</td></tr>
+<tr><td rowspan="3">存储</td><td>05 · MySQL 索引与事务</td><td>B+ 树 1170 扇出、ReadView 四字段</td></tr>
+<tr><td>16 · 分库分表与迁移</td><td>2053 万行上限、基因法</td></tr>
+<tr><td><strong>25 · Elasticsearch 与搜索</strong></td><td><strong>三层倒排、段与 refresh、BM25 可算</strong></td></tr>
+<tr><td rowspan="2">缓存</td><td>06 · Redis</td><td>单线程边界、跳表、混合持久化</td></tr>
+<tr><td>17 · 缓存一致性</td><td>失败率是乘法：99.85% → 1.35 亿次脏读</td></tr>
+<tr><td rowspan="4">分布式</td><td>07 · MQ 与分布式事务</td><td>LEO/HW/ISR、六种事务方案</td></tr>
+<tr><td>08 · Spring Cloud</td><td>三级缓存 90~180s、重试放大 27 倍</td></tr>
+<tr><td>18 · 幂等与防重</td><td>0 行双重语义、处理中带租期</td></tr>
+<tr><td>10 · 大厂场景设计</td><td>秒杀四道闸门、雪花位图</td></tr>
+<tr><td rowspan="2">工程能力</td><td>09 · 线上排查</td><td>CPU 六真凶、OOM 九落点</td></tr>
+<tr><td>11 · 设计模式</td><td>策略替 if-else、责任链三变形</td></tr>
+</tbody>
+</table>
+
+<div class="box blue">
+  <div class="h">这一期在整张地图里的位置</div>
+  <p>05 讲「数据库怎么想」，25 讲「检索怎么想」。两者的接缝在三处，也是面试最爱的追问：<strong>为什么加了索引还是慢</strong>（MySQL 侧是回表，ES 侧是 refresh 和扇出）、<strong>为什么数据明明在库里却搜不到</strong>（MySQL 侧是隔离级别，ES 侧是 analyzer 和 refresh）、<strong>为什么统计数字对不上</strong>（MySQL 侧是 MVCC 快照，ES 侧是 <code>cardinality</code> 的近似）。能把两侧连起来讲的人，比只会背单边的人高一档。</p>
+</div>
+
+<div class="box amber">
+  <div class="h">贯穿 25 期的一条主线</div>
+  <p>所有「为什么快 / 为什么慢」的答案，最后都能落成一个除法或乘法：<code>Eden = 速率 × 间隔</code>、<code>B+ 树容量 = 1170² × 15</code>、<code>可见延迟 = refresh_interval</code>、<code>扇出耗时 = 分片数 / 线程数 × 单片耗时</code>、<code>BM25 上界 = k1 + 1</code>、<code>深分页成本 = 分片数 × (from+size)</code>。<strong>能把定性结论换算成数字的人，和只会背结论的人，差距就在这里。</strong></p>
+</div>
+
+<div class="foot">
+  <p><strong>本期事实来源</strong>：Elastic 官方文档 8.x / 7.x index modules（主分片默认 1、副本 1、<code>refresh_interval</code> 1s、<code>max_result_window</code> 10000、<code>max_terms_count</code> 65536、<code>max_ngram_diff</code> 1、translog flush 512MB/30min、<code>total_fields.limit</code> 1000）、Lucene 9.x 的段与 FST 实现、BM25 公式手算（k1=1.2、b=0.75）。图 8 的分数表与图 9 的 IDF 均为本文按公式逐行计算，可复核。</p>
+  <p>标注「估算」的体积与耗时（40MB / 400MB / 24GB、40 秒 / 10ms、770ms）均已给出计算过程，非实测值。所有默认值以 Elasticsearch 8.x 为准。</p>
+  <p>Java 面试深挖 · 第 25 期 · 生成于 2026-11-12</p>
+  <div class="next"><strong>下期预告</strong>　第 26 期：字节码增强与 Java Agent——ASM 的树 API 与访问者 API 怎么选、<code>premain</code> 与 <code>agentmain</code> 的加载时机差在哪、APM 探针为什么能无侵入埋点、Arthas 的 <code>watch</code> 到底改了谁的字节码、Lombok 与 MapStruct 的编译期把戏、以及「热部署」为什么永远有边界。</div>
+</div>
+
+</div>
+<script>
+(function () {
+  var KW = /\b(public|private|protected|static|final|class|interface|extends|implements|new|return|if|else|for|while|try|catch|finally|throw|throws|void|int|long|boolean|this|super|null|true|false|import|package|abstract|synchronized|volatile|instanceof|enum|record|var|default|break|continue|switch|case|do|char|double|float|byte|short|GET|POST|PUT|DELETE|SELECT|FROM|WHERE)\b/g;
+  var blocks = document.querySelectorAll('pre code');
+  for (var i = 0; i < blocks.length; i++) {
+    var el = blocks[i];
+    var text = el.textContent;
+    var out = '';
+    var re = /(\/\/[^\n]*|#[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|([A-Za-z_$][\w$]*)|(\b\d+(?:\.\d+)?\b)/g;
+    var last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      out += esc(text.slice(last, m.index));
+      if (m[1]) out += '<span class="c">' + esc(m[1]) + '</span>';
+      else if (m[2]) out += '<span class="s">' + esc(m[2]) + '</span>';
+      else if (m[3]) {
+        if (KW.test(m[3])) { KW.lastIndex = 0; out += '<span class="k">' + esc(m[3]) + '</span>'; }
+        else { KW.lastIndex = 0; out += esc(m[3]); }
+      } else if (m[4]) out += '<span class="n">' + esc(m[4]) + '</span>';
+      last = m.index + m[0].length;
+    }
+    out += esc(text.slice(last));
+    el.innerHTML = out;
+  }
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+})();
+</script>
+</body>
+</html>

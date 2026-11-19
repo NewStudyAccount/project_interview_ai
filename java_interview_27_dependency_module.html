@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 面试深挖 27 · 依赖冲突、Classpath 与模块化边界</title>
+<style>
+:root{
+  --ink:#1a1d21; --ink2:#3d454e; --muted:#6b7683; --line:#e4e8ed; --line2:#d4dae1;
+  --bg:#ffffff; --panel:#f7f9fb; --panel2:#eef2f6;
+  --blue:#1a5fb4; --blue-soft:#e8f0fb;
+  --red:#c62828; --red-soft:#fdeceb;
+  --green:#1e7d3c; --green-soft:#e9f5ec;
+  --amber:#9a6400; --amber-soft:#fdf4e3;
+  --purple:#6a3fa0; --purple-soft:#f2ecfb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.78; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px; margin:0 auto; padding:0 28px 80px}
+.hero{padding:56px 0 30px; border-bottom:2px solid var(--ink)}
+.hero .kicker{font-size:12.5px; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; font-weight:600}
+.hero h1{margin:14px 0 10px; font-size:36px; line-height:1.25; letter-spacing:-.5px; font-weight:800}
+.hero .sub{color:var(--ink2); font-size:16.5px; max-width:820px}
+.hero .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+.tag{font-size:12.5px; padding:4px 11px; border-radius:999px; background:var(--panel2); color:var(--ink2); font-weight:600}
+.tag.b{background:var(--blue-soft); color:var(--blue)}
+.tag.r{background:var(--red-soft); color:var(--red)}
+.tag.g{background:var(--green-soft); color:var(--green)}
+.tag.a{background:var(--amber-soft); color:var(--amber)}
+
+h2{
+  margin:56px 0 18px; padding:14px 0 14px 18px; font-size:23px; font-weight:800; letter-spacing:-.2px;
+  border-left:4px solid var(--blue); background:linear-gradient(90deg,var(--blue-soft),transparent 62%);
+  border-radius:0 6px 6px 0;
+}
+h2 .n{display:inline-block; min-width:38px; color:var(--blue); font-variant-numeric:tabular-nums}
+h3{margin:32px 0 12px; font-size:17.5px; font-weight:750; color:var(--ink)}
+h3::before{content:""; display:inline-block; width:6px; height:6px; background:var(--blue); border-radius:1px; margin-right:9px; vertical-align:2px}
+p{margin:12px 0}
+strong{font-weight:700; color:#101418}
+em{font-style:normal; background:linear-gradient(transparent 62%, #ffe9a8 62%); padding:0 1px}
+code{font-family:"JetBrains Mono",Consolas,"Courier New",monospace; font-size:13px; background:var(--panel2);
+  padding:1.5px 5px; border-radius:4px; color:#a03060}
+.lead{font-size:16px; color:var(--ink2)}
+
+ul,ol{margin:12px 0; padding-left:22px}
+li{margin:7px 0}
+li::marker{color:var(--muted)}
+
+table{width:100%; border-collapse:collapse; margin:20px 0; font-size:13.5px; background:#fff}
+th{background:var(--panel2); text-align:left; padding:10px 12px; font-weight:700; border-bottom:2px solid var(--line2); font-size:13px}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:1px solid var(--line2)}
+td code{font-size:12.5px}
+.num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum"}
+
+pre{
+  position:relative; margin:20px 0; padding:18px 18px 16px; background:#1c2128; color:#d7dde5;
+  border-radius:9px; overflow-x:auto; font-size:13px; line-height:1.68;
+  font-family:"JetBrains Mono",Consolas,"Courier New",monospace;
+}
+pre::before{content:attr(data-lang); position:absolute; top:0; right:0; font-size:10.5px; letter-spacing:.1em;
+  color:#7d8794; background:#252b33; padding:3px 10px; border-radius:0 9px 0 6px; text-transform:uppercase}
+pre code{background:none; padding:0; color:inherit; font-size:inherit}
+.k{color:#ff7b72}
+.s{color:#a5d6a7}
+.c{color:#8b949e; font-style:italic}
+.n{color:#79c0ff}
+
+figure{margin:26px 0; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:18px 18px 10px}
+figure svg{display:block; width:100%; height:auto}
+figcaption{margin-top:8px; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.6}
+figcaption b{color:var(--ink2)}
+
+.box{border-radius:9px; padding:14px 18px; margin:20px 0; border:1px solid var(--line2); background:var(--panel)}
+.box .h{font-weight:750; font-size:13.5px; letter-spacing:.02em; margin-bottom:6px; display:flex; align-items:center; gap:8px}
+.box p:last-child{margin-bottom:0}
+.box.blue{background:var(--blue-soft); border-color:#bcd4f2} .box.blue .h{color:var(--blue)}
+.box.red{background:var(--red-soft); border-color:#f3c9c6} .box.red .h{color:var(--red)}
+.box.green{background:var(--green-soft); border-color:#c2e2cc} .box.green .h{color:var(--green)}
+.box.amber{background:var(--amber-soft); border-color:#efd9ab} .box.amber .h{color:var(--amber)}
+.box.purple{background:var(--purple-soft); border-color:#d7c9ef} .box.purple .h{color:var(--purple)}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0}
+.card{background:#fff; border:1px solid var(--line); border-radius:9px; padding:14px 16px}
+.card .t{font-weight:750; font-size:14px; margin-bottom:5px; color:var(--ink)}
+.card .d{font-size:13px; color:var(--ink2); line-height:1.65}
+.card.r{border-top:3px solid var(--red)} .card.g{border-top:3px solid var(--green)}
+.card.b{border-top:3px solid var(--blue)} .card.a{border-top:3px solid var(--amber)}
+
+.qa{border-left:3px solid var(--line2); padding:2px 0 2px 16px; margin:18px 0}
+.qa .q{font-weight:750; color:var(--ink); font-size:14.5px}
+.qa .q::before{content:"Q "; color:var(--blue); font-weight:800}
+.qa .a{color:var(--ink2); font-size:14px; margin-top:5px}
+.qa .a::before{content:"A "; color:var(--green); font-weight:800}
+
+.mt{background:#fff; border:1px solid var(--line); border-radius:11px; padding:20px 22px; margin:24px 0}
+.mt .qh{font-weight:800; font-size:15.5px; margin-bottom:10px; color:var(--ink)}
+.mt .qh span{background:var(--ink); color:#fff; font-size:11.5px; padding:2px 8px; border-radius:4px; margin-right:9px; letter-spacing:.05em}
+.lv{margin-top:14px; padding:11px 14px; border-radius:7px; font-size:13.5px; line-height:1.7}
+.lv .lb{font-weight:750; font-size:12px; letter-spacing:.05em; margin-right:8px}
+.lv.l1{background:#fbeceb; border-left:3px solid #d9534f} .lv.l1 .lb{color:#c62828}
+.lv.l2{background:#fdf6e6; border-left:3px solid #d9a441} .lv.l2 .lb{color:#9a6400}
+.lv.l3{background:#eaf2fd; border-left:3px solid #4a86c8} .lv.l3 .lb{color:#1a5fb4}
+.lv.l4{background:#eaf6ee; border-left:3px solid #3f9b5c} .lv.l4 .lb{color:#1e7d3c}
+
+.foot{margin-top:70px; padding-top:26px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+.next{margin-top:26px; background:var(--panel2); border-radius:9px; padding:16px 20px; font-size:13.5px; color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <div class="kicker">Java 面试深挖 · 第 27 期</div>
+  <h1>依赖冲突、Classpath 与模块化边界</h1>
+  <div class="sub">
+    这一期正面回答一个比"背 GC 参数"更接近日常工作的题目：<strong>为什么代码昨天还能跑，今天启动就抛 NoSuchMethodError</strong>。答案藏在 JVM 的类身份定义里——它只认全限定类名，<em>不认版本</em>。顺着这条线，我们一路摸到 Maven 的三条调解规则、Spring Boot 那层套娃 fat jar，以及 JPMS 的强封装到底卡住了谁。
+  </div>
+  <div class="meta">
+    <span class="tag b">6 组实测·报错原文照抄</span>
+    <span class="tag r">classpath hell 四种形态</span>
+    <span class="tag g">Maven 调解三条规则</span>
+    <span class="tag a">JPMS 三张清单</span>
+    <span class="tag">JDK 21.0.7</span>
+  </div>
+</div>
+
+<p class="lead">前 26 期把语言、JVM、并发、框架、存储都过了一遍，唯独漏了一件事：这些代码是怎么被"装"进 JVM 的。这一期补上。它不是纯理论——文中的每一条报错都来自本机真跑，包括那句能让人愣三秒的 <code>Cannot cast com.demo.Client to com.demo.Client</code>。</p>
+
+<h2><span class="n">L0</span>先给结论：JVM 不认识版本</h2>
+
+<p>Java 的类身份是一个二元组：<strong>（定义它的 ClassLoader，全限定类名）</strong>。注意这个二元组里没有版本，也没有 jar 名，更没有 Maven 坐标。<code>com.demo.Client</code> 就是 <code>com.demo.Client</code>，v1 和 v2 在 JVM 眼里是同一个名字的两个候选实现，选谁取决于<strong>谁先被找到</strong>。</p>
+
+<p>由此推出三条铁律，后面所有现象都是它们的推论：</p>
+
+<div class="grid3">
+  <div class="card b"><div class="t">一、扁平</div><div class="d">同一个 ClassLoader 把整个 classpath 当成一个<strong>没有目录层级</strong>的抽屉，包名只是名字的一部分，不构成隔离。</div></div>
+  <div class="card r"><div class="t">二、先到先得</div><div class="d">同名类只会被 <code>defineClass</code> 一次。后面那 jar 里的同名类<strong>永远不会被加载</strong>——不报错，安静地消失。</div></div>
+  <div class="card g"><div class="t">三、延迟解析</div><div class="d">编译期只记符号引用，真正去"找那个方法"是在<strong>第一次执行到那条字节码</strong>时，所以故障常在运行几分钟后才出现。</div></div>
+</div>
+
+<p>面试里最容易被追问的一句是：<strong>"那如果两个 jar 都声明了同一个版本范围的依赖，Maven 怎么处理？"</strong>——Maven 处理的是<em>坐标</em>，只保证 classpath 上出现一个版本；它管不了 jar 内部到底有没有那个类。这就是为什么 <code>dependency:tree</code> 看起来很干净，线上照样 <code>NoClassDefFoundError</code>（jar 里压根没这个类，或者被 shade 打平了）。</p>
+
+<div class="box amber">
+<div class="h">这一期想让你带走的一句话</div>
+<p>依赖冲突之所以难，不是因为它复杂，而是因为<strong>它的报错信息和真实原因隔了三层</strong>：报错说"找不到方法"，真实原因是"classpath 上那个 jar 是旧版"，而旧版为什么在，要回到 Maven 的调解树。面试答得好不好，差别往往就在你能不能把这三层一次讲清。</p>
+</div>
+
+<h2><span class="n">L1</span>实测：一行 classpath 顺序，四种不同结局</h2>
+
+<p>先把最小可复现的现场搭出来。两个 jar 提供同一个类，唯一区别是 v2 多一个方法 <code>helloV2</code>。业务代码<strong>用 v2 编译</strong>，运行时把 v1 排到 classpath 前面。</p>
+
+<pre data-lang="java"><code>// 两个 jar 里都是 com.demo.Client，只有 v2 有 helloV2
+public class Client {
+    public static final String TAG = "v1";        // v2 里是 "v2"
+    static { System.out.println("[Client static init] loaded from v1"); }
+    public String hello(String n) { return "v1:hello " + n; }
+}
+// v2 额外有：public String helloV2(String n)
+
+public class App {
+    public static void main(String[] args) {
+        System.out.println("TAG=" + Client.TAG);
+        Client c = new Client();
+        System.out.println(c.hello("a"));
+        System.out.println(c.helloV2("b"));   // 只有 v2 有
+    }
+}</code></pre>
+
+<p>用 <code>javac -cp client-v2.jar</code> 编译通过（编译器看到的是 v2）。然后换两种运行顺序：</p>
+
+<pre data-lang="text"><code>=== 运行：v1 在前 ===         java -cp "appout;client-v1.jar" App
+TAG=v2
+[Client static init] loaded from v1
+v1:hello a
+Exception in thread "main" java.lang.NoSuchMethodError:
+  'java.lang.String com.demo.Client.helloV2(java.lang.String)'
+        at App.main(App.java:7)
+
+=== 运行：v2 在前 ===         java -cp "appout;client-v2.jar" App
+TAG=v2
+[Client static init] loaded from v2
+v2:hello a
+v2:helloV2 b</code></pre>
+
+<p>这段输出里有三个细节，每一个单独拿出来都是面试题：</p>
+
+<p><strong>细节一：<code>TAG=v2</code>，但静态块打印的是 <code>loaded from v1</code>。</strong>因为 <code>static final String</code> 是编译期常量，<code>javac</code> 在编译 <code>App</code> 时就把 <code>"v2"</code> 这个字面量<em>写进了 App.class 的常量池</em>，运行期根本不去读 <code>Client.TAG</code> 这个字段。所以"我把配置常量改了、重新打包、为什么线上不生效"——因为调用方没重新编译。修法：别用 <code>static final</code> 存可变配置，或者用 <code>static final</code> 但确保全量重编（Maven 的增量编译在这里经常坑人）。</p>
+
+<p><strong>细节二：静态块只打印了一次。</strong>同一个 ClassLoader 下，<code>defineClass</code> 有缓存，同名类只有一份 <code>Class</code> 对象。所以"两个版本共存"在单 loader 的 classpath 世界是个伪命题——不是共存，是覆盖。</p>
+
+<p><strong>细节三：不是启动就炸，而是执行到第 7 行才炸。</strong><code>App.class</code> 里存的是指向 <code>Client.helloV2</code> 的符号引用（常量池里的 Methodref），JVM 采用<em>惰性解析</em>：第一次执行 <code>invokevirtual</code> 时才去目标类里找方法，找不到才抛 <code>NoSuchMethodError</code>。这就是"服务跑了 40 分钟，某个低频接口第一次被调用时报错"的机制来源。</p>
+
+<figure>
+<svg viewBox="0 0 900 316" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="316" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">classpath 是一只扁平抽屉：包名只是名字，不构成隔离</text>
+
+  <text x="40" y="66" font-size="10.5" font-weight="700" fill="#6b7683">三个 jar 依次声明</text>
+  <rect x="40" y="78" width="150" height="40" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="115" y="103" text-anchor="middle" font-size="10.5" fill="#1a5fb4">client-v1.jar</text>
+  <rect x="40" y="126" width="150" height="40" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="115" y="151" text-anchor="middle" font-size="10.5" fill="#9a6400">client-v2.jar</text>
+  <rect x="40" y="174" width="150" height="40" rx="6" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="115" y="199" text-anchor="middle" font-size="10.5" fill="#6a3fa0">util-3.1.jar</text>
+
+  <line x1="190" y1="98" x2="212" y2="106" stroke="#d4dae1"/>
+  <line x1="190" y1="146" x2="212" y2="114" stroke="#d4dae1"/>
+  <line x1="190" y1="194" x2="212" y2="122" stroke="#d4dae1"/>
+  <rect x="212" y="100" width="34" height="28" rx="4" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="229" y="118" text-anchor="middle" font-size="9.5" fill="#6b7683">摊平</text>
+
+  <rect x="252" y="70" width="330" height="150" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="417" y="90" text-anchor="middle" font-size="10.5" font-weight="700" fill="#3d454e">ClassLoader 的命名空间（只有一个）</text>
+  <rect x="268" y="100" width="298" height="26" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="280" y="118" font-size="10" fill="#1a5fb4">com.demo.Client</text>
+  <text x="554" y="118" text-anchor="end" font-size="9.5" fill="#1e7d3c">← 只认这一个</text>
+  <rect x="268" y="132" width="298" height="26" rx="4" fill="#ffffff" stroke="#e4e8ed" stroke-dasharray="4 3"/>
+  <text x="280" y="150" font-size="10" fill="#b0b8c2">com.demo.Client（v2 的同名类）</text>
+  <text x="554" y="150" text-anchor="end" font-size="9.5" fill="#c62828">← 永不被加载</text>
+  <rect x="268" y="164" width="298" height="26" rx="4" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="280" y="182" font-size="10" fill="#3d454e">com.util.Helper</text>
+  <text x="554" y="182" text-anchor="end" font-size="9.5" fill="#6b7683">← 独生子，无争议</text>
+
+  <rect x="614" y="70" width="246" height="150" rx="8" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="737" y="92" text-anchor="middle" font-size="10.5" font-weight="700" fill="#c62828">三种结局</text>
+  <text x="630" y="116" font-size="10" fill="#3d454e">① 方法不存在 → NoSuchMethodError</text>
+  <text x="630" y="138" font-size="10" fill="#3d454e">② 行为变了 → 静默错误，最贵</text>
+  <text x="630" y="160" font-size="10" fill="#3d454e">③ 常量内联 → 改了也不生效</text>
+  <text x="630" y="188" font-size="9.5" fill="#c62828">都不报"版本冲突"，全靠人推</text>
+
+  <text x="40" y="256" font-size="10.5" font-weight="700" fill="#3d454e">为什么"加个 jar 就好了"这种修法很危险</text>
+  <text x="40" y="276" font-size="10" fill="#6b7683">它把 v2 放到 v1 前面，看起来修好了第一处报错，但所有<tspan font-weight="700" fill="#c62828">没报错</tspan></text>
+  <text x="40" y="292" font-size="10" fill="#6b7683">的调用点也跟着换成了 v2 的实现——包括那些你以为没动的业务。</text>
+  <text x="450" y="276" font-size="10" fill="#6b7683">正确做法是反查「谁把 v1 带进来了」（L4 的</text>
+  <text x="450" y="292" font-size="10" fill="#6b7683">dependency:tree -Dverbose），排除掉，而不是盖上去。</text>
+</svg>
+<figcaption><b>图 1 · classpath 是一只扁平抽屉。</b>三个 jar 摊进同一个命名空间后，同名类只剩一个位置；其余候选不会报冲突，只会安静消失。</figcaption>
+</figure>
+
+<div class="box red">
+<div class="h">上面图里那个「<b>没报错</b>的调用点」值得单独画一张</div>
+<p>因为它是真实事故的主要形态。加 jar 修 <code>NoSuchMethodError</code>，往往把另外十个原本正常的方法实现换掉了——那些方法<strong>签名兼容、行为不兼容</strong>。日志里不会有一行异常，只有报表数字慢慢歪掉。这类问题平均发现时间以"天"计，而 <code>NoSuchMethodError</code> 只要几秒。</p>
+</div>
+<h2><span class="n">L2</span>七种症状对照：从 <code>NoSuchMethodError</code> 到 <code>Cannot cast X to X</code></h2>
+
+<p>依赖问题的坑在于：<strong>同一个根因，报出来的异常完全不同</strong>，而每种异常都有更常见的"正常原因"。所以面试时能把异常和时机对上号，比背异常名有用得多。</p>
+
+<table>
+<thead><tr><th style="width:26%">异常</th><th style="width:14%">抛出时机</th><th style="width:30%">真实含义</th><th>最典型场景</th></tr></thead>
+<tbody>
+<tr><td><code>NoSuchMethodError</code></td><td>首次执行调用指令</td><td>类找到了，方法签名对不上</td><td>编译用新版、运行用旧版</td></tr>
+<tr><td><code>NoSuchFieldError</code></td><td>首次读写字段</td><td>字段被删/改名/改类型</td><td>常量类被重构后未全量重编</td></tr>
+<tr><td><code>NoClassDefFoundError</code></td><td>首次触发类初始化</td><td>类在编译期存在、运行期找不到；或静态块上次抛过异常（此时附带 <code>Could not initialize class</code>）</td><td>scope 写成 <code>provided</code>、打 fat jar 时漏包</td></tr>
+<tr><td><code>AbstractMethodError</code></td><td>首次调用接口方法</td><td>接口新增了方法，实现类是旧版</td><td>接口 jar 升级、实现 jar 未升级</td></tr>
+<tr><td><code>IncompatibleClassChangeError</code></td><td>首次使用该类</td><td>class 与 interface 互转、静态/实例成员错位</td><td>SLF4J 1.7（class）→ 2.0（interface）混用</td></tr>
+<tr><td><code>ClassCastException: Cannot cast X to X</code></td><td>强制转换时</td><td>同名类被<strong>两个 ClassLoader</strong> 各定义了一次</td><td>容器、插件、agent、热部署</td></tr>
+<tr><td><code>LinkageError: loader constraint violation</code></td><td>链接期</td><td>两个 loader 定义了同名类，在下游共享类型处冲突</td><td>Tomcat 的 webapp loader 与 shared loader</td></tr>
+</tbody>
+</table>
+
+<p>最后两条是"看起来最不像 bug 的 bug"。用一段 20 行的代码就能复现：同一个 jar，交给两个互不相干的 <code>URLClassLoader</code> 各加载一次。</p>
+
+<pre data-lang="java"><code>URL u = new File("client-v2.jar").toURI().toURL();
+URLClassLoader l1 = new URLClassLoader(new URL[]{u}, null);   // parent = null，故意断开父子
+URLClassLoader l2 = new URLClassLoader(new URL[]{u}, null);
+Class&lt;?&gt; c1 = l1.loadClass("com.demo.Client");
+Class&lt;?&gt; c2 = l2.loadClass("com.demo.Client");
+System.out.println("c1 == c2 ? " + (c1 == c2));
+Object o = c1.getDeclaredConstructor().newInstance();
+c2.cast(o);      // 类型完全一样，cast 却失败</code></pre>
+
+<pre data-lang="text"><code>c1 == c2 ? false
+c1 loader=java.net.URLClassLoader@2ff4acd0
+c2 loader=java.net.URLClassLoader@54bedef2
+[Client static init] loaded from v2
+CAST FAILED -&gt; Cannot cast com.demo.Client to com.demo.Client</code></pre>
+
+<p><code>Cannot cast com.demo.Client to com.demo.Client</code>——这行字第一次见的人会以为是 JDK 的 bug，其实是类身份的精确表述：类型检查比的是 <code>Class</code> 对象引用，而 <code>Class</code> 对象里记着 loader。<strong>同一个字节数组，被两个 loader 各 <code>defineClass</code> 一次，就是两个类型。</strong></p>
+
+<div class="box purple">
+<div class="h">为什么这条对面试特别加分</div>
+<p>它能一路解释到"为什么 Tomcat 里两个 webapp 的同名类不能互相传对象""为什么 Spring Boot DevTools 热重启后会 <code>ClassCastException</code>""为什么 Arthas 的 <code>watch</code> 增强过的类和没增强的不是同一个类"。一个知识点串起三四个场景，比背十条例题划算。</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 900 306" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="306" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">同一个根因，五种抛出时机：越晚出现，越难查</text>
+
+  <line x1="52" y1="96" x2="852" y2="96" stroke="#d4dae1" stroke-width="2"/>
+  <polygon points="852,96 840,90 840,102" fill="#d4dae1"/>
+
+  <circle cx="130" cy="96" r="7" fill="#6b7683"/>
+  <circle cx="292" cy="96" r="7" fill="#9a6400"/>
+  <circle cx="454" cy="96" r="7" fill="#1a5fb4"/>
+  <circle cx="616" cy="96" r="7" fill="#c62828"/>
+  <circle cx="790" cy="96" r="7" fill="#6a3fa0"/>
+
+  <text x="130" y="76" text-anchor="middle" font-size="10.5" font-weight="700" fill="#3d454e">javac</text>
+  <text x="292" y="76" text-anchor="middle" font-size="10.5" font-weight="700" fill="#9a6400">加载</text>
+  <text x="454" y="76" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a5fb4">链接·解析</text>
+  <text x="616" y="76" text-anchor="middle" font-size="10.5" font-weight="700" fill="#c62828">首次执行</text>
+  <text x="790" y="76" text-anchor="middle" font-size="10.5" font-weight="700" fill="#6a3fa0">类型转换</text>
+
+  <text x="130" y="118" text-anchor="middle" font-size="9.5" fill="#6b7683">符号引用写进 class</text>
+  <text x="292" y="118" text-anchor="middle" font-size="9.5" fill="#6b7683">findClass 找不到</text>
+  <text x="454" y="118" text-anchor="middle" font-size="9.5" fill="#6b7683">loader 约束</text>
+  <text x="616" y="118" text-anchor="middle" font-size="9.5" fill="#6b7683">invokevirtual</text>
+  <text x="790" y="118" text-anchor="middle" font-size="9.5" fill="#6b7683">checkcast</text>
+
+  <rect x="52" y="146" width="156" height="92" rx="7" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="130" y="168" text-anchor="middle" font-size="10" font-weight="700" fill="#3d454e">不报错</text>
+  <text x="130" y="188" text-anchor="middle" font-size="9.5" fill="#3d454e">编译期只认签名</text>
+  <text x="130" y="206" text-anchor="middle" font-size="9.5" fill="#c62828">埋雷阶段</text>
+  <text x="130" y="226" text-anchor="middle" font-size="9.5" fill="#6b7683">代价 = 0，风险最大</text>
+
+  <rect x="222" y="146" width="156" height="92" rx="7" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="300" y="168" text-anchor="middle" font-size="9.5" font-weight="700" fill="#9a6400">NoClassDefFound</text>
+  <text x="300" y="188" text-anchor="middle" font-size="9.5" fill="#3d454e">启动即失败</text>
+  <text x="300" y="206" text-anchor="middle" font-size="9.5" fill="#1e7d3c">好查：缺 jar</text>
+  <text x="300" y="226" text-anchor="middle" font-size="9.5" fill="#6b7683">排查 ≈ 5 分钟</text>
+
+  <rect x="392" y="146" width="156" height="92" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="470" y="168" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1a5fb4">LinkageError</text>
+  <text x="470" y="188" text-anchor="middle" font-size="9.5" fill="#3d454e">constraint violation</text>
+  <text x="470" y="206" text-anchor="middle" font-size="9.5" fill="#9a6400">中查：两 loader</text>
+  <text x="470" y="226" text-anchor="middle" font-size="9.5" fill="#6b7683">要看 -verbose:class</text>
+
+  <rect x="562" y="146" width="156" height="92" rx="7" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="640" y="168" text-anchor="middle" font-size="9.5" font-weight="700" fill="#c62828">NoSuchMethod</text>
+  <text x="640" y="188" text-anchor="middle" font-size="9.5" fill="#3d454e">NoSuchField</text>
+  <text x="640" y="206" text-anchor="middle" font-size="9.5" fill="#c62828">可能几个月后才爆</text>
+  <text x="640" y="226" text-anchor="middle" font-size="9.5" fill="#6b7683">低频分支首次触发</text>
+
+  <rect x="732" y="146" width="120" height="92" rx="7" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="792" y="168" text-anchor="middle" font-size="9.5" font-weight="700" fill="#6a3fa0">Cast 同名</text>
+  <text x="792" y="188" text-anchor="middle" font-size="9.5" fill="#3d454e">最迷惑</text>
+  <text x="792" y="206" text-anchor="middle" font-size="9.5" fill="#c62828">报错自相矛盾</text>
+  <text x="792" y="226" text-anchor="middle" font-size="9.5" fill="#6b7683">容易误判为 JDK bug</text>
+
+  <text x="52" y="266" font-size="10" fill="#6b7683">排查顺序建议：先看 <tspan font-weight="700" fill="#3d454e">-verbose:class</tspan> 确认到底哪个 jar 被加载了，再回去看 Maven 树。</text>
+  <text x="52" y="286" font-size="10" fill="#6b7683">反过来（先改 pom 试版本）是最常见的错误顺序——它把"定位"换成了"试错"。</text>
+</svg>
+<figcaption><b>图 2 · 五种抛出时机。</b>越靠右越难查：编译期只记签名（不报错）、加载期缺 jar（好查）、链接期双 loader（中查）、首次执行缺方法（可能几个月后）、类型转换报同名（最迷惑）。</figcaption>
+</figure>
+
+<h2><span class="n">L3</span>Maven 的三条调解规则与五张牌</h2>
+
+<p>Maven 不解决"类"的问题，它只保证一件事：<strong>同一个 groupId:artifactId 在 classpath 上只出现一个版本</strong>。选谁，由三条规则按顺序裁决。</p>
+
+<div class="grid3">
+  <div class="card b"><div class="t">规则一 · 最短路径优先</div><div class="d">依赖树里<strong>深度小</strong>的赢。直接依赖（深度 1）永远压过传递依赖（深度 2+），哪怕传递的那个版本更高。</div></div>
+  <div class="card a"><div class="t">规则二 · 同深度先声明</div><div class="d">深度相同时，<strong>POM 里写在前面</strong>的赢。这就是"调换 dependencies 顺序能改行为"的原因——它确实是有效操作，可复现。</div></div>
+  <div class="card g"><div class="t">规则三 · 管理段强制</div><div class="d"><code>dependencyManagement</code> 里声明的版本<strong>覆盖</strong>以上两条，对传递依赖也生效（只要坐标匹配）。BOM 靠这条生效。</div></div>
+</div>
+
+<figure>
+<svg viewBox="0 0 900 316" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="316" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">同一棵树上三个候选：谁赢取决于"深度"和"声明顺序"</text>
+
+  <rect x="360" y="48" width="180" height="34" rx="6" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="450" y="70" text-anchor="middle" font-size="10.5" font-weight="700" fill="#3d454e">my-app（根）</text>
+
+  <line x1="450" y1="82" x2="450" y2="102" stroke="#d4dae1"/>
+  <line x1="180" y1="102" x2="720" y2="102" stroke="#d4dae1"/>
+  <line x1="180" y1="102" x2="180" y2="118" stroke="#d4dae1"/>
+  <line x1="450" y1="102" x2="450" y2="118" stroke="#d4dae1"/>
+  <line x1="720" y1="102" x2="720" y2="118" stroke="#d4dae1"/>
+
+  <rect x="90" y="118" width="180" height="34" rx="6" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="180" y="140" text-anchor="middle" font-size="10" fill="#c62828">lib-a 1.0（depth 1）</text>
+  <rect x="360" y="118" width="180" height="34" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="450" y="140" text-anchor="middle" font-size="10" fill="#1a5fb4">lib-b 1.0（depth 1）</text>
+  <rect x="630" y="118" width="180" height="34" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="720" y="140" text-anchor="middle" font-size="10" fill="#9a6400">lib-c 1.0（depth 1）</text>
+
+  <line x1="180" y1="152" x2="180" y2="170" stroke="#d4dae1"/>
+  <line x1="450" y1="152" x2="450" y2="170" stroke="#d4dae1"/>
+  <line x1="720" y1="152" x2="720" y2="170" stroke="#d4dae1"/>
+
+  <text x="180" y="188" text-anchor="middle" font-size="9.5" fill="#6b7683">↓</text>
+  <text x="450" y="188" text-anchor="middle" font-size="9.5" fill="#6b7683">↓</text>
+  <text x="720" y="188" text-anchor="middle" font-size="9.5" fill="#6b7683">↓</text>
+
+  <rect x="90" y="198" width="180" height="34" rx="6" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="180" y="220" text-anchor="middle" font-size="9.5" fill="#3d454e">core 2.0（depth 2）</text>
+  <rect x="360" y="198" width="180" height="34" rx="6" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="450" y="220" text-anchor="middle" font-size="9.5" fill="#3d454e">core 1.5（depth 2）</text>
+  <rect x="630" y="198" width="180" height="34" rx="6" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="720" y="220" text-anchor="middle" font-size="9.5" fill="#3d454e">core 1.5（depth 2）</text>
+
+  <rect x="40" y="252" width="410" height="48" rx="7" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="56" y="272" font-size="10" font-weight="700" fill="#1e7d3c">并列 depth 2 → 比"谁先声明"</text>
+  <text x="56" y="290" font-size="9.5" fill="#3d454e">lib-a 写在 lib-b 前面 ⇒ core 2.0 胜（与版本高低无关）</text>
+
+  <rect x="470" y="252" width="390" height="48" rx="7" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="486" y="272" font-size="10" font-weight="700" fill="#9a6400">若管理段声明 core 1.5</text>
+  <text x="486" y="290" font-size="9.5" fill="#3d454e">三条规则全部让位 —— 1.5 强制生效</text>
+</svg>
+<figcaption><b>图 3 · 调解三规则。</b>注意左下的结论：<b>版本高低完全不参与裁决</b>——1.5 明明更旧、却有两条路径指向它，仍然输给唯一路径的 2.0。这是被问得最多、也最容易答错的一条。</figcaption>
+</figure>
+
+<p>除了三条规则，还有五张"手动牌"，用途完全不同，面试里能分清就是加分项：</p>
+
+<table>
+<thead><tr><th style="width:22%">手段</th><th style="width:40%">作用</th><th>典型误用</th></tr></thead>
+<tbody>
+<tr><td><code>dependencyManagement</code></td><td>只<strong>约束</strong>版本，不引入依赖；对传递依赖同样生效</td><td>以为写了就会把 jar 加进来，结果编译报"找不到包"</td></tr>
+<tr><td><code>exclusions</code></td><td>从某条依赖里<strong>按坐标</strong>摘掉传递项</td><td>以为能按包名排除；同一个 groupId 下多个 artifact 要各写一条</td></tr>
+<tr><td><code>optional=true</code></td><td>自己不传递，下游要用得自己声明</td><td>以为能"藏起"依赖，结果下游启动就 <code>NoClassDefFoundError</code></td></tr>
+<tr><td><code>scope</code></td><td>控制<strong>可见性 + 传递性</strong>（见下表）</td><td>把运行期必须的包写成 <code>provided</code>，本地能跑、容器炸</td></tr>
+<tr><td><code>import</code> + BOM</td><td>把一整套版本搬进管理段</td><td>忘了 <code>&lt;type&gt;pom&lt;/type&gt;&lt;scope&gt;import&lt;/scope&gt;</code> 两个都要写</td></tr>
+</tbody>
+</table>
+
+<p>scope 的传递矩阵是必背的六行，因为它决定了"本地 IDE 能跑、打出来的包却缺类"：</p>
+
+<figure>
+<svg viewBox="0 0 900 262" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="262" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">scope 传递矩阵：✓ 会传给下游，✗ 不会</text>
+
+  <text x="30" y="66" font-size="9.5" font-weight="700" fill="#6b7683">本项目 \ 下游</text>
+  <text x="316" y="60" text-anchor="middle" font-size="9.5" font-weight="700" fill="#6b7683">compile</text>
+  <text x="436" y="60" text-anchor="middle" font-size="9.5" font-weight="700" fill="#6b7683">runtime</text>
+  <text x="556" y="60" text-anchor="middle" font-size="9.5" font-weight="700" fill="#6b7683">test</text>
+  <text x="676" y="60" text-anchor="middle" font-size="9.5" font-weight="700" fill="#6b7683">provided</text>
+  <text x="796" y="60" text-anchor="middle" font-size="9.5" font-weight="700" fill="#6b7683">编译可见</text>
+
+  <rect x="30" y="72" width="240" height="26" fill="#eef2f6"/>
+  <text x="42" y="90" font-size="10" font-weight="700" fill="#3d454e">compile</text>
+  <rect x="286" y="72" width="120" height="26" fill="#e9f5ec" stroke="#ffffff"/>
+  <text x="346" y="90" text-anchor="middle" font-size="11" font-weight="700" fill="#1e7d3c">✓</text>
+  <rect x="406" y="72" width="120" height="26" fill="#e9f5ec" stroke="#ffffff"/>
+  <text x="466" y="90" text-anchor="middle" font-size="11" font-weight="700" fill="#1e7d3c">✓</text>
+  <rect x="526" y="72" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="586" y="90" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <rect x="646" y="72" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="706" y="90" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <text x="790" y="90" text-anchor="middle" font-size="9.5" fill="#1e7d3c">✓ 是</text>
+
+  <rect x="30" y="100" width="240" height="26" fill="#eef2f6"/>
+  <text x="42" y="118" font-size="10" font-weight="700" fill="#3d454e">runtime</text>
+  <rect x="286" y="100" width="120" height="26" fill="#e9f5ec" stroke="#ffffff"/>
+  <text x="346" y="118" text-anchor="middle" font-size="11" font-weight="700" fill="#1e7d3c">✓</text>
+  <rect x="406" y="100" width="120" height="26" fill="#e9f5ec" stroke="#ffffff"/>
+  <text x="466" y="118" text-anchor="middle" font-size="11" font-weight="700" fill="#1e7d3c">✓</text>
+  <rect x="526" y="100" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="586" y="118" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <rect x="646" y="100" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="706" y="118" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <text x="790" y="118" text-anchor="middle" font-size="9.5" fill="#c62828">✗ 否</text>
+
+  <rect x="30" y="128" width="240" height="26" fill="#eef2f6"/>
+  <text x="42" y="146" font-size="10" font-weight="700" fill="#3d454e">test</text>
+  <rect x="286" y="128" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="346" y="146" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <rect x="406" y="128" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="466" y="146" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <rect x="526" y="128" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="586" y="146" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <rect x="646" y="128" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="706" y="146" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <text x="790" y="146" text-anchor="middle" font-size="9.5" fill="#1e7d3c">✓ 是</text>
+
+  <rect x="30" y="156" width="240" height="26" fill="#eef2f6"/>
+  <text x="42" y="174" font-size="10" font-weight="700" fill="#3d454e">provided</text>
+  <rect x="286" y="156" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="346" y="174" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <rect x="406" y="156" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="466" y="174" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <rect x="526" y="156" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="586" y="174" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <rect x="646" y="156" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="706" y="174" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <text x="790" y="174" text-anchor="middle" font-size="9.5" fill="#1e7d3c">✓ 是</text>
+
+  <rect x="30" y="184" width="240" height="26" fill="#eef2f6"/>
+  <text x="42" y="202" font-size="10" font-weight="700" fill="#3d454e">system（已废弃）</text>
+  <rect x="286" y="184" width="120" height="26" fill="#fdf4e3" stroke="#ffffff"/>
+  <text x="346" y="202" text-anchor="middle" font-size="10" fill="#9a6400">✓ 但需 systemPath</text>
+  <rect x="406" y="184" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="466" y="202" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <rect x="526" y="184" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="586" y="202" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <rect x="646" y="184" width="120" height="26" fill="#fdeceb" stroke="#ffffff"/>
+  <text x="706" y="202" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">✗</text>
+  <text x="790" y="202" text-anchor="middle" font-size="9.5" fill="#1e7d3c">✓ 是</text>
+
+  <text x="30" y="238" font-size="9.5" fill="#6b7683">记住一行就够：只有 <tspan font-weight="700" fill="#3d454e">compile</tspan> 和 <tspan font-weight="700" fill="#3d454e">runtime</tspan> 会往下游传递；<tspan font-weight="700" fill="#c62828">provided 不传递</tspan>——</text>
+  <text x="30" y="254" font-size="9.5" fill="#6b7683">这正是"本地能跑、部署缺类"最常见的原因（容器提供了 servlet-api，你的下游却以为它还在）。</text>
+</svg>
+<figcaption><b>图 4 · scope 传递矩阵。</b>列是"下游项目的 scope"，格子里是"这个依赖会不会传下去"。<code>provided</code> 全部不传递，是部署期缺类的主力原因。</figcaption>
+</figure>
+
+<div class="box amber">
+<div class="h">一个常被追问的细节：<code>dependencyManagement</code> 到底管不管传递依赖？</div>
+<p>管。只要坐标（groupId:artifactId）匹配，<strong>无论它出现在树的多深</strong>，都会被强制改成管理段里的版本。这一点和 <code>dependencies</code> 里的直接声明不同——后者只影响"我自己这一层"。所以 BOM 才能一次锁住上百个包：它不是逐条排除，而是"凡匹配即强制"。</p>
+</div>
+<h2><span class="n">L4</span>四道防线：让冲突在"发生之前"被拦住</h2>
+
+<p>面试里问"你怎么排查依赖冲突"，八成人只答得出 <code>mvn dependency:tree</code>。这只回答了"怎么查"，没回答"怎么不让它发生"。真正的工程答案是四道防线，按成本从低到高排：</p>
+
+<table>
+<thead><tr><th style="width:16%">防线</th><th style="width:26%">手段</th><th style="width:26%">能拦住什么</th><th>漏什么</th></tr></thead>
+<tbody>
+<tr><td>编译/构建期</td><td><code>maven-enforcer-plugin</code><br><code>bannedDependencies</code> / <code>dependencyConvergence</code></td><td>黑名单包（如 log4j-core 旧版）、同一坐标多版本未收敛</td><td>拦不住"版本收敛了但 jar 里没这个类"</td></tr>
+<tr><td>打包期</td><td><code>maven-shade-plugin</code> + <code>relocation</code></td><td>两个库依赖同一第三方包的不同版本 → 把其中一个改名隔离</td><td>打平会丢 <code>META-INF/versions</code>（见 L8）</td></tr>
+<tr><td>测试期</td><td><code>ArchUnit</code> / 自定义测试断言类路径</td><td>层次越界、跨模块引用 internal 包、禁止的依赖方向</td><td>需要人先写规则，否则形同虚设</td></tr>
+<tr><td>运行期</td><td><code>-verbose:class</code> / <code>-Xlog:class+load</code></td><td>事后定位"到底是哪个 jar 被加载了"</td><td>只能事后，且日志量大</td></tr>
+</tbody>
+</table>
+
+<p>最有用的一条命令，是把"谁把旧版带进来了"直接问出来——注意 <code>-Dverbose</code>，它会显示被 <em>omitted for conflict</em> 的分支，那才是真相：</p>
+
+<pre data-lang="bash"><code># 只显示某个坐标的所有路径（含被裁决掉的分支）
+mvn dependency:tree -Dverbose -Dincludes=com.google.guava:guava
+
+# 输出形如：
+# [INFO] +- com.foo:bar:jar:1.0:compile
+# [INFO] |  \- (com.google.guava:guava:jar:31.1-jre:compile - omitted for conflict with 32.1.3-jre)
+# [INFO] \- com.google.guava:guava:jar:32.1.3-jre:compile
+
+# 检查同一坐标是否被重复声明（不报错但会让人误判）
+mvn dependency:analyze-duplicate
+
+# 收敛失败就构建失败：适合放进 CI
+mvn enforcer:enforce -Drules=dependencyConvergence</code></pre>
+
+<p>还有一个只在真实项目里才会遇到的坑：<strong>Spring Boot 的版本仲裁有两套入口，优先级不同</strong>。<code>spring-boot-dependencies</code> 把上千个版本写成了 Maven 属性（<code>&lt;guava.version&gt;</code> 这种），你在自己 pom 里重定义属性<em>只对 BOM 内部生效</em>；要覆盖某个包的版本，正确做法是在自己的 <code>dependencyManagement</code> 里显式写坐标——它的优先级高于 BOM 的属性替换。</p>
+
+<figure>
+<svg viewBox="0 0 900 292" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="292" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">四道防线：越往左越便宜，越往右越接近真相</text>
+
+  <rect x="34" y="52" width="196" height="120" rx="8" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="132" y="74" text-anchor="middle" font-size="11" font-weight="700" fill="#1a5fb4">① 构建期 enforcer</text>
+  <text x="48" y="96" font-size="9.5" fill="#3d454e">bannedDependencies</text>
+  <text x="48" y="114" font-size="9.5" fill="#3d454e">dependencyConvergence</text>
+  <text x="48" y="136" font-size="9.5" fill="#1e7d3c">成本：配一次，永久生效</text>
+  <text x="48" y="156" font-size="9.5" fill="#c62828">盲区：jar 内容不完整</text>
+
+  <rect x="246" y="52" width="196" height="120" rx="8" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="344" y="74" text-anchor="middle" font-size="11" font-weight="700" fill="#1e7d3c">② 打包期 shade</text>
+  <text x="260" y="96" font-size="9.5" fill="#3d454e">relocation 改包名</text>
+  <text x="260" y="114" font-size="9.5" fill="#3d454e">两个版本可以共存</text>
+  <text x="260" y="136" font-size="9.5" fill="#1e7d3c">成本：包体积变大</text>
+  <text x="260" y="156" font-size="9.5" fill="#c62828">盲区：丢 MR 与 module-info</text>
+
+  <rect x="458" y="52" width="196" height="120" rx="8" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="556" y="74" text-anchor="middle" font-size="11" font-weight="700" fill="#9a6400">③ 测试期 ArchUnit</text>
+  <text x="472" y="96" font-size="9.5" fill="#3d454e">noClasses().that()...</text>
+  <text x="472" y="114" font-size="9.5" fill="#3d454e">守层次 / 守方向</text>
+  <text x="472" y="136" font-size="9.5" fill="#1e7d3c">成本：写规则要半天</text>
+  <text x="472" y="156" font-size="9.5" fill="#c62828">盲区：只管自己写的代码</text>
+
+  <rect x="670" y="52" width="196" height="120" rx="8" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="768" y="74" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">④ 运行期 -verbose:class</text>
+  <text x="684" y="96" font-size="9.5" fill="#3d454e">-Xlog:class+load=info</text>
+  <text x="684" y="114" font-size="9.5" fill="#3d454e">看 jar 路径与来源</text>
+  <text x="684" y="136" font-size="9.5" fill="#c62828">成本：日志几个 G</text>
+  <text x="684" y="156" font-size="9.5" fill="#1e7d3c">价值：唯一能证伪的</text>
+
+  <text x="34" y="196" font-size="10" font-weight="700" fill="#3d454e">四道防线各抓什么</text>
+  <text x="34" y="218" font-size="9.5" fill="#6b7683">① 抓"不该出现"　② 抓"必须共存"　③ 抓"方向不对"　④ 抓"到底是谁"</text>
+
+  <rect x="34" y="232" width="832" height="44" rx="7" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="48" y="250" font-size="9.5" fill="#3d454e">一句话记法：冲突要在<tspan font-weight="700" fill="#1a5fb4">还没人写代码的时候</tspan>就变红（CI 挂掉），</text>
+  <text x="48" y="266" font-size="9.5" fill="#3d454e">而不是等线上某个低频接口第一次被调用时才变红（凌晨三点）。</text>
+</svg>
+<figcaption><b>图 5 · 四道防线。</b>① 禁黑名单 ② 允许共存 ③ 守依赖方向 ④ 事后取证。多数团队只做了 ④，所以永远在救火。</figcaption>
+</figure>
+
+<h2><span class="n">L5</span>Spring Boot 的套娃 jar：为什么 <code>java -cp app.jar</code> 跑不起来</h2>
+
+<p>这是一个非常好的"分层理解"考点。执行 <code>mvn package</code> 后，Spring Boot 的产物长这样：</p>
+
+<figure>
+<svg viewBox="0 0 900 336" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="336" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">可执行 jar 的三层结构：类不在根目录，这在 classpath 眼里等于不存在</text>
+
+  <rect x="40" y="52" width="330" height="212" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="56" y="72" font-size="10" font-weight="700" fill="#3d454e">app.jar</text>
+
+  <rect x="56" y="82" width="298" height="34" rx="4" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="68" y="104" font-size="9.5" fill="#3d454e">META-INF/MANIFEST.MF</text>
+
+  <rect x="56" y="122" width="298" height="34" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="68" y="144" font-size="9.5" fill="#1a5fb4">BOOT-INF/classes/     ← 你的 .class</text>
+
+  <rect x="56" y="162" width="298" height="60" rx="4" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="68" y="182" font-size="9.5" fill="#9a6400">BOOT-INF/lib/         ← 几百个嵌套 jar</text>
+  <text x="68" y="200" font-size="9" fill="#6b7683">spring-core-6.2.x.jar / jackson / tomcat...</text>
+  <text x="68" y="216" font-size="9" fill="#6b7683">每一个都是完整的 jar 文件，不是解开的 class</text>
+
+  <rect x="56" y="228" width="298" height="30" rx="4" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="68" y="248" font-size="9.5" fill="#6a3fa0">org/springframework/boot/loader/  ← 启动器</text>
+
+  <rect x="404" y="52" width="456" height="102" rx="8" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="420" y="74" font-size="10.5" font-weight="700" fill="#c62828">MANIFEST 里两个 Main-Class 的分工</text>
+  <text x="420" y="96" font-size="9.5" fill="#3d454e">Main-Class:  org.springframework.boot.loader.JarLauncher</text>
+  <text x="420" y="116" font-size="9.5" fill="#3d454e">Start-Class: com.demo.Application   ← 你的 main</text>
+  <text x="420" y="140" font-size="9.5" fill="#6b7683">java -jar 只认 Main-Class；Start-Class 是 Boot 自己的约定</text>
+
+  <rect x="404" y="166" width="456" height="98" rx="8" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="420" y="188" font-size="10.5" font-weight="700" fill="#1e7d3c">为什么 java -cp app.jar 必失败</text>
+  <text x="420" y="210" font-size="9.5" fill="#3d454e">classpath 只认 jar 根目录下的 com/demo/Application.class，</text>
+  <text x="420" y="228" font-size="9.5" fill="#3d454e">而它在 BOOT-INF/classes/ 里 → ClassNotFoundException。</text>
+  <text x="420" y="250" font-size="9.5" fill="#6b7683">同理，app.jar 也不能被别的项目当普通依赖用。</text>
+
+  <rect x="40" y="280" width="820" height="44" rx="7" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="56" y="298" font-size="9.5" fill="#3d454e">JarLauncher 做的事：用自定义 URLStreamHandler 把「jar 里的 jar」变成一个可读的 URL，</text>
+  <text x="56" y="314" font-size="9.5" fill="#3d454e">再交给 <tspan font-weight="700" fill="#1a5fb4">LaunchedURLClassLoader</tspan> 加载 —— 标准 URLClassLoader 读不了嵌套 jar，这是必须自研的原因。</text>
+</svg>
+<figcaption><b>图 6 · 套娃 jar 的三层结构。</b>类在 <code>BOOT-INF/classes</code>、依赖在 <code>BOOT-INF/lib</code>、启动器在根包。<code>JarLauncher</code> 不是"多此一举"，是因为 JDK 原生 <code>URLClassLoader</code> 无法读取 jar 内嵌的 jar。</figcaption>
+</figure>
+
+<p>由此推出三个高频追问的答案：</p>
+
+<ul>
+<li><strong>"为什么我的 Boot 可执行 jar 不能被别的模块依赖？"</strong>——因为类在 <code>BOOT-INF/classes</code>，不在 jar 根目录，javac 找不到。要用 <code>spring-boot-maven-plugin</code> 的 <code>classifier=exec</code> 保留一份普通 jar，或者用 <code>repackage</code> 留下的 <code>.original</code>。</li>
+<li><strong>"<code>BOOT-INF/lib</code> 里几百个 jar，同名类怎么裁决？"</strong>——同样是先到先得：<code>LaunchedURLClassLoader</code> 按 <code>BOOT-INF/lib</code> 里 jar 的<em>名字排序</em>遍历。<strong>注意这一点和 Maven 调解无关</strong>：Maven 决定"放哪个版本进来"，loader 决定"先看哪个 jar"，两层各管一段。</li>
+<li><strong>"怎么外挂一个不在包里的驱动？"</strong>——用 <code>PropertiesLauncher</code> + <code>loader.path</code>，它支持目录与通配符，是 Boot 里少见的"运维友好"入口。</li>
+</ul>
+<h2><span class="n">L6</span>JPMS：模块三个字，其实是三张清单</h2>
+
+<p>JDK 9 引入模块系统，十年来真正落地的项目不多——但它<strong>对所有人都有影响</strong>，因为 <code>java.base</code> 自己被模块化了，强封装从 JDK 17 起彻底生效。所以哪怕你的项目完全不用 <code>module-info</code>，你也得知道"为什么 JDK 17 之后反射 String 的内部字段会报错"。</p>
+
+<p><code>module-info.java</code> 里的关键字看着多，本质只有三张清单：<strong>我读谁</strong>、<strong>我给谁看</strong>、<strong>我给谁反射</strong>。第四组 <code>uses/provides</code> 是 SPI 的模块化写法，属于加分项。</p>
+
+<figure>
+<svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="330" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">module-info 三张清单：读谁 / 给谁看 / 给谁反射</text>
+
+  <rect x="34" y="48" width="368" height="216" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="50" y="70" font-size="10" font-weight="700" fill="#3d454e">module com.lib { ... }</text>
+
+  <text x="50" y="98" font-size="9.5" fill="#1a5fb4">requires com.base;</text>
+  <text x="50" y="116" font-size="9" fill="#6b7683">读别人（编译期+运行期都要在）</text>
+
+  <text x="50" y="142" font-size="9.5" fill="#1a5fb4">requires transitive com.api;</text>
+  <text x="50" y="160" font-size="9" fill="#6b7683">读，并且传给下游（"我也需要"）</text>
+
+  <text x="50" y="186" font-size="9.5" fill="#1e7d3c">exports com.lib.api;</text>
+  <text x="50" y="204" font-size="9" fill="#6b7683">公开这个包：编译、普通访问、反射都行</text>
+
+  <text x="50" y="230" font-size="9.5" fill="#9a6400">opens com.lib.entity to com.orm;</text>
+  <text x="50" y="248" font-size="9" fill="#6b7683">只对指定模块打开「反射深度访问」</text>
+
+  <rect x="424" y="48" width="442" height="66" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="440" y="68" font-size="10.5" font-weight="700" fill="#1a5fb4">清单① 我读谁 → requires</text>
+  <text x="440" y="88" font-size="9.5" fill="#3d454e">不写 requires，编译期就报 "package is not visible"。</text>
+  <text x="440" y="106" font-size="9.5" fill="#6b7683">这是硬门槛：编译器替你挡住了越界。</text>
+
+  <rect x="424" y="124" width="442" height="66" rx="7" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="440" y="144" font-size="10.5" font-weight="700" fill="#1e7d3c">清单② 我给谁看 → exports</text>
+  <text x="440" y="164" font-size="9.5" fill="#3d454e">不导出 ≠ 不能反射；导出 = 允许编译与普通调用。</text>
+  <text x="440" y="182" font-size="9.5" fill="#6b7683">exports ... to X 只对 X 开放（白名单式 API）。</text>
+
+  <rect x="424" y="200" width="442" height="64" rx="7" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="440" y="220" font-size="10.5" font-weight="700" fill="#9a6400">清单③ 我给谁反射 → opens</text>
+  <text x="440" y="240" font-size="9.5" fill="#3d454e">反射读私有字段/调私有方法，要 opens，不要 exports。</text>
+  <text x="440" y="258" font-size="9.5" fill="#6b7683">两个是独立的门：开了 exports 不代表能 setAccessible。</text>
+
+  <rect x="34" y="280" width="832" height="38" rx="7" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="50" y="304" font-size="9.5" fill="#3d454e">面试常问「exports 和 opens 有什么区别」——答"一个管访问、一个管反射"只能算及格，</text>
+  <text x="560" y="304" font-size="9.5" fill="#c62828">不及格：说成"opens 是导出给反射用的 exports"</text>
+</svg>
+<figcaption><b>图 7 · 三张清单。</b><code>requires</code> 管"我能不能看见"，<code>exports</code> 管"别人能不能用"，<code>opens</code> 管"别人能不能反射进去"。三件事，三个关键字，互不替代。</figcaption>
+</figure>
+
+<h3>实测：两句话就把"强封装"讲清楚了</h3>
+
+<p>先造一个模块，只导出 <code>com.lib.api</code>，另一个包 <code>com.lib.internal</code> 故意不导出。让 <code>com.app</code> 去用它：</p>
+
+<pre data-lang="text"><code>Main.java:3: error: package com.lib.internal is not visible
+import com.lib.internal.Secret;
+              ^
+  (package com.lib.internal is declared in module com.lib, which does not export it)
+1 error</code></pre>
+
+<p>这不是运行时错误，是<strong>编译期</strong>就被挡了。模块系统最有价值的地方就在这：它把"你这个包是内部实现，别用"从注释约定变成了编译错误。</p>
+
+<p>更难理解的是反射那条。同样是 <code>com.app</code>，去反射 JDK 内部的 <code>String.value</code>：</p>
+
+<pre data-lang="text"><code># 以命名模块运行（module-path）
+java.lang.reflect.InaccessibleObjectException: Unable to make field private final
+byte[] java.lang.String.value accessible: module java.base does not "opens java.lang"
+to module com.app
+
+# 以 classpath 运行（unnamed module）
+java.lang.reflect.InaccessibleObjectException: Unable to make field private final
+byte[] java.lang.String.value accessible: module java.base does not "opens java.lang"
+to unnamed module @2ff4acd0</code></pre>
+
+<p>两条文案只差最后半句，但它精确区分了两种身份：<strong>你的代码是命名模块，还是 unnamed module</strong>（classpath 上的一切都被归入 unnamed module）。这决定了 <code>--add-opens</code> 后面该写谁：</p>
+
+<pre data-lang="bash"><code># 命名模块：目标模块要写你自己的模块名
+java --add-opens java.base/java.lang=com.app --module-path out -m com.app/com.app.Peek
+
+# classpath：写 ALL-UNNAMED
+java --add-opens java.base/java.lang=ALL-UNNAMED -cp out com.app.Peek
+
+# 验证结果（加上之后）
+length=5 -&gt; setAccessible OK</code></pre>
+
+<div class="box red">
+<div class="h">三个容易记反的点</div>
+<p><strong>① <code>--add-opens</code> 与 <code>--add-exports</code> 不能互相替代。</strong>前者放宽反射（<code>setAccessible</code>），后者放宽编译期可见性（<code>import</code> 与直接调用）。给 Jackson 加 <code>--add-exports</code> 是无效的，它要的是 opens。</p>
+<p><strong>② <code>--illegal-access</code> 已经死了。</strong>本机实测：<code>Ignoring option --illegal-access=permit; support was removed in 17.0</code>。JDK 9 默认 permit（只警告）、JDK 16 默认 deny、JDK 17 删掉选项——所以"升到 17 之后一堆框架报 InaccessibleObjectException"不是框架退步，是这条路被拆了。</p>
+<p><strong>③ 强封装只针对 JDK 自己的模块和显式模块化的库。</strong>你自己放在 classpath 上的 jar（unnamed module）内部互相反射，一切照旧。</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 900 288" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="288" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">强封装的四级台阶：从"只警告"到"只剩 --add-opens"</text>
+
+  <line x1="60" y1="98" x2="848" y2="98" stroke="#d4dae1" stroke-width="3"/>
+  <polygon points="848,98 836,92 836,104" fill="#d4dae1"/>
+
+  <circle cx="150" cy="98" r="8" fill="#1e7d3c"/>
+  <circle cx="390" cy="98" r="8" fill="#9a6400"/>
+  <circle cx="630" cy="98" r="8" fill="#c62828"/>
+  <circle cx="810" cy="98" r="8" fill="#6a3fa0"/>
+
+  <text x="150" y="76" text-anchor="middle" font-size="11" font-weight="700" fill="#1e7d3c">JDK 9 ~ 15</text>
+  <text x="390" y="76" text-anchor="middle" font-size="11" font-weight="700" fill="#9a6400">JDK 16</text>
+  <text x="630" y="76" text-anchor="middle" font-size="11" font-weight="700" fill="#c62828">JDK 17 起</text>
+  <text x="810" y="76" text-anchor="middle" font-size="11" font-weight="700" fill="#6a3fa0">今天</text>
+
+  <rect x="46" y="126" width="208" height="96" rx="8" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="150" y="148" text-anchor="middle" font-size="10" font-weight="700" fill="#1e7d3c">permit（默认）</text>
+  <text x="150" y="168" text-anchor="middle" font-size="9.5" fill="#3d454e">能反射，只打一行警告</text>
+  <text x="150" y="186" text-anchor="middle" font-size="9.5" fill="#3d454e">--illegal-access=deny 可关</text>
+  <text x="150" y="208" text-anchor="middle" font-size="9" fill="#6b7683">框架密集使能"深度反射"</text>
+
+  <rect x="288" y="126" width="208" height="96" rx="8" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="392" y="148" text-anchor="middle" font-size="10" font-weight="700" fill="#9a6400">deny（默认翻面）</text>
+  <text x="392" y="168" text-anchor="middle" font-size="9.5" fill="#3d454e">默认拒绝，需显式 permit</text>
+  <text x="392" y="186" text-anchor="middle" font-size="9.5" fill="#3d454e">大量项目在这一步爆</text>
+  <text x="392" y="208" text-anchor="middle" font-size="9" fill="#6b7683">"为什么升 JDK 就起不来"</text>
+
+  <rect x="528" y="126" width="208" height="96" rx="8" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="632" y="148" text-anchor="middle" font-size="10" font-weight="700" fill="#c62828">选项被删除</text>
+  <text x="632" y="168" text-anchor="middle" font-size="9.5" fill="#3d454e">--illegal-access 失效</text>
+  <text x="632" y="186" text-anchor="middle" font-size="9.5" fill="#3d454e">只剩 --add-opens / --add-exports</text>
+  <text x="632" y="208" text-anchor="middle" font-size="9" fill="#c62828">实测：Ignoring option...</text>
+
+  <rect x="752" y="126" width="112" height="96" rx="8" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="808" y="148" text-anchor="middle" font-size="10" font-weight="700" fill="#6a3fa0">现实</text>
+  <text x="808" y="170" text-anchor="middle" font-size="9" fill="#3d454e">Spring Boot</text>
+  <text x="808" y="186" text-anchor="middle" font-size="9" fill="#3d454e">仍跑 classpath</text>
+  <text x="808" y="206" text-anchor="middle" font-size="9" fill="#6b7683">绕开而非对抗</text>
+
+  <text x="46" y="252" font-size="9.5" fill="#6b7683">一句话：JDK 9 说"我要开始关门了"，JDK 16 把门关上，JDK 17 把钥匙扔掉。</text>
+  <text x="46" y="272" font-size="9.5" fill="#6b7683">这不是兼容性事故，是设计意图——尤其对"读 String.value 做缓存优化"这类黑魔法。</text>
+</svg>
+<figcaption><b>图 8 · 强封装四级台阶。</b>JDK 16 就把默认值翻了面，JDK 17 直接删选项。今天能用的只剩 <code>--add-opens</code> 与 <code>--add-exports</code>，且必须指名道姓。</figcaption>
+</figure>
+<h2><span class="n">L7</span>split package：模块路径上最硬的一堵墙</h2>
+
+<p>classpath 允许一百个 jar 都有 <code>com.dup</code> 这个包（L1 的扁平抽屉）。模块路径不允许——模块系统的基本假设是"<strong>一个包只能属于一个模块</strong>"，因为包是 <code>exports</code> 的最小单位，如果两个模块都导出同名包，那"这个包该听谁的"就没有答案了。</p>
+
+<p>实测是这么报的（<code>all.use</code> 同时 <code>requires</code> 两个都含 <code>com.dup</code> 的模块）：</p>
+
+<pre data-lang="text"><code>module-info.java:1: error: module all.use reads package com.dup from both dup.one and dup.two
+module all.use { requires dup.one; requires dup.two; }
+^
+1 error</code></pre>
+
+<p>注意它甚至不是运行时错误，而是<strong>编译期解析失败</strong>。而如果你绕开编译、直接启动一个已存在的模块，报的是另一条：</p>
+
+<pre data-lang="text"><code>Error occurred during initialization of boot layer
+java.lang.module.FindException: Module all.use not found</code></pre>
+
+<p>第二条更阴——它不告诉你"包冲突"，只说"模块找不到"，因为 boot layer 在解析阶段就整个失败了。问"为什么启动报 Module not found 但 jar 明明在"的时候，答案往往就是某个包被两个模块切了。</p>
+
+<figure>
+<svg viewBox="0 0 900 322" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="322" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">同一个包被两个模块切走：classpath 装作没看见，模块路径直接拒绝解析</text>
+
+  <text x="40" y="56" font-size="10.5" font-weight="700" fill="#1e7d3c">classpath：允许，先到先得</text>
+  <rect x="40" y="66" width="150" height="44" rx="6" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="115" y="84" text-anchor="middle" font-size="9.5" fill="#1e7d3c">one.jar</text>
+  <text x="115" y="100" text-anchor="middle" font-size="9" fill="#6b7683">com/dup/X.class</text>
+  <rect x="40" y="118" width="150" height="44" rx="6" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="115" y="136" text-anchor="middle" font-size="9.5" fill="#1e7d3c">two.jar</text>
+  <text x="115" y="152" text-anchor="middle" font-size="9" fill="#6b7683">com/dup/Y.class</text>
+  <rect x="210" y="66" width="180" height="96" rx="6" fill="#ffffff" stroke="#c2e2cc" stroke-dasharray="4 3"/>
+  <text x="300" y="90" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1e7d3c">合成一个普通包</text>
+  <text x="300" y="112" text-anchor="middle" font-size="9" fill="#3d454e">com.dup 里有 X 又有 Y</text>
+  <text x="300" y="132" text-anchor="middle" font-size="9" fill="#6b7683">老项目常见，能跑</text>
+  <text x="300" y="150" text-anchor="middle" font-size="9" fill="#1e7d3c">✓ 不报错</text>
+
+  <text x="470" y="56" font-size="10.5" font-weight="700" fill="#c62828">module path：拒绝</text>
+  <rect x="470" y="66" width="150" height="44" rx="6" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="545" y="84" text-anchor="middle" font-size="9.5" fill="#c62828">dup.one</text>
+  <text x="545" y="100" text-anchor="middle" font-size="9" fill="#6b7683">exports com.dup</text>
+  <rect x="470" y="118" width="150" height="44" rx="6" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="545" y="136" text-anchor="middle" font-size="9.5" fill="#c62828">dup.two</text>
+  <text x="545" y="152" text-anchor="middle" font-size="9" fill="#6b7683">exports com.dup</text>
+
+  <line x1="626" y1="112" x2="672" y2="112" stroke="#c62828" stroke-width="2"/>
+  <polygon points="674,112 662,106 662,118" fill="#c62828"/>
+  <text x="668" y="98" font-size="15" font-weight="700" fill="#c62828">✕</text>
+  <rect x="690" y="66" width="176" height="96" rx="6" fill="#ffffff" stroke="#f3c9c6" stroke-dasharray="4 3"/>
+  <text x="778" y="88" text-anchor="middle" font-size="9" font-weight="700" fill="#c62828">all.use 读两个</text>
+  <text x="778" y="108" text-anchor="middle" font-size="8.5" fill="#3d454e">com.dup 从哪来？</text>
+  <text x="778" y="126" text-anchor="middle" font-size="9" fill="#c62828">编译期直接失败</text>
+  <text x="778" y="148" text-anchor="middle" font-size="8.5" fill="#6b7683">模块系统不做「合并」</text>
+
+  <rect x="40" y="190" width="826" height="52" rx="7" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="56" y="212" font-size="9.5" fill="#3d454e">为什么这是迁移的最大障碍：很多老 jar 会"顺手"带一个 <tspan font-weight="700" fill="#9a6400">javax.annotation</tspan> / <tspan font-weight="700" fill="#9a6400">com.google.common</tspan></text>
+  <text x="56" y="230" font-size="9.5" fill="#3d454e">的影子包，classpath 上相安无事，一上模块路径就两两冲突 —— 而且报错指向的是"模块找不到"。</text>
+
+  <text x="40" y="268" font-size="10" font-weight="700" fill="#3d454e">三条出路</text>
+  <text x="40" y="288" font-size="9.5" fill="#1a5fb4">① 把冲突包从其中一个模块里 shade 掉（relocation 改名），让它不再叫 com.dup</text>
+  <text x="40" y="306" font-size="9.5" fill="#1e7d3c">② 放弃模块路径，全放 classpath（Boot 项目的现实选择：一切都归入 unnamed module）</text>
+</svg>
+<figcaption><b>图 9 · split package。</b>左边 classpath 会把两个 jar 的 <code>com.dup</code> 合成一个包（能跑）；右边模块路径必须判定归属，判不出来就整体拒载。</figcaption>
+</figure>
+
+<h3>自动模块名：一个连老手都会踩的坑</h3>
+
+<p>jar 放到模块路径上却没有 <code>module-info.class</code>，它就变成「自动模块」。模块名由<strong>文件名推导</strong>：去掉 <code>.jar</code>、把非字母数字换成 <code>.</code>、去掉尾部形如 <code>-1.4.2</code> 的版本段。看着合理，实测就出问题：</p>
+
+<pre data-lang="text"><code>$ jar --describe-module --file mylib.jar
+mylib automatic
+
+$ jar --describe-module --file mylib-SNAPSHOT.jar
+mylib.SNAPSHOT automatic     # 版本段没被识别，模块名变了</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 268" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="268" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">自动模块名由文件名推导：规则简单，结果不稳定</text>
+
+  <text x="40" y="60" font-size="9.5" font-weight="700" fill="#6b7683">文件名</text>
+  <text x="330" y="60" font-size="9.5" font-weight="700" fill="#6b7683">推导出的模块名</text>
+  <text x="620" y="60" font-size="9.5" font-weight="700" fill="#6b7683">结论</text>
+
+  <rect x="40" y="70" width="270" height="30" rx="4" fill="#eef2f6"/>
+  <text x="52" y="90" font-size="9.5" fill="#3d454e">guava-32.1.3-jre.jar</text>
+  <rect x="330" y="70" width="270" height="30" rx="4" fill="#e9f5ec"/>
+  <text x="342" y="90" font-size="9.5" font-weight="700" fill="#1e7d3c">com.google.common</text>
+  <text x="620" y="90" font-size="9" fill="#1e7d3c">✓ 多段版本被识别并剥掉</text>
+
+  <rect x="40" y="106" width="270" height="30" rx="4" fill="#eef2f6"/>
+  <text x="52" y="126" font-size="9.5" fill="#3d454e">commons-lang3-3.14.0.jar</text>
+  <rect x="330" y="106" width="270" height="30" rx="4" fill="#e9f5ec"/>
+  <text x="342" y="126" font-size="9.5" font-weight="700" fill="#1e7d3c">commons.lang3</text>
+  <text x="620" y="126" font-size="9" fill="#1e7d3c">✓ 连字符变点</text>
+
+  <rect x="40" y="142" width="270" height="30" rx="4" fill="#fdeceb"/>
+  <text x="52" y="162" font-size="9.5" fill="#3d454e">mylib-SNAPSHOT.jar</text>
+  <rect x="330" y="142" width="270" height="30" rx="4" fill="#fdeceb"/>
+  <text x="342" y="162" font-size="9.5" font-weight="700" fill="#c62828">mylib.SNAPSHOT</text>
+  <text x="620" y="162" font-size="9" fill="#c62828">✗ 版本段没识别，名字带进版本</text>
+
+  <rect x="40" y="178" width="270" height="30" rx="4" fill="#fdeceb"/>
+  <text x="52" y="198" font-size="9.5" fill="#3d454e">my.lib.v2.jar（无版本号约定）</text>
+  <rect x="330" y="178" width="270" height="30" rx="4" fill="#fdeceb"/>
+  <text x="342" y="198" font-size="9.5" font-weight="700" fill="#c62828">my.lib.v2</text>
+  <text x="620" y="198" font-size="9" fill="#c62828">✗ 版本进了名字</text>
+
+  <rect x="40" y="220" width="826" height="34" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="56" y="242" font-size="9.5" fill="#3d454e">解法：在 MANIFEST 里写 <tspan font-weight="700" fill="#1a5fb4">Automatic-Module-Name: com.foo.mylib</tspan>，名字就固定了，与文件名无关。</text>
+</svg>
+<figcaption><b>图 10 · 自动模块名推导。</b>规则是"去后缀、非字母数字转点、剥尾部版本"，但 <code>-SNAPSHOT</code> 这类版本段识别不了，模块名就会跟着版本漂移。</figcaption>
+</figure>
+
+<p>这解释了一个真实痛点：<strong>你的 <code>module-info</code> 里写着 <code>requires mylib;</code>，某天依赖从 <code>mylib.jar</code> 变成 <code>mylib-SNAPSHOT.jar</code>，编译突然报"module mylib not found"</strong>——因为它的模块名变成了 <code>mylib.SNAPSHOT</code>。所以凡是要上模块路径的库，都该显式声明 <code>Automatic-Module-Name</code>。</p>
+
+<div class="box blue">
+<div class="h">顺带把一个常混的概念说清：unnamed module</div>
+<p>classpath 上的一切（所有 jar + 你的 classes 目录）被整体归入一个叫 <strong>unnamed module</strong> 的虚拟模块。它的特权是：<em>能读所有模块、导出所有包</em>。这就是"我什么 module-info 都没写，为什么还能反射"的答案——不是模块系统放过你，是你压根没进模块系统。<br>反过来，它也有一个致命缺陷：<strong>不能被命名模块 requires</strong>。所以"我们的库想被别人模块化引用"这件事，unnamed module 做不到。</p>
+</div>
+
+<h2><span class="n">L8</span>Multi-Release JAR：一份包，多个 JDK</h2>
+
+<p>JDK 9 之后很多库要"在 JDK 8 上用 8 的实现，在 17 上用 17 的实现"，但不想发两个 jar。解法是 Multi-Release JAR：把不同版本的 class 放进 <code>META-INF/versions/N/</code>，再在 MANIFEST 里加一行 <code>Multi-Release: true</code>。</p>
+
+<pre data-lang="bash"><code># 打包：base 是 8 的版本，versions/17 是 17 的版本
+javac -d bo base/com/demo/Ver.java
+javac --release 17 -d v17o v17/com/demo/Ver.java
+mkdir -p jarroot/META-INF/versions/17
+cp -r bo/. jarroot/ &amp;&amp; cp -r v17o/. jarroot/META-INF/versions/17/
+printf 'Multi-Release: true\n' &gt; mf.txt
+jar cfm mylib.jar mf.txt -C jarroot .
+
+# 实测：在 JDK 21 上跑
+runtime=21  Ver.get()=versioned(17)</code></pre>
+
+<p>选择规则一句话：<strong>取 <code>versions/</code> 下不超过当前运行版本的最高目录</strong>。所以在 21 上取 17 那份，在 8 上取 base 那份。目录号必须 ≥ 9（9 以下不允许）。</p>
+
+<figure>
+<svg viewBox="0 0 900 296" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="296" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">MR-JAR 的选择规则：取「不超过运行版本」的最高目录</text>
+
+  <rect x="40" y="52" width="300" height="176" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="56" y="72" font-size="10" font-weight="700" fill="#3d454e">mylib.jar</text>
+  <rect x="56" y="82" width="268" height="30" rx="4" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="68" y="102" font-size="9" fill="#3d454e">META-INF/MANIFEST.MF  (MR: true)</text>
+  <rect x="56" y="118" width="268" height="34" rx="4" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="68" y="139" font-size="9" fill="#6b7683">com/demo/Ver.class        ← base(8)</text>
+  <rect x="56" y="158" width="268" height="24" rx="4" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="68" y="174" font-size="9" fill="#9a6400">META-INF/versions/11/ ...</text>
+  <rect x="56" y="186" width="268" height="24" rx="4" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="68" y="202" font-size="9" fill="#1e7d3c">META-INF/versions/17/ com/demo/Ver.class</text>
+
+  <text x="380" y="72" font-size="10" font-weight="700" fill="#6b7683">运行在 JDK 21</text>
+  <line x1="380" y1="90" x2="850" y2="90" stroke="#d4dae1"/>
+  <text x="380" y="112" font-size="9" fill="#6b7683">8</text>
+  <text x="460" y="112" font-size="9" fill="#6b7683">11</text>
+  <text x="540" y="112" font-size="9" fill="#6b7683">17</text>
+  <text x="640" y="112" font-size="9" fill="#6b7683">21</text>
+  <text x="760" y="112" font-size="9" fill="#6b7683">26</text>
+
+  <line x1="400" y1="90" x2="620" y2="90" stroke="#1e7d3c" stroke-width="3"/>
+  <text x="400" y="86" font-size="9" fill="#1e7d3c">候选区（≤21）</text>
+
+  <rect x="380" y="126" width="470" height="102" rx="8" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="396" y="148" font-size="10" font-weight="700" fill="#1e7d3c">命中 versions/17（候选里最高的那个）</text>
+  <text x="396" y="170" font-size="9.5" fill="#3d454e">JDK 8 上 → 取 base；JDK 11 上 → 取 11；JDK 17/21/26 上 → 取 17</text>
+  <text x="396" y="192" font-size="9.5" fill="#c62828">若版本目录写成 8 或更低 → 打包直接报错（不允许 &lt; 9）</text>
+  <text x="396" y="214" font-size="9.5" fill="#6b7683">这是 JDK 自己的做法：java.base 里就有大量 MR 类</text>
+
+  <text x="40" y="256" font-size="9.5" fill="#9a6400">最大陷阱：shade / assembly 打平依赖时，容易把 META-INF/versions 丢掉或把两个版本的同名类塞进同一目录，</text>
+  <text x="40" y="274" font-size="9.5" fill="#9a6400">结果"在 17 上却跑 8 的实现"，且不报错 —— 症状是"升级 JDK 后性能反而变差"。</text>
+</svg>
+<figcaption><b>图 11 · MR-JAR 选择规则。</b>候选集是"≤ 运行版本的所有目录"，从中取最大。踩坑点不在选择规则，而在打包工具把 <code>META-INF/versions</code> 打平。</figcaption>
+</figure>
+<h2><span class="n">L9</span>谁在偷偷要 <code>opens</code>：一张迁移成本清单</h2>
+
+<p>「要不要把项目模块化」这个问题，真正卡住的从来不是 <code>module-info</code> 怎么写，而是<strong>你依赖的框架有多少在靠反射活着</strong>。下面这张表是迁移前该先盘的东西（经验清单，不是规范）：</p>
+
+<table>
+<thead><tr><th style="width:18%">组件</th><th style="width:24%">它要什么</th><th>为什么</th></tr></thead>
+<tbody>
+<tr><td>Spring（CGLIB 代理）</td><td><code>opens</code> 被代理类所在包</td><td>运行期生成子类、反射调父类方法；<code>@Transactional</code> 打在类上就触发</td></tr>
+<tr><td>Spring（字段注入）</td><td><code>opens</code> 含 <code>@Autowired</code> 字段的包</td><td><code>Field.set</code> 需要深度访问</td></tr>
+<tr><td>Jackson</td><td><code>opens</code> DTO 包</td><td>反射调 getter/setter；record 的组件访问器也走反射</td></tr>
+<tr><td>Hibernate / JPA</td><td><code>opens</code> 实体包</td><td>无参构造 + 字段直写；字节码增强还要 <code>Instrumentation</code></td></tr>
+<tr><td>MyBatis</td><td><code>opens</code> 实体包</td><td>反射 <code>setXxx</code> 或直接写字段</td></tr>
+<tr><td>Mockito（inline）</td><td><code>--add-opens</code> + agent</td><td>inline mock maker 直接改字节码，比普通 mock 更容易被挡</td></tr>
+<tr><td>Netty</td><td><code>--add-exports java.base/jdk.internal.misc</code></td><td><code>PlatformDependent</code> 探测 <code>Unsafe</code>、堆外内存地址</td></tr>
+<tr><td>Lombok</td><td>编译期 <code>--add-exports jdk.compiler/...</code></td><td>它改的是 AST，跟运行时 opens 无关——<strong>这一点最常被搞混</strong></td></tr>
+</tbody>
+</table>
+
+<p>看到这张表你就明白为什么 Spring Boot 到今天还是 classpath 模式：把上面这些全搬上模块路径，需要一个<em>几十条 <code>--add-opens</code></em> 的启动脚本，收益却只是"编译期能挡住内部包被引用"——而这件事故完全可以用 ArchUnit 在测试期做到（见 L10）。<strong>投入产出比不成立，不是技术不行。</strong></p>
+
+<div class="box green">
+<div class="h">面试里这样答，比背概念高一个档</div>
+<p>"我们没上 JPMS，但不是因为不了解——我评估过：<code>module-info</code> 的收益是编译期强边界和更小的 jlink 镜像；成本是 Spring/Hibernate/Jackson 全家桶的 <code>opens</code> 清单，以及一堆第三方 jar 的 split package 与自动模块名漂移。所以我选了中间路线：<strong>用 ArchUnit 守边界、用 enforcer 守依赖、用 <code>-verbose:class</code> 兜底取证</strong>，把 JPMS 留给未来的 jlink 场景（比如 CLI 工具、Serverless 冷启动优化）。"</p>
+</div>
+
+<h2><span class="n">L10</span>工程化边界：让"不该依赖"变成构建失败</h2>
+
+<p>模块系统想解决的"边界"问题，有更便宜的做法。核心只有一句：<strong>依赖方向必须单一，且能被机器检查</strong>。</p>
+
+<pre data-lang="java"><code>// ArchUnit：分层守卫，跑在单元测试里，改坏了 CI 就红
+@ArchTest
+static final ArchRule layers = layeredArchitecture().consideringAllDependencies()
+    .layer("Web").definedBy("..controller..")
+    .layer("App").definedBy("..service..")
+    .layer("Dao").definedBy("..repository..")
+    .whereLayer("Web").mayNotBeAccessedByAnyLayer()      // 没人能反向依赖 controller
+    .whereLayer("Dao").mayOnlyBeAccessedByLayers("App"); // dao 只给 service 用
+
+// 另一条常用规则：禁止跨模块使用 internal 包
+@ArchTest
+static final ArchRule noInternalLeak = noClasses()
+    .that().resideOutsideOfPackage("..order.internal..")
+    .should().dependOnClassesThat().resideInAPackage("..order.internal..");</code></pre>
+
+<p>而"到底谁依赖了谁、有没有环"，交给 <code>jdeps</code>：</p>
+
+<pre data-lang="bash"><code># 看模块依赖（模块化项目）
+jdeps --print-module-deps --module-path out -m com.app
+
+# 找循环依赖（包级）
+jdeps -verbose:package -cp "target/classes;libs/*" target/classes \
+  | awk '{print $1" -&gt; "$3}' | sort -u | head -40
+
+# 统计每个包的扇入/扇出，扇出特别大的是"上帝包"
+jdeps -summary -cp libs/* target/classes</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">依赖方向单一 + 边界可见：模块化的收益，ArchUnit 也能给</text>
+
+  <rect x="60" y="56" width="200" height="116" rx="8" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="160" y="78" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a5fb4">order-api</text>
+  <text x="72" y="100" font-size="9" fill="#3d454e">只放接口与 DTO</text>
+  <text x="72" y="118" font-size="9" fill="#3d454e">OrderService (interface)</text>
+  <text x="72" y="136" font-size="9" fill="#3d454e">CreateOrderCmd</text>
+  <text x="72" y="158" font-size="9" fill="#1e7d3c">依赖：无（最干净）</text>
+
+  <rect x="60" y="192" width="200" height="88" rx="8" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="160" y="214" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e7d3c">order-impl</text>
+  <text x="72" y="236" font-size="9" fill="#3d454e">实现 + internal 包</text>
+  <text x="72" y="254" font-size="9" fill="#3d454e">依赖 api + 第三方</text>
+  <text x="72" y="272" font-size="9" fill="#6b7683">internal 不得外泄</text>
+
+  <line x1="160" y1="192" x2="160" y2="176" stroke="#1e7d3c" stroke-width="2"/>
+  <polygon points="160,174 154,184 166,184" fill="#1e7d3c"/>
+  <text x="170" y="186" font-size="9" fill="#1e7d3c">implements</text>
+
+  <rect x="316" y="56" width="200" height="116" rx="8" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="416" y="78" text-anchor="middle" font-size="10.5" font-weight="700" fill="#9a6400">order-web</text>
+  <text x="328" y="100" font-size="9" fill="#3d454e">Controller</text>
+  <text x="328" y="118" font-size="9" fill="#3d454e">只依赖 api 的接口</text>
+  <text x="328" y="136" font-size="9" fill="#1e7d3c">不知道 impl 存在</text>
+  <text x="328" y="158" font-size="9" fill="#6b7683">（运行期由容器注入）</text>
+
+  <line x1="316" y1="114" x2="266" y2="114" stroke="#9a6400" stroke-width="2"/>
+  <polygon points="264,114 276,108 276,120" fill="#9a6400"/>
+
+  <rect x="572" y="56" width="286" height="224" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="588" y="78" font-size="10" font-weight="700" fill="#3d454e">三条机器能查的边界</text>
+  <text x="588" y="104" font-size="9.5" fill="#1a5fb4">① 方向：web → api ← impl</text>
+  <text x="588" y="122" font-size="9" fill="#6b7683">反向依赖 = 循环，构建失败</text>
+  <text x="588" y="148" font-size="9.5" fill="#1a5fb4">② 可见：internal 包不跨模块</text>
+  <text x="588" y="166" font-size="9" fill="#6b7683">ArchUnit 一条规则搞定</text>
+  <text x="588" y="192" font-size="9.5" fill="#1a5fb4">③ 传递：api 的依赖必须"薄"</text>
+  <text x="588" y="210" font-size="9" fill="#6b7683">api 引了什么，下游全得引</text>
+  <text x="588" y="240" font-size="9" fill="#c62828">module-info 只能做 ② 的一部分，</text>
+  <text x="588" y="258" font-size="9" fill="#c62828">① ③ 仍要靠测试与人工评审</text>
+
+  <text x="316" y="214" font-size="9.5" fill="#3d454e">api 模块的依赖越薄，</text>
+  <text x="316" y="232" font-size="9.5" fill="#3d454e">下游升级越自由。</text>
+  <text x="316" y="258" font-size="9" fill="#6b7683">反过来：api 里塞一个</text>
+  <text x="316" y="274" font-size="9" fill="#6b7683">spring-web，全公司都得跟着升。</text>
+</svg>
+<figcaption><b>图 12 · 依赖方向与边界。</b>api / impl 分离 + ArchUnit 守卫，能在<em>不引入模块系统</em>的前提下拿到大部分收益。这是大多数团队的实际最优解。</figcaption>
+</figure>
+
+<h2><span class="n">L11</span>七条最容易记反的结论</h2>
+
+<table>
+<thead><tr><th style="width:34%">直觉</th><th style="width:30%">实际</th><th>为什么</th></tr></thead>
+<tbody>
+<tr><td>冲突时 Maven 会选版本更高的</td><td>不选高的，选<strong>路径短的</strong>；同深度看声明顺序</td><td>调解只看树形结构，不看版本号大小</td></tr>
+<tr><td><code>dependencyManagement</code> 写了就会引入依赖</td><td>只约束，不引入</td><td>它是"版本字典"，不是"依赖清单"</td></tr>
+<tr><td><code>exclusions</code> 能按包名排除</td><td>只能按<strong>坐标</strong>排除</td><td>Maven 在坐标层面工作，不解析 jar 内容</td></tr>
+<tr><td><code>optional=true</code> 只是"可选依赖"</td><td>它<strong>彻底不传递</strong></td><td>下游必须自己声明，否则运行期缺类</td></tr>
+<tr><td><code>exports</code> 开了就能反射</td><td>反射要 <code>opens</code></td><td>两套门禁：编译可见性 vs 深度访问</td></tr>
+<tr><td><code>--illegal-access=permit</code> 还能救一下</td><td>JDK 17 起该选项被删</td><td>实测输出 <code>Ignoring option ... removed in 17.0</code></td></tr>
+<tr><td>可执行 fat jar 可以当普通依赖用</td><td>不能，类在 <code>BOOT-INF/classes</code></td><td>classpath 只认 jar 根目录</td></tr>
+</tbody>
+</table>
+
+<div class="box amber">
+<div class="h">最后补一个只在生产里才看得到的现象</div>
+<p><code>UnsupportedClassVersionError</code> 经常被误当成"依赖冲突"。它的文案是 <code>class file version 61.0, this version only recognizes up to 55.0</code>——意思是<strong>编译用了 JDK 17（major 61），运行在 JDK 11（认识 55）</strong>。所以看到它的第一反应应该是查 <code>java -version</code> 与 <code>maven.compiler.release</code>，而不是查依赖树。数字对照：Java 8 = 52、11 = 55、17 = 61、21 = 65。</p>
+</div>
+<h2><span class="n">L12</span>数字速查：这一期值得记的量</h2>
+
+<table>
+<thead><tr><th style="width:16%">数字</th><th style="width:42%">含义</th><th>出现位置</th></tr></thead>
+<tbody>
+<tr><td class="num">1 次</td><td>同一 ClassLoader 下同名类只被 <code>defineClass</code> 一次，之后走缓存</td><td>L1</td></tr>
+<tr><td class="num">0 次</td><td><code>static final</code> 常量在运行期的字段读取次数（编译期已内联）</td><td>L1</td></tr>
+<tr><td class="num">2 个</td><td>构成类身份的要素个数：ClassLoader + 全限定名</td><td>L0</td></tr>
+<tr><td class="num">7 种</td><td>依赖问题引发的异常类型（<code>NoSuchMethod</code> 到 <code>loader constraint violation</code>）</td><td>L2</td></tr>
+<tr><td class="num">3 条</td><td>Maven 调解规则：最短路径 → 同深度先声明 → 管理段强制</td><td>L3</td></tr>
+<tr><td class="num">5 张</td><td>手动牌：<code>dependencyManagement</code> / <code>exclusions</code> / <code>optional</code> / <code>scope</code> / <code>import</code>-BOM</td><td>L3</td></tr>
+<tr><td class="num">2 种</td><td>会向下游传递的 scope：<code>compile</code> 与 <code>runtime</code></td><td>L3</td></tr>
+<tr><td class="num">4 道</td><td>防线：enforcer / shade / ArchUnit / <code>-verbose:class</code></td><td>L4</td></tr>
+<tr><td class="num">3 层</td><td>Boot 可执行 jar 结构：<code>BOOT-INF/classes</code> + <code>BOOT-INF/lib</code> + loader 包</td><td>L5</td></tr>
+<tr><td class="num">2 行</td><td>MANIFEST 里的双 Main：<code>Main-Class</code>=JarLauncher、<code>Start-Class</code>=你的 main</td><td>L5</td></tr>
+<tr><td class="num">3 张</td><td>模块清单：<code>requires</code>（读谁）/ <code>exports</code>（给谁看）/ <code>opens</code>（给谁反射）</td><td>L6</td></tr>
+<tr><td class="num">17</td><td>从 JDK 17 起 <code>--illegal-access</code> 被彻底移除，只剩 <code>--add-opens</code></td><td>L6</td></tr>
+<tr><td class="num">1 个</td><td>一个包只能属于一个模块——split package 的判据</td><td>L7</td></tr>
+<tr><td class="num">3 步</td><td>自动模块名推导：去 <code>.jar</code> → 非字母数字转 <code>.</code> → 剥尾部版本段</td><td>L7</td></tr>
+<tr><td class="num">≥ 9</td><td><code>META-INF/versions/N</code> 的目录号下限</td><td>L8</td></tr>
+<tr><td class="num">52 / 55 / 61 / 65</td><td>Java 8 / 11 / 17 / 21 的 class major 版本号</td><td>L11</td></tr>
+<tr><td class="num">6 种</td><td>scope 取值：<code>compile</code> / <code>provided</code> / <code>runtime</code> / <code>test</code> / <code>system</code> / <code>import</code></td><td>L3</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">L13</span>十四条问答</h2>
+
+<div class="qa"><div class="q">线上突然大面积 <code>NoSuchMethodError</code>，但你只改了一个配置，怎么查？</div><div class="a">先确认是不是真的"只改了配置"。两条线索：① 报错的方法在哪个类，用 <code>-verbose:class</code>（或 <code>-Xlog:class+load</code>）看这个类是从哪个 jar 加载的，路径里的版本号立刻暴露；② 如果最近重打过包，可能是依赖被别的团队间接升级了——<code>mvn dependency:tree -Dverbose -Dincludes=groupId:artifactId</code> 看 <em>omitted for conflict</em> 的分支。只有先定位"谁带进来的"，改 pom 才有方向，否则就是在试版本。</div></div>
+
+<div class="qa"><div class="q">为什么 <code>static final String</code> 改了不生效？<code>static final</code> 的 int 呢？</div><div class="a">编译期常量（基本类型与 String 字面量）会被 <code>javac</code> 直接内联进调用方的常量池，运行期不读原字段。所以改值后必须<strong>重新编译调用方</strong>。int 也一样内联。反例：<code>static final String X = UUID.randomUUID().toString()</code> 不是编译期常量（非字面量），不会被内联，运行期照常读字段。判断标准就一条：编译器能不能在编译期算出值。</div></div>
+
+<div class="qa"><div class="q">两个 jar 都有 <code>com.foo.Bar</code>，JVM 会报冲突吗？</div><div class="a">不会。同一个 ClassLoader 只认先找到的那个，后面的安静消失——这比报错危险得多。会报冲突的场景只有两个：① 两个不同 ClassLoader 各定义一次（报 <code>ClassCastException: Cannot cast X to X</code> 或 <code>loader constraint violation</code>）；② 上了模块路径且两个模块都导出该包（报 <code>reads package ... from both</code>）。</div></div>
+
+<div class="qa"><div class="q">Maven 会选版本更高的那个吗？</div><div class="a">不会。调解只看树：<strong>路径短的赢</strong>；同深度看<strong>POM 里谁先声明</strong>。版本号高低完全不参与。唯一能压过这两条的是 <code>dependencyManagement</code>（对传递依赖也强制生效）。所以"我把版本写高一点应该就好了"这个直觉是错的。</div></div>
+
+<div class="qa"><div class="q"><code>dependencyManagement</code> 写了 <code>guava 32</code>，为什么 <code>dependency:tree</code> 里还是 31？</div><div class="a">两种可能：① 你写在了 <code>dependencies</code> 之外但坐标写错（比如少了 <code>&lt;type&gt;</code>）；② 那个 31 是<strong>另一个 groupId</strong> 下的同 artifact（<code>com.google.collections:google-collections</code> 这种历史包）。第二种在 <code>-Dverbose</code> 下能看到两条不同坐标并列，是最容易被漏掉的一类"假冲突"。</div></div>
+
+<div class="qa"><div class="q">为什么 Spring Boot 的 jar 不能用 <code>java -cp</code> 跑？</div><div class="a">类在 <code>BOOT-INF/classes</code> 里，而 classpath 只认 jar 根目录下的包路径。真正能跑的方式只有 <code>java -jar</code>（走 MANIFEST 的 <code>Main-Class: JarLauncher</code>），由 <code>LaunchedURLClassLoader</code> 用自定义 <code>URLStreamHandler</code> 去读"jar 里的 jar"。衍生结论：这个 jar 也不能被别的项目当依赖。</div></div>
+
+<div class="qa"><div class="q"><code>exports</code> 和 <code>opens</code> 的区别，一句话？</div><div class="a"><code>exports</code> 管"编译期能不能 <code>import</code> 与普通调用"，<code>opens</code> 管"运行期能不能 <code>setAccessible</code> 做深度反射"。给 Jackson / Hibernate 加 <code>--add-exports</code> 是无效的，它们要的是 opens。</div></div>
+
+<div class="qa"><div class="q">为什么升到 JDK 17 之后一堆框架报 <code>InaccessibleObjectException</code>？</div><div class="a">因为强封装分三步走完：JDK 9 默认 <code>--illegal-access=permit</code>（只警告）、JDK 16 默认改 deny、JDK 17 直接把该选项删掉（实测提示 <code>Ignoring option ... removed in 17.0</code>）。之前靠"默认放行"活着的老版本框架，在这一步同时失效。应对只有两条：升级框架，或显式 <code>--add-opens</code>。</div></div>
+
+<div class="qa"><div class="q">你项目为什么不上模块化？</div><div class="a">按收益/成本答：收益是编译期强边界 + jlink 瘦镜像；成本是 Spring / Hibernate / Jackson / MyBatis 一长串 <code>opens</code> 清单，加上第三方 jar 的 split package 和自动模块名漂移。所以我们用中间路线：ArchUnit 守依赖方向、enforcer 守版本收敛、<code>-verbose:class</code> 兜底取证。真需要瘦镜像时（CLI、Serverless）再对那个模块单独模块化。</div></div>
+
+<div class="qa"><div class="q">什么是 split package，为什么它挡住迁移？</div><div class="a">同一个包被两个模块各声明一次。模块系统以包为 <code>exports</code> 的最小单位，必须能判定归属，判不出来就整个 boot layer 解析失败。classpath 相反：它会把两个 jar 的同一个包"合成"成一个包，能跑。所以老项目里那些"顺手带了个 <code>javax.annotation</code> 影子包"的 jar，一上模块路径就互相打架，而且报错常常是误导性的 <code>Module ... not found</code>。</div></div>
+
+<div class="qa"><div class="q">自动模块名有什么坑？</div><div class="a">它由文件名推导，<code>-SNAPSHOT</code> 这类版本段识别不了。实测 <code>mylib.jar</code> → <code>mylib</code>，而 <code>mylib-SNAPSHOT.jar</code> → <code>mylib.SNAPSHOT</code>。于是 <code>requires mylib;</code> 在换包之后突然编不过。解法：MANIFEST 里写 <code>Automatic-Module-Name</code>，把名字钉死。</div></div>
+
+<div class="qa"><div class="q">什么是 Multi-Release JAR？怎么选版本？</div><div class="a">把一个类的多个实现放在 <code>META-INF/versions/N/</code>，MANIFEST 加 <code>Multi-Release: true</code>。选择规则：从所有 ≤ 当前运行版本的目录里取最大的那个。实测在 JDK 21 上，base 返回 <code>base(8)</code>、<code>versions/17</code> 返回 <code>versioned(17)</code>，运行时拿到 <code>versioned(17)</code>。坑在打包：shade/assembly 打平依赖会把 <code>META-INF/versions</code> 丢掉，症状是"升了 JDK 却还在跑旧实现"。</div></div>
+
+<div class="qa"><div class="q"><code>Cannot cast com.demo.Client to com.demo.Client</code> 怎么解释？</div><div class="a">类型检查比的是 <code>Class</code> 对象身份，而 <code>Class</code> 的身份里含 ClassLoader。同一个 jar 被两个 loader 各 <code>defineClass</code> 一次，就是两个不同的类型，名字一样也没用。复现只要两行：两个 <code>new URLClassLoader(..., null)</code> 各 <code>loadClass</code> 同一个类，<code>c1 == c2</code> 返回 false。容器、插件框架、热部署、agent 都会造出这种局面。</div></div>
+
+<div class="qa"><div class="q"><code>UnsupportedClassVersionError</code> 是依赖冲突吗？</div><div class="a">不是。它是"编译用的 JDK 比运行的高"。文案里的两个数字就是 major 版本：<code>class file version 61.0</code>（Java 17 编的）而 <code>only recognizes up to 55.0</code>（运行在 Java 11）。对照表：8→52、11→55、17→61、21→65。第一反应查 <code>java -version</code> 与 <code>maven.compiler.release</code>，不要查依赖树。</div></div>
+
+<h2><span class="n">L14</span>三道模拟面试题</h2>
+
+<div class="mt">
+<div class="qh"><span>Q1</span>我们一个老服务，本地启动正常，打到预发就抛 <code>NoSuchMethodError: com.google.common.base.Preconditions.checkArgument</code>，你怎么定位？</div>
+<p style="font-size:13.5px;color:#3d454e">考点不是"怎么改 pom"，而是"能不能按证据链推"。</p>
+<div class="lv l1"><span class="lb">不及格</span>「加个 guava 依赖就好了」「把版本升到最新」——没有定位动作，属于试错。</div>
+<div class="lv l2"><span class="lb">及格</span>「用 <code>mvn dependency:tree</code> 看 guava 版本，找到冲突的排除掉」。方向对，但没解释"为什么本地正常、预发异常"，也没说怎么确认。</div>
+<div class="lv l3"><span class="lb">良好</span>「本地与预发的差异只可能在打包或依赖来源。① 先用 <code>-verbose:class</code> 或 <code>-Xlog:class+load</code> 确认 <code>Preconditions</code> 实际从哪个 jar 加载，路径带版本号，一眼看出是旧版；② 再 <code>dependency:tree -Dverbose -Dincludes=com.google.guava:guava</code> 找 <em>omitted for conflict</em> 的分支，通常是某个中间件 SDK 传递带进来的；③ 用 <code>dependencyManagement</code> 强制版本（比 exclusions 更彻底，因为对全树生效）。」</div>
+<div class="lv l4"><span class="lb">优秀</span>在上面基础上补三点：<strong>④</strong> 为什么是 <code>NoSuchMethodError</code> 而不是 <code>NoClassDefFound</code>——类找到了、方法没有，说明是"同 artifact 不同版本"，而不是"jar 缺失"，这直接排除了 scope 写错的可能；<strong>⑤</strong> 为什么可能只在某个低频接口触发——符号引用惰性解析，第一次执行 <code>invokevirtual</code> 才报；<strong>⑥</strong> 收口动作：CI 加 <code>enforcer:dependencyConvergence</code>，让同类问题在构建期就红，而不是等预发。</div>
+</div>
+
+<div class="mt">
+<div class="qh"><span>Q2</span>我们要把一个 SDK 打成可执行 jar 交付给客户，客户又想把我们的 jar 当依赖嵌进他的 Spring Boot 应用。有什么坑？</div>
+<div class="lv l1"><span class="lb">不及格</span>「打个 jar 给他就行」——没说清可执行 jar 与普通 jar 的区别。</div>
+<div class="lv l2"><span class="lb">及格</span>「可执行 jar 的类在 <code>BOOT-INF/classes</code> 里，不能被依赖，要用 <code>classifier</code> 出两份」。</div>
+<div class="lv l3"><span class="lb">良好</span>「出两个产物：<code>xxx-exec.jar</code>（<code>spring-boot-maven-plugin</code> 的 <code>repackage</code>，供客户命令行跑）和 <code>xxx.jar</code>（普通 jar，供依赖）。同时注意：客户是 Boot 应用，我们的 <code>spring-boot-starter</code> 依赖很容易和他的版本打架，所以我们的 pom 要把 Boot 相关依赖设成 <code>provided</code> 或 <code>optional</code>。」</div>
+<div class="lv l4"><span class="lb">优秀</span>再补两层：<strong>①</strong> 依赖面收窄——SDK 的公共 API 不应暴露第三方类型（避免把 guava/jackson 的版本强加给客户），必要时用 <code>shade + relocation</code> 把内部依赖改包名彻底隔离；<strong>②</strong> 交付验证——用一个"最小客户工程"在 CI 里真实依赖我们的 jar 并启动一次，这才是唯一能证明"可被依赖"的方式；<strong>③</strong> 如果客户将来模块化，我们的 jar 要带 <code>Automatic-Module-Name</code>，否则他的名字会随文件名漂移。</div>
+</div>
+
+<div class="mt">
+<div class="qh"><span>Q3</span>团队想上 JPMS，让你评估。你怎么给结论？</div>
+<div class="lv l1"><span class="lb">不及格</span>「JPMS 是好东西，我们应该上」——没有成本评估，等于没答。</div>
+<div class="lv l2"><span class="lb">及格</span>「收益是强封装和 jlink 瘦镜像；成本是要处理 <code>opens</code> 和 split package」。</div>
+<div class="lv l3"><span class="lb">良好</span>「先盘依赖：Spring/Hibernate/Jackson/MyBatis 都靠反射，需要成批 <code>opens</code>；再盘第三方 jar 的 split package 与自动模块名。如果这两项成本高于收益，就先做中间方案：ArchUnit 守依赖方向、enforcer 守版本收敛、api/impl 分包。」</div>
+<div class="lv l4"><span class="lb">优秀</span>给出分层结论：<strong>①</strong> 对"库"（被依赖的 SDK）值得模块化——<code>module-info</code> 能让「internal 包别用」从注释变成编译错误，这是它最硬的收益；<strong>②</strong> 对"应用"（Spring Boot 单体/微服务）不值得——启动脚本要挂几十条 <code>--add-opens</code>，且收益已被 ArchUnit 覆盖；<strong>③</strong> 对特定场景值得——CLI 工具、Serverless 冷启动可以用 jlink 裁到几十 MB；<strong>④</strong> 落地路径是"先库后应用、先新模块后老模块"，而不是一次性改造，并明确一条红线：<em>不允许为了上模块化去 fork 第三方 jar</em>。</div>
+</div>
+
+<h2><span class="n">L15</span>二十七期，一张地图</h2>
+
+<figure>
+<svg viewBox="0 0 900 252" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <rect x="0" y="0" width="900" height="252" fill="#ffffff"/>
+  <text x="450" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1d21">27 期轨道：这一期补的是"代码怎么进 JVM"这一段</text>
+
+  <line x1="30" y1="70" x2="870" y2="70" stroke="#d4dae1" stroke-width="2"/>
+
+  <rect x="30" y="56" width="110" height="28" rx="5" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="85" y="74" text-anchor="middle" font-size="9" fill="#3d454e">01·14 集合</text>
+  <rect x="146" y="56" width="122" height="28" rx="5" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="207" y="74" text-anchor="middle" font-size="9" fill="#3d454e">23 泛型·反射·代理</text>
+  <rect x="274" y="56" width="110" height="28" rx="5" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="329" y="74" text-anchor="middle" font-size="9" fill="#3d454e">03·20 并发</text>
+  <rect x="390" y="56" width="128" height="28" rx="5" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="454" y="74" text-anchor="middle" font-size="9" fill="#3d454e">02·12·21·22 JVM</text>
+  <rect x="524" y="56" width="110" height="28" rx="5" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="579" y="74" text-anchor="middle" font-size="9" fill="#3d454e">04·15·24 框架</text>
+  <rect x="640" y="56" width="120" height="28" rx="5" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="700" y="74" text-anchor="middle" font-size="9" fill="#3d454e">05·16·25 存储</text>
+  <rect x="766" y="56" width="104" height="28" rx="5" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="818" y="74" text-anchor="middle" font-size="9" fill="#3d454e">07·08·18 分布式</text>
+
+  <rect x="330" y="100" width="240" height="52" rx="8" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="450" y="120" text-anchor="middle" font-size="10" font-weight="700" fill="#1a5fb4">13 类加载 + 26 字节码增强 + 27 边界</text>
+  <text x="450" y="140" text-anchor="middle" font-size="9" fill="#3d454e">从"谁能看见谁"到"看见的是哪个版本"</text>
+
+  <rect x="40" y="172" width="820" height="28" rx="6" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="52" y="190" font-size="9" fill="#6b7683">03 讲"线程怎么跑" → 13 讲"类怎么进来" → 26 讲"类进来时怎么被改" → <tspan font-weight="700" fill="#1a5fb4">27 讲"进来的是哪一个"</tspan></text>
+
+  <text x="40" y="222" font-size="9.5" fill="#6b7683">这四期连起来是一条完整的装载流水线：读字节码 → 找类 → 定义类 → 增强类 → 解析符号引用。</text>
+  <text x="40" y="240" font-size="9.5" fill="#6b7683">面试里只要能把这条线讲通，几乎所有"偶发/环境相关"的诡异 bug 都有解释框架。</text>
+</svg>
+<figcaption><b>图 13 · 27 期轨道。</b>01/14 集合、23 泛型反射、03/20 并发、02/12/21/22 JVM、04/15/24 框架、05/16/25 存储、07/08/18 分布式；本期与 13、26 构成"类装载流水线"的最后一段。</figcaption>
+</figure>
+
+<table>
+<thead><tr><th style="width:16%">板块</th><th style="width:44%">期号 · 主题</th><th>一句话抓手</th></tr></thead>
+<tbody>
+<tr><td>语言与底层</td><td>01 · 14 集合 / 23 泛型·反射·代理</td><td>树化泊松 6e-8、稳态反射只慢 7 倍</td></tr>
+<tr><td></td><td><strong>27 · 依赖冲突与模块化边界</strong></td><td><strong>类身份 = loader + 全限定名，版本不在里面</strong></td></tr>
+<tr><td>并发</td><td>03 锁升级·AQS / 20 线程池 / 19 NIO·Netty</td><td>ctl 3+29 位、依赖栈 LIFO、epoll 红黑树</td></tr>
+<tr><td>JVM</td><td>02 GC / 12 调优 / 21 内存泄漏 / 22 JIT / 13 类加载 / 26 Agent</td><td>三色标记、Eden=速率×间隔、支配树、内联 35/325</td></tr>
+<tr><td>框架</td><td>04 Spring / 15 Boot / 24 MyBatis</td><td>refresh 十二步、153→60→40、九站执行链</td></tr>
+<tr><td>存储</td><td>05 MySQL / 16 分库分表 / 25 ES</td><td>1170 扇出、2053 万行上限、BM25 可算</td></tr>
+<tr><td>分布式</td><td>07 MQ / 08 Spring Cloud / 18 幂等 / 10 场景 / 17 缓存 / 06 Redis</td><td>ISR 水位、重试 27 倍、0 行双重语义</td></tr>
+</tbody>
+</table>
+
+<div class="box blue">
+<div class="h">这一期真正的价值：给"诡异 bug"一个解释框架</div>
+<p>面试里最难答的从来不是"讲讲 GC"，而是"讲一个你排查过的线上问题"。而线上问题里最难查的一类，就是"代码没改、环境变了"。这一期给的框架是三问：<strong>① 这个类是哪个 jar 提供的（<code>-verbose:class</code>）？② 这个 jar 是谁带进来的（<code>dependency:tree -Dverbose</code>）？③ 它的哪个版本被编译期记住了（常量内联 / 符号引用）？</strong>三问答完，绝大多数"偶发、环境相关、重启就好"的问题都能收敛到一个具体坐标上。</p>
+</div>
+
+<div class="next">
+<strong>下期预告 · 第 28 期：Java 与可观测性</strong><br>
+Micrometer 的 <code>MeterRegistry</code> 与指标基数爆炸 / 直方图与分位数为什么不能平均 / OpenTelemetry 的 Trace 上下文传播（含 MQ 与线程池两处断链）/ 日志、指标、链路三者的采样冲突 / "为什么我的 P99 和监控对不上"。这一期会把 08 期的 TraceId 与 09 期的排查串成一条完整的可观测链路。
+</div>
+
+<div class="foot">
+<p>本期事实来源：本机 JDK 21.0.7（major 65）与 Maven 3.8.8 实测。L1 的 classpath 覆盖、L2 的双 ClassLoader 强转、L6 的 <code>package is not visible</code> 与 <code>InaccessibleObjectException</code>（命名模块 / unnamed 两种文案）、L7 的 split package 报错、L8 的 MR-JAR 选择结果与自动模块名推导，全部为真实运行输出，报错文案原样复制。<code>--illegal-access</code> 在 JDK 17 被移除为实测提示。JDK 8/11/17/21 的 class major 版本号为规范事实。L3、L4 的 Maven 调解规则与插件行为为文档事实，本机未逐个跑通（<code>maven-dependency-plugin</code> 未安装）。L9 的框架 <code>opens</code> 需求为经验清单，实施前应以目标版本实测为准。</p>
+</div>
+
+</div>
+<script>
+document.querySelectorAll('pre code').forEach(function (el) {
+  var esc = function (s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  };
+  var text = esc(el.textContent);
+  var re = /(\/\/[^\n]*|#[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(public|private|protected|static|final|class|void|new|return|try|finally|catch|if|else|int|long|byte|short|char|boolean|double|float|const|import|package|extends|implements|throws|throw|interface|this|super|abstract|synchronized|volatile|transient|instanceof|default|switch|case|break|continue|while|for|null|true|false)\b|\b(\d+\.?\d*[fFdDlL]?)\b/g;
+  el.innerHTML = text.replace(re, function (m, c, s, k, n) {
+    if (c) return '<span class="c">' + m + '</span>';
+    if (s) return '<span class="s">' + m + '</span>';
+    if (k) return '<span class="k">' + m + '</span>';
+    if (n) return '<span class="n">' + m + '</span>';
+    return m;
+  });
+});
+</script>
+</body>
+</html>

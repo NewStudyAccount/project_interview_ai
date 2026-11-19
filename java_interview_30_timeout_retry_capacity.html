@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 面试深挖 30 · 超时、重试与容量：为什么加了重试，故障反而扩散得更快</title>
+<style>
+:root{
+  --ink:#1a1d21; --ink2:#3d454e; --muted:#6b7683; --line:#e4e8ed; --line2:#d4dae1;
+  --bg:#ffffff; --panel:#f7f9fb; --panel2:#eef2f6;
+  --blue:#1a5fb4; --blue-soft:#e8f0fb;
+  --red:#c62828; --red-soft:#fdeceb;
+  --green:#1e7d3c; --green-soft:#e9f5ec;
+  --amber:#9a6400; --amber-soft:#fdf4e3;
+  --purple:#6a3fa0; --purple-soft:#f2ecfb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.78; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px; margin:0 auto; padding:0 28px 80px}
+.hero{padding:56px 0 30px; border-bottom:2px solid var(--ink)}
+.hero .kicker{font-size:12.5px; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; font-weight:600}
+.hero h1{margin:14px 0 10px; font-size:35px; line-height:1.26; letter-spacing:-.5px; font-weight:800}
+.hero .sub{color:var(--ink2); font-size:16.5px; max-width:820px}
+.hero .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+.tag{font-size:12.5px; padding:4px 11px; border-radius:999px; background:var(--panel2); color:var(--ink2); font-weight:600}
+.tag.b{background:var(--blue-soft); color:var(--blue)}
+.tag.r{background:var(--red-soft); color:var(--red)}
+.tag.g{background:var(--green-soft); color:var(--green)}
+.tag.a{background:var(--amber-soft); color:var(--amber)}
+
+h2{
+  margin:56px 0 18px; padding:14px 0 14px 18px; font-size:23px; font-weight:800; letter-spacing:-.2px;
+  border-left:4px solid var(--blue); background:linear-gradient(90deg,var(--blue-soft),transparent 62%);
+  border-radius:0 6px 6px 0;
+}
+h2 .n{display:inline-block; min-width:38px; color:var(--blue); font-variant-numeric:tabular-nums}
+h3{margin:32px 0 12px; font-size:17.5px; font-weight:750; color:var(--ink)}
+h3::before{content:""; display:inline-block; width:6px; height:6px; background:var(--blue); border-radius:1px; margin-right:9px; vertical-align:2px}
+p{margin:12px 0}
+strong{font-weight:700; color:#101418}
+em{font-style:normal; background:linear-gradient(transparent 62%, #ffe9a8 62%); padding:0 1px}
+code{font-family:"JetBrains Mono",Consolas,"Courier New",monospace; font-size:13px; background:var(--panel2);
+  padding:1.5px 5px; border-radius:4px; color:#a03060}
+.lead{font-size:16px; color:var(--ink2)}
+
+ul,ol{margin:12px 0; padding-left:22px}
+li{margin:7px 0}
+li::marker{color:var(--muted)}
+
+table{width:100%; border-collapse:collapse; margin:20px 0; font-size:13.5px; background:#fff}
+th{background:var(--panel2); text-align:left; padding:10px 12px; font-weight:700; border-bottom:2px solid var(--line2); font-size:13px}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:1px solid var(--line2)}
+td code{font-size:12.5px}
+.num{font-variant-numeric:tabular-nums}
+
+pre{
+  position:relative; margin:20px 0; padding:18px 18px 16px; background:#1c2128; color:#d7dde5;
+  border-radius:9px; overflow-x:auto; font-size:13px; line-height:1.68;
+  font-family:"JetBrains Mono",Consolas,"Courier New",monospace;
+}
+pre::before{content:attr(data-lang); position:absolute; top:0; right:0; font-size:10.5px; letter-spacing:.1em;
+  color:#7d8794; background:#252b33; padding:3px 10px; border-radius:0 9px 0 6px; text-transform:uppercase}
+pre code{background:none; padding:0; color:inherit; font-size:inherit}
+.k{color:#ff7b72}
+.s{color:#a5d6a7}
+.c{color:#8b949e; font-style:italic}
+.n{color:#79c0ff}
+
+figure{margin:26px 0; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:18px 18px 10px}
+figure svg{display:block; width:100%; height:auto}
+figcaption{margin-top:8px; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.6}
+figcaption b{color:var(--ink2)}
+
+.box{border-radius:9px; padding:14px 18px; margin:20px 0; border:1px solid var(--line2); background:var(--panel)}
+.box .h{font-weight:750; font-size:13.5px; letter-spacing:.02em; margin-bottom:6px; display:flex; align-items:center; gap:8px}
+.box p:last-child{margin-bottom:0}
+.box.blue{background:var(--blue-soft); border-color:#bcd4f2} .box.blue .h{color:var(--blue)}
+.box.red{background:var(--red-soft); border-color:#f3c9c6} .box.red .h{color:var(--red)}
+.box.green{background:var(--green-soft); border-color:#c2e2cc} .box.green .h{color:var(--green)}
+.box.amber{background:var(--amber-soft); border-color:#efd9ab} .box.amber .h{color:var(--amber)}
+.box.purple{background:var(--purple-soft); border-color:#d7c9ef} .box.purple .h{color:var(--purple)}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0}
+.card{background:#fff; border:1px solid var(--line); border-radius:9px; padding:14px 16px}
+.card .t{font-weight:750; font-size:14px; margin-bottom:5px; color:var(--ink)}
+.card .d{font-size:13px; color:var(--ink2); line-height:1.65}
+.card.r{border-top:3px solid var(--red)} .card.g{border-top:3px solid var(--green)}
+.card.b{border-top:3px solid var(--blue)} .card.a{border-top:3px solid var(--amber)}
+
+.qa{border-left:3px solid var(--line2); padding:2px 0 2px 16px; margin:18px 0}
+.qa .q{font-weight:750; color:var(--ink); font-size:14.5px}
+.qa .q::before{content:"Q "; color:var(--blue); font-weight:800}
+.qa .a{color:var(--ink2); font-size:14px; margin-top:5px}
+.qa .a::before{content:"A "; color:var(--green); font-weight:800}
+
+.mt{background:#fff; border:1px solid var(--line); border-radius:11px; padding:20px 22px; margin:24px 0}
+.mt .qh{font-weight:800; font-size:15.5px; margin-bottom:10px; color:var(--ink)}
+.mt .qh span{background:var(--ink); color:#fff; font-size:11.5px; padding:2px 8px; border-radius:4px; margin-right:9px; letter-spacing:.05em}
+.lv{margin-top:14px; padding:11px 14px; border-radius:7px; font-size:13.5px; line-height:1.7}
+.lv .lb{font-weight:750; font-size:12px; letter-spacing:.05em; margin-right:8px}
+.lv.l1{background:#fbeceb; border-left:3px solid #d9534f} .lv.l1 .lb{color:#c62828}
+.lv.l2{background:#fdf6e6; border-left:3px solid #d9a441} .lv.l2 .lb{color:#9a6400}
+.lv.l3{background:#eaf2fd; border-left:3px solid #4a86c8} .lv.l3 .lb{color:#1a5fb4}
+.lv.l4{background:#eaf6ee; border-left:3px solid #3f9b5c} .lv.l4 .lb{color:#1e7d3c}
+
+.foot{margin-top:70px; padding-top:26px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+.next{margin-top:26px; background:var(--panel2); border-radius:9px; padding:16px 20px; font-size:13.5px; color:var(--ink2)}
+</style><div class="wrap">
+
+<div class="hero">
+  <div class="kicker">Java 面试深挖 · 第 30 期</div>
+  <h1>超时、重试与容量：故障为什么会自己长大</h1>
+  <div class="sub">重试放大 27 倍、利用率 71% 的相变点、100 个下游并行时整体中位数就落在单个的 99.3 分位。全篇 12 张图 + 9 组真跑实验，把"加点重试更稳"这句口头禅换算成一张账单。</div>
+  <div class="meta">
+    <span class="tag b">第 30 / 30 期</span>
+    <span class="tag r">重试放大 R^D</span>
+    <span class="tag a">排队相变 ρ≈0.71</span>
+    <span class="tag g">超时预算</span>
+    <span class="tag">9 组实测</span>
+    <span class="tag">3 道模拟面试</span>
+  </div>
+</div>
+
+<p class="lead">第 08 期讲过限流熔断的组件，第 20 期讲过线程池的 ctl 与依赖栈，第 29 期讲过租约为什么会在 GC 停顿后失效两次。这一期把它们串成一条线，只回答一个问题：<strong>为什么一个"加了超时、加了重试、还加了熔断"的系统，故障时反而比什么都不加崩得更快？</strong></p>
+
+<div class="box blue">
+  <div class="h">本期的实验都是真跑的</div>
+  <p>Python 3.13 的排队事件仿真与蒙特卡洛（20 万样本），JDK 21.0.7 的超时语义实验。文中标"实测"的都是真跑结果；标"经验值 / 默认值"的注明了来源。M/M/1 与对数正态是模型假设，用来给量级和拐点，不代表任何具体生产系统的绝对数值。</p>
+</div>
+
+<h2><span class="n">L0</span>一次超时如何长成 27 次请求</h2>
+
+<p>先把事故写出来，短到可以背下来。</p>
+
+<pre data-lang="java"><code>// 网关：3 次重试
+for (int i = 0; i &lt; 3; i++) {
+    try { return orderClient.create(req); } catch (Exception e) { /* 继续重试 */ }
+}
+// 订单服务：内部调库存，也是 3 次重试
+for (int i = 0; i &lt; 3; i++) {
+    try { return stockClient.deduct(sku, n); } catch (Exception e) { /* 继续重试 */ }
+}
+// 库存服务：内部调 DB，还是 3 次重试
+for (int i = 0; i &lt; 3; i++) {
+    try { return db.update(...); } catch (Exception e) { /* 继续重试 */ }
+}</code></pre>
+
+<p>每层都在做一件本地看起来完全正确的事：失败了就再试两次，用户体验更好。三层叠起来，<strong>一次用户点击最坏会在数据库上变成 27 条 UPDATE</strong>。</p>
+
+<p>不是"大概几次"，是精确的 3³ = 27。这个数字有个残酷的性质：<em>它对"重试次数"是三次方敏感的</em>。把每层从 3 次调到 4 次，只是"多给一次机会"，穿透量从 27 变成 64；调到 5 次，125。而你的容量是按 1 倍规划的。</p>
+
+<figure>
+<svg viewBox="0 0 900 344" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">一次点击的 27 条路径：重试不是"再试一次"，是"再扇出一次"</text>
+
+  <rect x="24" y="40" width="120" height="34" rx="6" fill="#1a5fb4"/>
+  <text x="84" y="62" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">用户 1 次点击</text>
+
+  <rect x="204" y="40" width="120" height="34" rx="6" fill="#1a5fb4"/>
+  <text x="264" y="62" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">网关 × 3</text>
+
+  <rect x="384" y="40" width="120" height="34" rx="6" fill="#6a3fa0"/>
+  <text x="444" y="62" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">订单 × 3</text>
+
+  <rect x="564" y="40" width="120" height="34" rx="6" fill="#9a6400"/>
+  <text x="624" y="62" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">库存 × 3</text>
+
+  <rect x="744" y="40" width="120" height="34" rx="6" fill="#c62828"/>
+  <text x="804" y="62" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">DB 27 次</text>
+
+  <line x1="144" y1="57" x2="200" y2="57" stroke="#3d454e" stroke-width="1.4"/>
+  <polygon points="200,57 193,53 193,61" fill="#3d454e"/>
+  <line x1="324" y1="57" x2="380" y2="57" stroke="#3d454e" stroke-width="1.4"/>
+  <polygon points="380,57 373,53 373,61" fill="#3d454e"/>
+  <line x1="504" y1="57" x2="560" y2="57" stroke="#3d454e" stroke-width="1.4"/>
+  <polygon points="560,57 553,53 553,61" fill="#3d454e"/>
+  <line x1="684" y1="57" x2="740" y2="57" stroke="#3d454e" stroke-width="1.4"/>
+  <polygon points="740,57 733,53 733,61" fill="#3d454e"/>
+
+  <rect x="24" y="92" width="264" height="26" rx="5" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="34" y="109" font-size="11" fill="#1a5fb4">×3：把 1% 失败率补到 0.01%</text>
+  <rect x="384" y="92" width="264" height="26" rx="5" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="394" y="109" font-size="11" fill="#6a3fa0">×9：第一层放大已经全部转嫁</text>
+  <rect x="744" y="92" width="120" height="26" rx="5" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="754" y="109" font-size="11" fill="#c62828">×27</text>
+
+  <text x="24" y="146" font-size="11" font-weight="700" fill="#3d454e">时间轴：客户端感知到的只是 3 个超时周期，服务端承受的是 27 倍工作</text>
+
+  <line x1="40" y1="164" x2="860" y2="164" stroke="#d4dae1" stroke-width="1.2"/>
+  <text x="40" y="182" font-size="10" fill="#6b7683">T=0</text>
+  <text x="240" y="182" font-size="10" fill="#6b7683">T=100ms</text>
+  <text x="440" y="182" font-size="10" fill="#6b7683">T=200ms</text>
+  <text x="640" y="182" font-size="10" fill="#6b7683">T=300ms</text>
+  <text x="800" y="182" font-size="10" fill="#6b7683">T=400ms</text>
+
+  <rect x="40" y="196" width="60" height="20" rx="4" fill="#1a5fb4"/>
+  <rect x="110" y="196" width="60" height="20" rx="4" fill="#6a3fa0"/>
+  <rect x="180" y="196" width="60" height="20" rx="4" fill="#9a6400"/>
+  <rect x="250" y="196" width="60" height="20" rx="4" fill="#9a6400"/>
+  <rect x="320" y="196" width="60" height="20" rx="4" fill="#9a6400"/>
+  <text x="400" y="211" font-size="10.5" fill="#3d454e">第 1 次尝试失败 → 3 个重试</text>
+
+  <rect x="40" y="226" width="60" height="20" rx="4" fill="#c62828"/>
+  <rect x="110" y="226" width="60" height="20" rx="4" fill="#c62828"/>
+  <rect x="180" y="226" width="60" height="20" rx="4" fill="#c62828"/>
+  <rect x="250" y="226" width="60" height="20" rx="4" fill="#c62828"/>
+  <rect x="320" y="226" width="60" height="20" rx="4" fill="#c62828"/>
+  <rect x="390" y="226" width="60" height="20" rx="4" fill="#c62828"/>
+  <rect x="460" y="226" width="60" height="20" rx="4" fill="#c62828"/>
+  <rect x="530" y="226" width="60" height="20" rx="4" fill="#c62828"/>
+  <rect x="600" y="226" width="60" height="20" rx="4" fill="#c62828"/>
+  <text x="680" y="241" font-size="10.5" fill="#c62828" font-weight="700">9 个（最坏 27 个）打到底层</text>
+
+  <rect x="24" y="266" width="852" height="62" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="38" y="286" font-size="11.5" font-weight="700" fill="#9a6400">重试只在"偶发失败"时有效。当最深层整体不可用（成功率 0），27 次重试全部失败，</text>
+  <text x="38" y="304" font-size="11.5" font-weight="700" fill="#9a6400">它不产生任何成功率，只产生 27 倍流量 —— 补概率的动作变成了加压的动作。</text>
+  <text x="38" y="320" font-size="10.5" fill="#6b7683">正反馈就此闭合：过载制造失败 → 失败触发重试 → 重试加剧过载。</text>
+</svg>
+<figcaption><b>图 1</b> 3 层 × 3 次重试 = 27 倍穿透。用户只等了 3 个超时周期，服务端做了 27 份工作。</figcaption>
+</figure>
+
+<p>再看一眼"重试买到了什么"。设单跳成功率 s=0.99（也就是 1% 失败），三层、每层重试 3 次：</p>
+
+<table>
+<tr><th style="width:150px">层</th><th style="width:130px">该层失败率</th><th>说明</th></tr>
+<tr><td>最深层（DB）</td><td class="num">1.0 × 10⁻²</td><td>单次 1% 失败</td></tr>
+<tr><td>中间层</td><td class="num">1.0 × 10⁻⁶</td><td>重试 3 次把 1% 立方成 10⁻⁶</td></tr>
+<tr><td>入口</td><td class="num">1.0 × 10⁻¹⁸</td><td>再立方一次（浮点已下溢为 0）</td></tr>
+</table>
+
+<p>失败率在每一层被<strong>立方</strong>一次，成本在每一层被<strong>乘 3</strong> 一次。这不是"提升可靠性"，这是用 27 倍的钱买一个从 10⁻² 到 10⁻¹⁸ 的位移——而绝大多数业务在 10⁻⁶（百万分之一）时早就够用了。</p>
+
+<figure>
+<svg viewBox="0 0 900 316" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">失败率被"取幂"，成本被"相乘"——两条曲线走的不是一个方向</text>
+
+  <text x="24" y="52" font-size="11" font-weight="700" fill="#3d454e">失败率（对数刻度，每格 6 个数量级）</text>
+  <rect x="24" y="62" width="520" height="24" rx="4" fill="#fdeceb" stroke="#e6c0bc"/>
+  <rect x="24" y="62" width="173" height="24" rx="4" fill="#c62828"/>
+  <text x="206" y="79" font-size="11" fill="#c62828" font-weight="700">10⁻²（单跳 1%）</text>
+
+  <rect x="24" y="96" width="520" height="24" rx="4" fill="#fdeceb" stroke="#e6c0bc"/>
+  <rect x="24" y="96" width="26" height="24" rx="4" fill="#c62828"/>
+  <text x="60" y="113" font-size="11" fill="#c62828" font-weight="700">10⁻⁶（两次重试后，肉眼已不可见）</text>
+
+  <rect x="24" y="130" width="520" height="24" rx="4" fill="#fdeceb" stroke="#e6c0bc"/>
+  <rect x="24" y="130" width="2" height="24" fill="#c62828"/>
+  <text x="36" y="147" font-size="11" fill="#c62828" font-weight="700">10⁻¹⁸（三段重试后，bar 宽度 0 像素）</text>
+
+  <text x="24" y="184" font-size="11" font-weight="700" fill="#3d454e">成本（线性刻度，最深层请求数 / 用户请求）</text>
+  <rect x="24" y="194" width="520" height="24" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <rect x="24" y="194" width="52" height="24" rx="4" fill="#1a5fb4"/>
+  <text x="86" y="211" font-size="11" fill="#1a5fb4" font-weight="700">3（只重试最深层）</text>
+
+  <rect x="24" y="228" width="520" height="24" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <rect x="24" y="228" width="260" height="24" rx="4" fill="#1a5fb4"/>
+  <text x="294" y="245" font-size="11" fill="#1a5fb4" font-weight="700">8（每层 2 次）</text>
+
+  <rect x="24" y="262" width="520" height="24" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <rect x="24" y="262" width="520" height="24" rx="4" fill="#c62828"/>
+  <text x="40" y="279" font-size="11" fill="#ffffff" font-weight="700">27（每层 3 次）—— 成本线性涨，收益已经用完</text>
+
+  <rect x="568" y="52" width="308" height="234" rx="8" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="584" y="76" font-size="12" font-weight="700" fill="#1e7d3c">同一可靠性，成本差 9 倍</text>
+  <text x="584" y="100" font-size="11" fill="#3d454e">只重试最深层 3 次：</text>
+  <text x="584" y="120" font-size="11" fill="#3d454e">  成本 3×，失败率 3×10⁻⁶</text>
+  <text x="584" y="144" font-size="11" fill="#3d454e">每层都重试 3 次：</text>
+  <text x="584" y="164" font-size="11" fill="#3d454e">  成本 27×，失败率 10⁻¹⁸</text>
+  <text x="584" y="192" font-size="11" font-weight="700" fill="#1e7d3c">3×10⁻⁶ 意味着什么？</text>
+  <text x="584" y="212" font-size="11" fill="#3d454e">每天 1 亿请求 → 每天 300 次失败</text>
+  <text x="584" y="230" font-size="11" fill="#3d454e">而 99.9% 的 SLO 允许 10 万次失败</text>
+  <text x="584" y="256" font-size="10.5" fill="#6b7683">后 18 倍的钱，买的是一个</text>
+  <text x="584" y="272" font-size="10.5" fill="#6b7683">已经不在瓶颈上的指标。</text>
+</svg>
+<figcaption><b>图 2</b> 失败率的 bar 长度在三步内缩到 2 像素，成本的 bar 长度涨到满格。这就是"重试过度"的形状。</figcaption>
+</figure>
+
+<div class="box red">
+  <div class="h">一句话记住</div>
+  <p>一个健康的系统，重试是在<strong>补概率</strong>；一个已经过载的系统，重试是在<strong>加压</strong>。而<em>过载本身就会制造失败</em>，于是补概率的动作变成了加压的动作——正反馈闭合。</p>
+</div>
+
+<h2><span class="n">L1</span>超时的四种语义，和它最容易被误解的一件事</h2>
+
+<p>面试里问"你怎么设超时"，八成的人回答"设 3 秒"。这句话里有四个不同的东西被混成了一个。</p>
+
+<table>
+<tr><th style="width:150px">语义</th><th>覆盖什么</th><th>不覆盖什么</th><th style="width:150px">典型默认</th></tr>
+<tr><td>connect timeout</td><td>TCP 握手（三次握手完成）</td><td>TLS 握手、DNS 解析（多数实现不算）</td><td>OkHttp 10s；JDK HttpClient 默认<strong>无</strong></td></tr>
+<tr><td>read / socket timeout</td><td>两次数据到达之间的最长间隔</td><td>整个响应的总时长（慢速滴流能无限续命）</td><td>OkHttp 10s；Feign 60s</td></tr>
+<tr><td>write timeout</td><td>发送请求体的最长时长</td><td>服务端处理时间</td><td>OkHttp 10s</td></tr>
+<tr><td>整体 deadline</td><td>从发起到拿到完整响应的总预算</td><td>已被服务端消耗的部分（除非传递）</td><td>gRPC 需显式设置</td></tr>
+</table>
+
+<p>四个里只有一个能真正约束"用户等了多久"，就是<strong>整体 deadline</strong>。而它必须<strong>在调用链上传递</strong>才有意义，否则每一跳都在花自己的预算，加起来是 N 倍的预算。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">四种超时各自覆盖哪一段：只有 deadline 覆盖"用户等了多久"</text>
+
+  <line x1="80" y1="60" x2="856" y2="60" stroke="#d4dae1" stroke-width="1.2"/>
+  <text x="80" y="48" font-size="10" fill="#6b7683">发起</text>
+  <text x="300" y="48" font-size="10" fill="#6b7683">TCP 建立</text>
+  <text x="470" y="48" font-size="10" fill="#6b7683">TLS</text>
+  <text x="600" y="48" font-size="10" fill="#6b7683">发送</text>
+  <text x="700" y="48" font-size="10" fill="#6b7683">服务端处理</text>
+  <text x="820" y="48" font-size="10" fill="#6b7683">响应</text>
+
+  <rect x="80" y="74" width="180" height="18" rx="3" fill="#9a6400" opacity="0.85"/>
+  <text x="88" y="88" font-size="10" fill="#ffffff">connect</text>
+  <rect x="300" y="74" width="120" height="18" rx="3" fill="#9a6400" opacity="0.55"/>
+  <rect x="470" y="74" width="60" height="18" rx="3" fill="#9a6400" opacity="0.3"/>
+
+  <rect x="80" y="102" width="200" height="18" rx="3" fill="#6a3fa0" opacity="0.9"/>
+  <text x="88" y="116" font-size="10" fill="#ffffff">write</text>
+
+  <rect x="600" y="102" width="120" height="18" rx="3" fill="#c62828" opacity="0.9"/>
+  <text x="608" y="116" font-size="10" fill="#ffffff">read</text>
+  <rect x="730" y="102" width="60" height="18" rx="3" fill="#c62828" opacity="0.9"/>
+
+  <rect x="80" y="130" width="776" height="18" rx="3" fill="#1a5fb4"/>
+  <text x="88" y="144" font-size="10" fill="#ffffff">整体 deadline（gRPC 的 grpc-timeout / 自定义 X-Request-Deadline）</text>
+
+  <rect x="80" y="170" width="380" height="52" rx="6" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="94" y="190" font-size="11" font-weight="700" fill="#c62828">read timeout 的漏洞</text>
+  <text x="94" y="210" font-size="10.5" fill="#3d454e">每 9 秒返回 1 字节 → 永不超时，永远不结束</text>
+
+  <rect x="484" y="170" width="372" height="52" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="498" y="190" font-size="11" font-weight="700" fill="#9a6400">connect timeout 的漏洞</text>
+  <text x="498" y="210" font-size="10.5" fill="#3d454e">不设 = 交给内核，tcp_syn_retries=6 → 127 秒</text>
+
+  <rect x="24" y="238" width="852" height="46" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="38" y="258" font-size="11.5" font-weight="700" fill="#1a5fb4">四个超时里，只有 deadline 能表达"用户最多等多久"。其余三个都是"单段保护"，</text>
+  <text x="38" y="276" font-size="11.5" fill="#1a5fb4">拼起来没有上界：4 段各自设 1 秒，端到端可以是 4 秒。</text>
+</svg>
+<figcaption><b>图 3</b> connect / read / write 各保护一段，只有 deadline 覆盖全程。read timeout 挡不住"慢速滴流"。</figcaption>
+</figure>
+
+<p>第二件容易被误解的事，比第一件严重得多：</p>
+
+<div class="box red">
+  <div class="h">超时不等于取消</div>
+  <p>这不是措辞问题，是物理事实。在进程内，超时可以变成取消，因为你能 <code>interrupt</code> 同一 JVM 里的线程；<strong>跨进程就做不到</strong>——TCP 没有"撤销"这个操作，客户端关掉连接，服务端读到的只是一个 RST，它可能正在写库，写完了才发现对端没了。</p>
+</div>
+
+<p>实测一（JDK 21.0.7，10 线程池提交 20 个各 3 秒的任务）：</p>
+
+<pre data-lang="text"><code>=== A) invokeAll(timeout) 会真的取消 ===
+返回耗时 210ms, 被取消 20/20, 已完成 0</code></pre>
+
+<p>200ms 到点，20 个任务全部被 interrupt 掉，一个都没跑完。这是"真取消"。</p>
+
+<p>但同一台机器上用 <code>CompletableFuture.orTimeout</code> 就能看到另一种语义（它连线程都不 interrupt）：</p>
+
+<pre data-lang="text"><code>=== B) orTimeout 只是不再等，任务照跑 ===
+调用方在 211ms 收到 ExecutionException
+2s 后: 计数器 = 1 (任务确实做完了), cf.isDone=true, cf.isCancelled=false</code></pre>
+
+<p>调用方 211ms 就"超时"了，但那个任务在 1.5s 时<strong>照样把活干完了</strong>。<code>isCancelled=false</code> 说明它压根没被取消，只是结果被丢弃了。</p>
+
+<div class="box amber">
+  <div class="h">本期最重要的一句话</div>
+  <p><strong>客户端超时，削减的是"等待"，不是"负载"。</strong>你以为的"失败请求"，在服务端眼里是一次正常完成的工作；而你的重试，是让同一份工作再做一遍。</p>
+</div>
+
+<p>所以"下游慢"的正确应对不是"调大超时"或"多重试几次"，而是<strong>减少同一份工作的重复次数</strong>（幂等 + 去重 + 熔断），因为服务端从来不会因为你走了就停下来。</p>
+
+<p>第三件：<strong>排队时间也算在超时里</strong>。实测（2 线程池，提交 10 个各 1 秒的任务）：</p>
+
+<pre data-lang="text"><code>第  1 个任务真正开始于  1002ms
+第  9 个任务真正开始于  5013ms
+第 10 个任务真正开始于  5013ms</code></pre>
+
+<p>第 10 个任务在 5013ms 才开始执行，而它自己只需要 1000ms。<strong>等待是执行的 4 倍</strong>。如果你的超时设 1 秒、线程池用无界队列，那第 10 个请求一定是超时的——它不是"下游慢"，它是"在自家队列里排了 4 秒"。这也是第 20 期说过的：无界队列把"拒绝"变成了"排队到超时"，而排队到超时比直接拒绝更糟，因为它把资源（线程、连接、内存）全都占着，还额外产生了一次重试。</p>
+<h2><span class="n">L2</span>重试的真实数学：把重试下推到最靠近故障的那一跳</h2>
+
+<p>上一节说了放大是 R^D。但这个故事还有一半没讲完：<strong>同样的可靠性，成本可以差 9 倍</strong>。</p>
+
+<p>关键在于重试放在哪一层。两种放法的效果对比如下（s=0.99，D=3，R=3，Python 实跑）：</p>
+
+<table>
+<tr><th style="width:230px">策略</th><th style="width:170px">最深层请求 / 用户</th><th>入口失败率</th></tr>
+<tr><td>每层都重试 3 次</td><td class="num">27</td><td class="num">1.0 × 10⁻¹⁸（浮点下溢为 0）</td></tr>
+<tr><td><strong>只有最深层重试 3 次</strong></td><td class="num"><strong>3</strong></td><td class="num"><strong>3.0 × 10⁻⁶</strong></td></tr>
+</table>
+
+<p>成本差 <strong>9 倍</strong>，可靠性差 12 个数量级。但 3×10⁻⁶ 是什么概念？按每天 1 亿次请求算，是每天 300 次失败——而绝大多数业务的 SLO 本来就在 99.9%（每天 10 万次失败）这个量级。<em>你在用 9 倍的成本，去优化一个已经不是瓶颈的指标。</em></p>
+
+<div class="box blue">
+  <div class="h">重试的第一条设计原则</div>
+  <p><strong>重试要下推到最靠近故障的那一跳，而不是每一层都加。</strong>网关不重试，业务服务不重试，只有真正持有资源的那个客户端（DB 客户端、HTTP 客户端）重试一次。这样成本是 R，不是 R^D。</p>
+</div>
+
+<p>第二原则：<strong>重试只对"可重试错误"生效</strong>。这个判断必须是白名单，不是黑名单：</p>
+
+<ul>
+<li><strong>可重试</strong>：连接被拒、连接重置、503、429（要读 <code>Retry-After</code>）、超时（且操作幂等）。</li>
+<li><strong>不可重试</strong>：400、401、403、404、422、409（业务冲突）、任何写操作在<strong>没有幂等键</strong>时。</li>
+</ul>
+
+<p>第 18 期讲过幂等键由"意图"决定，这里补一个更硬的判断法：<strong>如果重试会让"结果"与"重试次数"相关，就不能重试</strong>。扣库存、发券、转账都不行；查询、读缓存都可以。</p>
+
+<p>第三原则，也是最容易被忽略的：<strong>给重试设上限（预算）</strong>。Google SRE 的做法是给重试流量设一个比例预算（经验值 10%）：成功请求的 10% 是重试通道的容量上限，超了就<strong>不发重试</strong>，直接把错误返给上游。</p>
+
+<p>为什么这条这么重要？算一下：10 万 QPS、依赖 5% 超时、每请求最多重试 2 次，重试带来的额外流量是 5% + 5%×5% = 5.25%，总量 105,250 QPS——看起来还好。但当超时率涨到 20% 时，额外流量 24%，总量 124,000 QPS。而 20% 超时通常意味着下游已经在过载边缘，你再给它加 24% 的流量，它就从"边缘"掉下去了。</p>
+
+<p>有了 10% 预算，无论失败率多高，总流量封顶在 1.10 倍。<strong>这就是"重试预算"的本质：它不是提高成功率，它是给"重试"这个动作本身装一个断路器。</strong></p>
+
+<table>
+<tr><th style="width:150px">超时率</th><th style="width:190px">重试带来的额外流量</th><th>总 QPS</th></tr>
+<tr><td class="num">1%</td><td class="num">1.010%</td><td class="num">101,010（1.010×）</td></tr>
+<tr><td class="num">5%</td><td class="num">5.250%</td><td class="num">105,250（1.052×）</td></tr>
+<tr><td class="num">20%</td><td class="num">24.000%</td><td class="num">124,000（1.240×）</td></tr>
+<tr><td class="num">有 10% 预算</td><td>封顶</td><td class="num"><strong>110,000（1.100×）</strong></td></tr>
+</table>
+
+<h2><span class="n">L3</span>抖动：同样是重试三次，峰值差 6.7 倍</h2>
+
+<p>假设下游挂了 2 秒，1 万个客户端同时失败。它们都重试，退避策略不同，峰值差多少？实跑（10000 客户端，5 次重试，100ms 起、指数、上限 3.2s，10ms 粒度统计峰值）：</p>
+
+<table>
+<tr><th style="width:170px">策略</th><th style="width:140px">峰值 / 10ms</th><th style="width:170px">折算峰值 QPS</th><th>最挤的 1ms</th></tr>
+<tr><td>固定 100ms</td><td class="num">10000</td><td class="num">1,000,000</td><td class="num">10000 个</td></tr>
+<tr><td>指数无抖动</td><td class="num">10000</td><td class="num">1,000,000</td><td class="num">10000 个</td></tr>
+<tr><td>Equal Jitter</td><td class="num">2082</td><td class="num">208,200</td><td class="num">227 个</td></tr>
+<tr><td><strong>Full Jitter</strong></td><td class="num"><strong>1501</strong></td><td class="num"><strong>150,100</strong></td><td class="num"><strong>124 个</strong></td></tr>
+</table>
+
+<p>"指数退避"这个答案本身是不够的：指数只把<strong>重试的时间点</strong>拉开了，但所有客户端的时钟是同步的，于是它们在 100ms、200ms、400ms……这些<strong>同一个时刻</strong>一起到达。10000 个请求在同一毫秒撞进一个刚恢复的服务，它立刻又挂——这就是"重试风暴"（thundering herd）的准确形状。</p>
+
+<p>加入抖动（jitter）后，同一毫秒的撞车从 10000 个降到 124 个，<strong>降了 80 倍</strong>；峰值 QPS 从 100 万降到 15 万，<strong>降了 6.7 倍</strong>。注意 Equal 与 Full 的差别只有 1.4~1.8 倍——<em>关键不是"哪种抖动"，而是"有没有抖动"</em>。</p>
+
+<figure>
+<svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">四种退避的"请求密度形状"：前两种是五根全高柱，后两种是平缓的低带</text>
+
+  <line x1="90" y1="290" x2="840" y2="290" stroke="#d4dae1" stroke-width="1.2"/>
+  <text x="90" y="306" font-size="10" fill="#6b7683">0</text>
+  <text x="300" y="306" font-size="10" fill="#6b7683">1.0s</text>
+  <text x="514" y="306" font-size="10" fill="#6b7683">2.0s</text>
+  <text x="728" y="306" font-size="10" fill="#6b7683">3.0s</text>
+
+  <text x="24" y="76" font-size="11" font-weight="700" fill="#c62828">固定 100ms</text>
+  <line x1="90" y1="80" x2="840" y2="80" stroke="#e4e8ed"/>
+  <polygon points="111,80 118,80 118,46 111,46" fill="#c62828"/>
+  <polygon points="134,80 141,80 141,46 134,46" fill="#c62828"/>
+  <polygon points="157,80 164,80 164,46 157,46" fill="#c62828"/>
+  <polygon points="180,80 187,80 187,46 180,46" fill="#c62828"/>
+  <polygon points="203,80 210,80 210,46 203,46" fill="#c62828"/>
+  <text x="232" y="60" font-size="10.5" fill="#c62828" font-weight="700">峰值 100 万 QPS · 窗口 0.5s</text>
+
+  <text x="24" y="126" font-size="11" font-weight="700" fill="#9a6400">指数无抖动</text>
+  <line x1="90" y1="130" x2="840" y2="130" stroke="#e4e8ed"/>
+  <polygon points="111,130 118,130 118,96 111,96" fill="#9a6400"/>
+  <polygon points="156,130 163,130 163,96 156,96" fill="#9a6400"/>
+  <polygon points="246,130 253,130 253,96 246,96" fill="#9a6400"/>
+  <polygon points="425,130 432,130 432,96 425,96" fill="#9a6400"/>
+  <polygon points="784,130 791,130 791,96 784,96" fill="#9a6400"/>
+  <text x="452" y="110" font-size="10.5" fill="#9a6400" font-weight="700">峰值 100 万 QPS · 窗口 3.1s（拉长了，但没打散）</text>
+
+  <text x="24" y="176" font-size="11" font-weight="700" fill="#6a3fa0">Equal Jitter</text>
+  <line x1="90" y1="180" x2="840" y2="180" stroke="#e4e8ed"/>
+  <rect x="108" y="163" width="18" height="17" fill="#6a3fa0" opacity="0.8"/>
+  <rect x="153" y="163" width="24" height="17" fill="#6a3fa0" opacity="0.8"/>
+  <rect x="243" y="163" width="30" height="17" fill="#6a3fa0" opacity="0.8"/>
+  <rect x="422" y="163" width="34" height="17" fill="#6a3fa0" opacity="0.8"/>
+  <rect x="781" y="163" width="38" height="17" fill="#6a3fa0" opacity="0.8"/>
+  <text x="232" y="160" font-size="10.5" fill="#6a3fa0" font-weight="700">峰值 20.8 万 QPS（只降到 1/5）</text>
+
+  <text x="24" y="226" font-size="11" font-weight="700" fill="#1a5fb4">Full Jitter</text>
+  <line x1="90" y1="230" x2="840" y2="230" stroke="#e4e8ed"/>
+  <rect x="105" y="216" width="26" height="14" fill="#1a5fb4" opacity="0.85"/>
+  <rect x="150" y="216" width="34" height="14" fill="#1a5fb4" opacity="0.85"/>
+  <rect x="238" y="216" width="40" height="14" fill="#1a5fb4" opacity="0.85"/>
+  <rect x="415" y="216" width="46" height="14" fill="#1a5fb4" opacity="0.85"/>
+  <rect x="772" y="216" width="54" height="14" fill="#1a5fb4" opacity="0.85"/>
+  <text x="232" y="212" font-size="10.5" fill="#1a5fb4" font-weight="700">峰值 15 万 QPS（1/6.7）· 同毫秒撞车从 1 万降到 124</text>
+
+</svg>
+<figcaption><b>图 4</b> 柱子的高度 = 同一时刻到达的请求量。固定与指数退避都是"五根全高柱"，Full Jitter 把它压成一条低带。横轴为从首次失败算起的时间。</figcaption>
+</figure>
+
+<p>三种抖动的区别值得背下来：</p>
+
+<ul>
+<li><strong>无抖动</strong>：<code>delay = base × 2^k</code>。所有客户端同步，等于没退避。</li>
+<li><strong>Equal Jitter</strong>：<code>delay = d/2 + rand(0, d/2)</code>。保留一半下限，抖动范围窄一半，峰值只降到 20.8 万。</li>
+<li><strong>Full Jitter</strong>：<code>delay = rand(0, d)</code>。范围最大，峰值最低（15 万），但最坏情况下可能 1ms 后就重试——所以<strong>要配合最小重试间隔</strong>使用。</li>
+</ul>
+
+<p>AWS 那篇《Exponential Backoff And Jitter》的结论就是 Full Jitter 在"总调用次数"和"完成时间"两项上都最优，这不是玄学，是它能最大化打散到达时间。</p>
+
+<p>一个能直接用的实现（注意第 13 行那个看似多余的判断）：</p>
+
+<pre data-lang="java"><code>// 带预算 + Full Jitter 的重试器
+static &lt;T&gt; T call(Callable&lt;T&gt; op, Deadline dl, RetryBudget budget)
+        throws Exception {
+    long attempt = 0;
+    while (true) {
+        try {
+            return op.call();
+        } catch (RetryableException e) {
+            attempt++;
+            // ① 预算：重试流量不得超过成功请求的 10%，超了就立刻失败
+            if (!budget.tryAcquire()) throw e;
+            // ② 预算：剩余时间不够"一次尝试 + 退避"就不再重试
+            long cap = Math.min(200, 20L &lt;&lt; attempt);              // 上限 200ms
+            long sleep = ThreadLocalRandom.current().nextLong(cap);  // Full Jitter
+            if (dl.remaining() &lt; sleep + 30) throw e;       // 30ms 是最小处理时间
+            Thread.sleep(sleep);
+        }
+    }
+}</code></pre>
+
+<p>这三行判断分别对应三条原则：<strong>预算</strong>（不让重试无限放大）、<strong>抖动</strong>（不让重试同步撞车）、<strong>剩余时间</strong>（不为一个已经没人等的请求继续干活）。少任何一条，重试都会在故障时变成放大器。</p>
+
+<p>这里有个常被漏掉的细节：<strong>抖动的基准不该是 100ms，而该是"预期的恢复时间"</strong>。下游是 200ms 的 GC 抖动，你把 base 设成 10ms，重试全落在故障窗口内，等于没退避；下游是 30 秒的发布重启，base 100ms、上限 3.2s 也不够，重试会在它恢复前耗尽。经验值：<strong>base ≈ 单次调用的 P99，上限 ≈ 你愿意等的最长时间（通常 2~5 个 P99）</strong>。</p>
+<h2><span class="n">L4</span>扇出与串联：为什么"每个下游都达标"，接口 P99 还是 800ms</h2>
+
+<p>这一段是本期的"数形结合"核心，也是最能体现区分度的地方。</p>
+
+<p>先定义单下游：中位数 20ms、P99 = 200ms（对数正态，实跑校验 P50=19.9ms / P90=70.5ms / P99=194.1ms）。</p>
+
+<p><strong>并行扇出</strong>（一个页面调 100 个下游，等最慢的那个）：整体 = max，实跑 4 万次：</p>
+
+<table>
+<tr><th style="width:120px">扇出数 N</th><th>整体 P50</th><th>整体 P90</th><th>整体 P99</th><th>P50 / 单 P50</th></tr>
+<tr><td class="num">1</td><td class="num">19.9ms</td><td class="num">70.5ms</td><td class="num">194.1ms</td><td class="num">1.0×</td></tr>
+<tr><td class="num">5</td><td class="num">61.4ms</td><td class="num">151.3ms</td><td class="num">344.4ms</td><td class="num">3.1×</td></tr>
+<tr><td class="num">10</td><td class="num">87.9ms</td><td class="num">196.5ms</td><td class="num">415.7ms</td><td class="num">4.4×</td></tr>
+<tr><td class="num">50</td><td class="num">177.2ms</td><td class="num">341.5ms</td><td class="num">663.4ms</td><td class="num">8.9×</td></tr>
+<tr><td class="num"><strong>100</strong></td><td class="num"><strong>228.2ms</strong></td><td class="num">419.6ms</td><td class="num"><strong>784.1ms</strong></td><td class="num"><strong>11.5×</strong></td></tr>
+</table>
+
+<p>看清楚这一行：<strong>100 个下游并行时，整体 P50 = 228ms，而单个下游的 P99 只有 194ms。也就是说"中位数体验"已经比"任何单个下游的最差 1%"还慢。</strong></p>
+
+<p>这就是"每个下游都达标，我的接口却不达标"的全部答案。它有个精确的形式：</p>
+
+<pre data-lang="text"><code>P(整体 &gt; x) = 1 - F(x)^N
+
+要让整体中位数不超过 x，需要 F(x)^N = 0.5，即  F(x) = 0.5^(1/N)
+
+N = 1     → F(x) = 0.50      → 整体中位数 = 单个 P50
+N = 10    → F(x) = 0.933     → 整体中位数 = 单个 P93
+N = 100   → F(x) = 0.9931    → 整体中位数 = 单个 P99.3
+N = 1000  → F(x) = 0.99931   → 整体中位数 = 单个 P99.93</code></pre>
+
+<p>扇出数每加一个 0，你要盯的分位数就多两个 9。这是"扇出成本"的准确表达，也是为什么大促前"加个推荐位"这种需求比它看起来贵得多。</p>
+
+<p><strong>串联</strong>（A→B→C，等最慢累加）：整体 = sum，实跑：</p>
+
+<table>
+<tr><th style="width:110px">跳数 D</th><th>和 P50</th><th>和 P99</th><th>朴素估算 D × 单P99</th><th>实际 / 朴素</th></tr>
+<tr><td class="num">2</td><td class="num">48.3ms</td><td class="num">293.6ms</td><td class="num">388ms</td><td class="num">0.76×</td></tr>
+<tr><td class="num">5</td><td class="num">141.9ms</td><td class="num">494.0ms</td><td class="num">970ms</td><td class="num">0.51×</td></tr>
+<tr><td class="num">10</td><td class="num">301.9ms</td><td class="num">769.2ms</td><td class="num">1941ms</td><td class="num">0.40×</td></tr>
+</table>
+
+<p>串联正好相反：<strong>10 跳的和 P99 只有 769ms，是"10 × 单跳 P99 = 1941ms"的 40%</strong>。因为 10 跳同时都落在各自 P99 的概率极低（0.01¹⁰），和的分位数远小于分位数的和。</p>
+
+<figure>
+<svg viewBox="0 0 900 336" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">左边：并行的"最慢者胜"；右边：串联的"分位不能相加"</text>
+
+  <text x="40" y="44" font-size="11.5" font-weight="700" fill="#1a5fb4">并行扇出 = max（整体比任何一个都慢）</text>
+  <line x1="40" y1="252" x2="440" y2="252" stroke="#d4dae1" stroke-width="1.2"/>
+  <line x1="40" y1="205" x2="440" y2="205" stroke="#c62828" stroke-width="1.2" stroke-dasharray="5 4"/>
+  <text x="44" y="200" font-size="9.5" fill="#c62828">单下游 P99 = 194ms</text>
+
+  <rect x="58" y="247" width="26" height="5" fill="#bcd4f2"/>
+  <rect x="86" y="205" width="26" height="47" fill="#1a5fb4"/>
+  <text x="58" y="270" font-size="10" fill="#3d454e">N=1</text>
+
+  <rect x="133" y="237" width="26" height="15" fill="#bcd4f2"/>
+  <rect x="161" y="169" width="26" height="83" fill="#1a5fb4"/>
+  <text x="133" y="270" font-size="10" fill="#3d454e">N=5</text>
+
+  <rect x="208" y="231" width="26" height="21" fill="#bcd4f2"/>
+  <rect x="236" y="152" width="26" height="100" fill="#1a5fb4"/>
+  <text x="208" y="270" font-size="10" fill="#3d454e">N=10</text>
+
+  <rect x="283" y="210" width="26" height="42" fill="#bcd4f2"/>
+  <rect x="311" y="93" width="26" height="159" fill="#1a5fb4"/>
+  <text x="283" y="270" font-size="10" fill="#3d454e">N=50</text>
+
+  <rect x="358" y="197" width="26" height="55" fill="#bcd4f2"/>
+  <rect x="386" y="64" width="26" height="188" fill="#c62828"/>
+  <text x="358" y="270" font-size="10" fill="#3d454e">N=100</text>
+  <text x="300" y="300" font-size="10" fill="#6b7683">浅色 = P50，深色 = P99</text>
+
+  <text x="500" y="44" font-size="11.5" font-weight="700" fill="#6a3fa0">串联 = sum（分位远小于分位之和）</text>
+  <line x1="500" y1="252" x2="872" y2="252" stroke="#d4dae1" stroke-width="1.2"/>
+  <line x1="500" y1="233" x2="872" y2="233" stroke="#c62828" stroke-width="1.2" stroke-dasharray="5 4"/>
+
+  <rect x="516" y="223" width="26" height="29" fill="#6a3fa0"/>
+  <rect x="546" y="214" width="26" height="38" fill="#e4e8ed" stroke="#c3cad2"/>
+  <text x="516" y="270" font-size="10" fill="#3d454e">D=2</text>
+
+  <rect x="596" y="216" width="26" height="36" fill="#6a3fa0"/>
+  <rect x="626" y="195" width="26" height="57" fill="#e4e8ed" stroke="#c3cad2"/>
+  <text x="596" y="270" font-size="10" fill="#3d454e">D=3</text>
+
+  <rect x="676" y="204" width="26" height="48" fill="#6a3fa0"/>
+  <rect x="706" y="157" width="26" height="95" fill="#e4e8ed" stroke="#c3cad2"/>
+  <text x="676" y="270" font-size="10" fill="#3d454e">D=5</text>
+
+  <rect x="756" y="177" width="26" height="75" fill="#6a3fa0"/>
+  <rect x="786" y="62" width="26" height="190" fill="#e4e8ed" stroke="#c3cad2"/>
+  <text x="756" y="270" font-size="10" fill="#3d454e">D=10</text>
+  <text x="686" y="300" font-size="10" fill="#6b7683" text-anchor="middle">深色 = 实际和 P99；灰 = 朴素估算 D×194ms</text>
+
+  <rect x="24" y="308" width="852" height="22" rx="5" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="36" y="323" font-size="10.5" fill="#9a6400" font-weight="700">分位数既不能相加，也不能取最大：串联合成后偏小，并联取最大后偏大。</text>
+</svg>
+<figcaption><b>图 5</b> 左：N=100 时整体 P50（228ms）已经越过单下游 P99（194ms）。右：D=10 时实际和 P99 只有朴素估算的 40%。</figcaption>
+</figure>
+
+<div class="box purple">
+  <div class="h">可以直接拿去面试的一句话</div>
+  <p><strong>分位数不能相加，也不能取最大。串联时"和的分位"远小于"分位的和"；并联时"最大值的分位"远大于"分位的最大"。</strong>前者让你高估问题，后者让你漏掉问题。</p>
+</div>
+
+<p>实际工程里，扇出的杀伤力远大于串联，因为串联还能靠减少跳数解决，扇出是业务结构决定的。所以读接口的优化顺序应该是：<strong>先砍扇出，再砍跳数，最后才优化单跳的 P99</strong>。</p>
+
+<h2><span class="n">L5</span>超时预算：把 1000ms 切成会缩小的片</h2>
+
+<p>单个超时的正确形态不是"每跳 3 秒"，而是<strong>总预算 + 剩余时间传递</strong>。</p>
+
+<p>假设端到端预算 1000ms，链路 5 跳。两种分法：</p>
+
+<ol>
+<li><strong>各跳独立设 1000ms</strong>：最坏 5000ms，用户等 5 秒；且第 5 跳失败时，前 4 跳的 800ms 全部白花。</li>
+<li><strong>剩余预算分配</strong>：进入第 k 跳时，<code>本跳预算 = 剩余预算 / 剩余跳数</code>。第 1 跳 200ms，若它用了 30ms，第 2 跳预算 = 970/4 ≈ 242ms；若第 1 跳用了 700ms，第 2 跳只剩 75ms——<strong>这时候直接快速失败比继续试更好</strong>，因为剩下的预算连一次正常调用都不够。</li>
+</ol>
+
+<figure>
+<svg viewBox="0 0 900 316" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">同一笔 1000ms 预算，两种切法：0.68s 完成 vs 3.2s 还在超时</text>
+
+  <text x="24" y="52" font-size="11" font-weight="700" fill="#1a5fb4">A · 剩余预算分配（deadline 传递）</text>
+  <line x1="130" y1="140" x2="870" y2="140" stroke="#d4dae1" stroke-width="1.2"/>
+  <text x="130" y="158" font-size="9.5" fill="#6b7683">0</text>
+  <text x="420" y="158" font-size="9.5" fill="#6b7683">400ms</text>
+  <text x="710" y="158" font-size="9.5" fill="#6b7683">800ms</text>
+  <text x="852" y="158" font-size="9.5" fill="#6b7683">1s</text>
+
+  <rect x="130" y="96" width="131" height="30" rx="4" fill="#1a5fb4"/>
+  <text x="136" y="115" font-size="10" fill="#ffffff">第1跳 180</text>
+  <text x="136" y="88" font-size="9.5" fill="#1a5fb4">预算 200</text>
+
+  <rect x="261" y="96" width="139" height="30" rx="4" fill="#2b6cb8"/>
+  <text x="267" y="115" font-size="10" fill="#ffffff">第2跳 190</text>
+  <text x="267" y="88" font-size="9.5" fill="#1a5fb4">预算 205</text>
+
+  <rect x="400" y="96" width="88" height="30" rx="4" fill="#3b7cc4"/>
+  <text x="406" y="115" font-size="10" fill="#ffffff">第3 120</text>
+  <text x="406" y="88" font-size="9.5" fill="#1a5fb4">预算 210</text>
+
+  <rect x="488" y="96" width="73" height="30" rx="4" fill="#4a86c8"/>
+  <text x="492" y="115" font-size="9.5" fill="#ffffff">第4 100</text>
+  <text x="492" y="88" font-size="9.5" fill="#1a5fb4">预算 255</text>
+
+  <rect x="561" y="96" width="66" height="30" rx="4" fill="#5a90cc"/>
+  <text x="565" y="115" font-size="9.5" fill="#ffffff">第5 90</text>
+  <text x="565" y="88" font-size="9.5" fill="#1a5fb4">预算 410</text>
+
+  <rect x="627" y="96" width="233" height="30" rx="4" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="638" y="115" font-size="10" fill="#1e7d3c">剩余 320ms（可提前结束）</text>
+  <text x="640" y="140" font-size="9.5" fill="#1e7d3c">总耗时 680ms</text>
+
+  <text x="24" y="196" font-size="11" font-weight="700" fill="#c62828">B · 每跳各设 1000ms（无传递）</text>
+  <line x1="130" y1="252" x2="870" y2="252" stroke="#d4dae1" stroke-width="1.2"/>
+  <rect x="130" y="208" width="330" height="30" rx="4" fill="#c62828"/>
+  <text x="138" y="227" font-size="10" fill="#ffffff">第1跳 1000ms 超时</text>
+  <rect x="460" y="208" width="330" height="30" rx="4" fill="#c62828"/>
+  <text x="468" y="227" font-size="10" fill="#ffffff">第2跳 1000ms 超时</text>
+  <polygon points="862,214 880,223 862,232" fill="#c62828"/>
+  <text x="858" y="268" font-size="9.5" fill="#c62828" text-anchor="end">还有第 3 跳在超时 → 累计 3.2s，用户早走了</text>
+
+  <rect x="24" y="272" width="852" height="34" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="36" y="293" font-size="10.5" fill="#9a6400" font-weight="700">预算制的三个动作：① 入站算剩余，不足即 503；② 出站超时 = 剩余 × 0.9；③ 剩余 &lt; 最小处理时间就短路，不进队列。</text>
+</svg>
+<figcaption><b>图 6</b> 预算递减时每跳的额度会重算（200→205→210→255→410）；各跳独立设超时则会一路等满，最后连用户都走了还在算。</figcaption>
+</figure>
+
+<p>实跑（5 跳、每跳 lognormal 中位 20ms/P99 194ms，10 万次）：</p>
+
+<table>
+<tr><th style="width:200px">端到端预算</th><th>能满足的比例</th></tr>
+<tr><td class="num">300ms</td><td class="num">92.60%</td></tr>
+<tr><td class="num">500ms</td><td class="num">99.03%</td></tr>
+<tr><td class="num">1000ms</td><td class="num">99.95%</td></tr>
+</table>
+
+<p>注意 1000ms 时也只有 99.95%——<strong>5 跳链路上"每跳 P99 都达标"并不保证"端到端 P99 达标"</strong>，因为和的分布尾部比你想象的厚。</p>
+
+<p>预算制的落地一般是一个 Filter/Interceptor，逻辑只有四行：</p>
+
+<pre data-lang="java"><code>// 入口：把 deadline 接下来；过期就快速失败，不进队列
+public boolean preHandle(HttpServletRequest req, HttpServletResponse resp) {
+    String h = req.getHeader("X-Request-Deadline");        // 绝对时间戳(ms)
+    long deadline = h == null ? System.currentTimeMillis() + DEFAULT_BUDGET
+                              : Long.parseLong(h);
+    if (deadline - System.currentTimeMillis() &lt; MIN_PROCESS_MS) {
+        resp.setStatus(503);
+        resp.setHeader("Retry-After", "1");
+        return false;                                      // 关键：不占线程继续算
+    }
+    RequestContext.setDeadline(deadline);
+    return true;
+}
+// 出站：本次调用的超时 = 剩余时间 × 0.9（留 10% 给自己处理响应）
+long timeout = (RequestContext.remaining() * 9) / 10;</code></pre>
+
+<p>三个工程要点：</p>
+
+<ul>
+<li><strong>传递方式</strong>：gRPC 用 <code>grpc-timeout</code> header 携带剩余毫秒；HTTP 一般用自定义 header（如 <code>X-Request-Deadline</code>）或 trace 上下文里的截止时间。没有传递，预算就退化成"每层各设一个超时"。</li>
+<li><strong>入站也要算</strong>：服务端收到请求时，先算 <code>剩余 = deadline - now</code>，如果剩余小于"本服务的最小处理时间"，直接返回 503 + <code>Retry-After</code>，不要排队。这叫 <strong>fail fast on budget</strong>，比让请求在队列里等到超时好得多（省了线程和一次重试）。</li>
+<li><strong>预算要给"非关键路径"打折</strong>：推荐位、埋点、风控异步校验这类可降级的调用，预算应该是主链路的 1/10，超时就直接返回降级结果，绝不参与重试。</li>
+</ul>
+<h2><span class="n">L6</span>排队：超时与重试如何把 70% 利用率推过 100%</h2>
+
+<p>前面都在讲"调用方"，这一节讲"服务端"——因为超时和重试的真正伤害发生在队列里。</p>
+
+<p>M/M/1 的等待时间公式（λ 到达率、μ 服务率、ρ=λ/μ）：</p>
+
+<pre data-lang="text"><code>Wq = ρ / (μ(1-ρ))            P(逗留 &gt; T) = ρ · e^(-(μ-λ)T)</code></pre>
+
+<p>取服务时间 10ms（μ=100/s），客户端超时 100ms，实算：</p>
+
+<table>
+<tr><th style="width:150px">利用率 ρ</th><th>平均等待 Wq</th><th>P(逗留 &gt; 100ms)</th></tr>
+<tr><td class="num">0.50</td><td class="num">10.0ms</td><td class="num">0.34%</td></tr>
+<tr><td class="num">0.70</td><td class="num">23.3ms</td><td class="num">3.49%</td></tr>
+<tr><td class="num">0.80</td><td class="num">40.0ms</td><td class="num">10.83%</td></tr>
+<tr><td class="num">0.85</td><td class="num">56.7ms</td><td class="num">18.97%</td></tr>
+<tr><td class="num">0.90</td><td class="num">90.0ms</td><td class="num">33.11%</td></tr>
+<tr><td class="num">0.95</td><td class="num">190.0ms</td><td class="num">57.62%</td></tr>
+<tr><td class="num">0.99</td><td class="num">990.0ms</td><td class="num">89.58%</td></tr>
+</table>
+
+<p>这张表要横着读：<strong>利用率从 70% 涨到 90%，等待时间涨了 3.9 倍（23ms→90ms），超时率涨了 9.5 倍（3.5%→33%）</strong>。而容量规划里"70% 是安全水位"这句话的真正含义，不是"还剩 30% 余量"，而是<em>"再涨 20 个点，超时率就翻 10 倍"</em>。</p>
+
+<figure>
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">等待时间在 ρ=0.8 之后不是"变慢"，是"转向垂直"（纵轴对数刻度）</text>
+
+  <line x1="60" y1="250" x2="860" y2="250" stroke="#d4dae1" stroke-width="1.2"/>
+  <line x1="60" y1="60" x2="60" y2="250" stroke="#d4dae1" stroke-width="1.2"/>
+  <text x="36" y="254" font-size="10" fill="#6b7683">10ms</text>
+  <text x="30" y="164" font-size="10" fill="#6b7683">100ms</text>
+  <text x="30" y="74" font-size="10" fill="#6b7683">1000ms</text>
+  <line x1="60" y1="160" x2="860" y2="160" stroke="#c62828" stroke-width="1" stroke-dasharray="4 4"/>
+  <text x="600" y="154" font-size="9.5" fill="#c62828">客户端超时 100ms</text>
+
+  <polyline points="60,250 200,232 340,217 480,196 550,182 620,164 690,135 746,70"
+            fill="none" stroke="#1a5fb4" stroke-width="2.4"/>
+  <circle cx="200" cy="232" r="3.4" fill="#1a5fb4"/>
+  <circle cx="340" cy="217" r="3.4" fill="#1a5fb4"/>
+  <circle cx="480" cy="196" r="3.4" fill="#1a5fb4"/>
+  <circle cx="550" cy="182" r="3.4" fill="#1a5fb4"/>
+  <circle cx="620" cy="164" r="3.4" fill="#1a5fb4"/>
+  <circle cx="690" cy="135" r="3.4" fill="#1a5fb4"/>
+  <circle cx="746" cy="70" r="4.2" fill="#c62828"/>
+
+  <text x="150" y="272" font-size="10" fill="#3d454e">ρ=0.5</text>
+  <text x="330" y="272" font-size="10" fill="#3d454e">0.7</text>
+  <text x="470" y="272" font-size="10" fill="#3d454e">0.8</text>
+  <text x="600" y="272" font-size="10" fill="#3d454e">0.9</text>
+  <text x="738" y="272" font-size="10" fill="#3d454e">0.99</text>
+
+  <text x="200" y="246" font-size="10" fill="#1a5fb4">23ms · 超时 3.5%</text>
+  <text x="628" y="188" font-size="10" fill="#1a5fb4">90ms · 超时 33%</text>
+  <text x="700" y="92" font-size="10" fill="#c62828">990ms · 超时 90%</text>
+
+  <rect x="24" y="286" width="852" height="22" rx="5" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="36" y="301" font-size="10.5" fill="#9a6400" font-weight="700">ρ 从 0.7 到 0.9，等待 ×3.9、超时率 ×9.5；到 0.99 时 90% 的请求都会超时 —— 此时系统"能用"只剩名义。</text>
+</svg>
+<figcaption><b>图 7</b> M/M/1 的等待曲线在对数坐标下仍快速上翘：100ms 的超时线在 ρ≈0.71 处被穿透。</figcaption>
+</figure>
+
+<p>现在把反馈接上。超时的请求会被重试，重试增加 λ，λ 增加 ρ，ρ 增加超时率：</p>
+
+<pre data-lang="text"><code>ρ_{n+1} = ρ0 · (1 + p(ρ_n) + p(ρ_n)²)      # p = 超时率，最多 2 次重试</code></pre>
+
+<p>迭代到不动点，实算：</p>
+
+<table>
+<tr><th style="width:260px">ρ0（没有重试时的利用率）</th><th style="width:140px">收敛结果</th><th>结论</th></tr>
+<tr><td class="num">0.60</td><td class="num">0.607</td><td>稳定</td></tr>
+<tr><td class="num">0.65</td><td class="num">0.666</td><td>稳定</td></tr>
+<tr><td class="num">0.70</td><td class="num">0.741</td><td>稳定（18 次迭代）</td></tr>
+<tr><td class="num">0.71</td><td class="num">0.767</td><td>稳定（32 次迭代，已经很勉强）</td></tr>
+<tr><td class="num"><strong>0.72</strong></td><td class="num"><strong>1.688</strong></td><td><strong>发散</strong></td></tr>
+<tr><td class="num">0.80</td><td class="num">1.134</td><td>发散</td></tr>
+<tr><td class="num">0.90</td><td class="num">1.297</td><td>发散</td></tr>
+</table>
+
+<div class="box red">
+  <div class="h">临界点在 0.71 和 0.72 之间</div>
+  <p>这不是"慢慢变差"，这是<strong>相变</strong>：0.71 时系统会收敛到一个更差的稳态（0.767），0.72 时它连稳态都没有了——队列单调增长，直到内存或连接耗尽。你按 70% 利用率做的容量规划，加上"最多重试 2 次"这个看起来很保守的配置，<em>实际的安全边界是 71.x%</em>。中间那 1 个百分点的余量，被重试吃掉了。</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">同一条公式，两个起始值：一个收敛到 0.741，一个跑到 1.688</text>
+
+  <line x1="90" y1="250" x2="800" y2="250" stroke="#d4dae1" stroke-width="1.2"/>
+  <line x1="90" y1="64" x2="90" y2="250" stroke="#d4dae1" stroke-width="1.2"/>
+  <text x="60" y="254" font-size="10" fill="#6b7683">0.66</text>
+  <text x="60" y="160" font-size="10" fill="#6b7683">0.76</text>
+  <text x="60" y="72" font-size="10" fill="#6b7683">0.86</text>
+
+  <polyline points="90,214 142,192 194,184 246,180 298,178 350,178 402,177 454,177 506,177 558,177 610,177 662,177"
+            fill="none" stroke="#1e7d3c" stroke-width="2.4"/>
+  <circle cx="90" cy="214" r="3" fill="#1e7d3c"/>
+  <circle cx="142" cy="192" r="3" fill="#1e7d3c"/>
+  <circle cx="194" cy="184" r="3" fill="#1e7d3c"/>
+  <circle cx="246" cy="180" r="3" fill="#1e7d3c"/>
+  <circle cx="298" cy="178" r="3" fill="#1e7d3c"/>
+  <text x="440" y="168" font-size="10.5" fill="#1e7d3c" font-weight="700">ρ0=0.70 → 收敛 0.741</text>
+
+  <polyline points="90,196 142,166 194,152 246,143 298,136 350,130 402,124 454,119 506,112 558,104 610,94 662,78 714,48"
+            fill="none" stroke="#c62828" stroke-width="2.4"/>
+  <circle cx="90" cy="196" r="3" fill="#c62828"/>
+  <circle cx="142" cy="166" r="3" fill="#c62828"/>
+  <circle cx="194" cy="152" r="3" fill="#c62828"/>
+  <circle cx="246" cy="143" r="3" fill="#c62828"/>
+  <circle cx="298" cy="136" r="3" fill="#c62828"/>
+  <circle cx="350" cy="130" r="3" fill="#c62828"/>
+  <circle cx="402" cy="124" r="3" fill="#c62828"/>
+  <circle cx="454" cy="119" r="3" fill="#c62828"/>
+  <circle cx="506" cy="112" r="3" fill="#c62828"/>
+  <circle cx="558" cy="104" r="3" fill="#c62828"/>
+  <circle cx="610" cy="94" r="3" fill="#c62828"/>
+  <circle cx="662" cy="78" r="3" fill="#c62828"/>
+  <circle cx="714" cy="48" r="4.2" fill="#c62828"/>
+
+  <polygon points="714,44 762,20 762,36" fill="#c62828"/>
+  <text x="770" y="30" font-size="10.5" fill="#c62828" font-weight="700">→ 1.688</text>
+  <text x="770" y="46" font-size="9.5" fill="#c62828">没有稳态</text>
+
+  <text x="90" y="272" font-size="10" fill="#3d454e">n=0</text>
+  <text x="350" y="272" font-size="10" fill="#3d454e">n=5</text>
+  <text x="610" y="272" font-size="10" fill="#3d454e">n=10</text>
+  <text x="700" y="272" font-size="10" fill="#3d454e">n=13</text>
+  <text x="470" y="288" font-size="10" fill="#6b7683">迭代次数 n（每轮 = 一次"超时→重试→利用率上升"）</text>
+</svg>
+<figcaption><b>图 8</b> 同一个超时与重试配置，ρ0=0.70 收敛、0.72 发散。拐点不在"系统很慢"，在"斜率超过 1"。</figcaption>
+</figure>
+
+<p>再看 20 秒的事件仿真（服务时间 10ms、超时 100ms、最多 3 次尝试、服务端<strong>不因客户端超时而中止</strong>）：</p>
+
+<table>
+<tr><th style="width:150px">ρ0</th><th>原始请求</th><th>重试次数</th><th>服务端处理</th><th>按时完成</th><th>白干</th><th>平均队列</th><th>P99 等待</th></tr>
+<tr><td>0.60（不重试）</td><td class="num">1192</td><td class="num">0</td><td class="num">1192</td><td class="num">1173</td><td class="num">19</td><td class="num">0.8</td><td class="num">97ms</td></tr>
+<tr><td>0.60（重试 3 次）</td><td class="num">1210</td><td class="num">480</td><td class="num">1354</td><td class="num">958</td><td class="num">395</td><td class="num">35.2</td><td class="num">1855ms</td></tr>
+<tr><td>0.70（重试 3 次）</td><td class="num">1372</td><td class="num">826</td><td class="num">1531</td><td class="num">952</td><td class="num">578</td><td class="num">99.9</td><td class="num">3080ms</td></tr>
+<tr><td>0.90（重试 3 次）</td><td class="num">1794</td><td class="num">3421</td><td class="num">1994</td><td class="num">77</td><td class="num">1916</td><td class="num">1521.7</td><td class="num">11867ms</td></tr>
+</table>
+
+<p>第一行和第二行是同一个 60% 利用率，唯一区别是"开了 3 次重试"：</p>
+
+<ul>
+<li>重试次数 480（占原始请求的 <strong>40%</strong>）；</li>
+<li><strong>"白干"（服务端算完了但客户端早走了）395 次，占处理量的 29%</strong>；</li>
+<li>P99 等待从 <strong>97ms 涨到 1855ms（19 倍）</strong>；</li>
+<li>平均队列从 0.8 涨到 35。</li>
+</ul>
+
+<p>注意最后一行：ρ0=0.9 时，1794 个请求里只有 <strong>77 个按时完成</strong>，1916 次是白干——系统 100% 在忙，<em>吞吐趋近于零</em>。这就是"活锁"（livelock）的准确形态：CPU 和线程全满，业务指标全崩，而每个组件看起来都在正常工作。</p>
+
+<figure>
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">服务端处理量里"白干"的比例：重试把有效工作挤成了少数派</text>
+
+  <line x1="60" y1="280" x2="800" y2="280" stroke="#d4dae1" stroke-width="1.2"/>
+
+  <rect x="110" y="173" width="90" height="106" fill="#1e7d3c"/>
+  <rect x="110" y="171" width="90" height="2" fill="#c62828"/>
+  <text x="110" y="166" font-size="10" fill="#1e7d3c" font-weight="700">1173 按时</text>
+
+  <rect x="300" y="194" width="90" height="86" fill="#1e7d3c"/>
+  <rect x="300" y="158" width="90" height="36" fill="#c62828"/>
+  <text x="300" y="152" font-size="10" fill="#c62828" font-weight="700">395 白干</text>
+
+  <rect x="490" y="194" width="90" height="86" fill="#1e7d3c"/>
+  <rect x="490" y="142" width="90" height="52" fill="#c62828"/>
+  <text x="490" y="136" font-size="10" fill="#c62828" font-weight="700">578 白干</text>
+
+  <rect x="680" y="273" width="90" height="7" fill="#1e7d3c"/>
+  <rect x="680" y="101" width="90" height="172" fill="#c62828"/>
+  <text x="680" y="95" font-size="10" fill="#c62828" font-weight="700">1916 白干</text>
+
+  <text x="112" y="300" font-size="10" fill="#3d454e">ρ0=0.6 无重试</text>
+  <text x="306" y="300" font-size="10" fill="#3d454e">ρ0=0.6 重试3</text>
+  <text x="496" y="300" font-size="10" fill="#3d454e">ρ0=0.7 重试3</text>
+  <text x="686" y="300" font-size="10" fill="#3d454e">ρ0=0.9 重试3</text>
+
+  <text x="60" y="60" font-size="10.5" fill="#3d454e">柱高 = 服务端处理次数</text>
+  <text x="60" y="78" font-size="10.5" fill="#3d454e">绿 = 客户端按时收到</text>
+  <text x="60" y="96" font-size="10.5" fill="#3d454e">红 = 白干（客户端早走了）</text>
+</svg>
+<figcaption><b>图 9</b> 前两根柱是同一个 60% 利用率：加了 3 次重试后，"白干"从 2% 涨到 29%。最后一根柱子里绿色几乎消失。</figcaption>
+</figure>
+<h2><span class="n">L7</span>容量：三个公式，一个反直觉结论</h2>
+
+<p>容量规划不需要复杂模型，三个公式够用：</p>
+
+<p><strong>① Little's Law</strong>：<code>并发 = QPS × 平均响应时间</code>。2000 QPS × 50ms = 100 个并发。这是线程池、连接池、Tomcat maxThreads 的下限。</p>
+
+<p><strong>② 吞吐上限</strong>：在同步阻塞模型里，<code>吞吐 ≤ 并发数 / 超时时间</code>。这条最反直觉：超时时间不只是"等多久"，它还是<strong>吞吐旋钮</strong>。</p>
+
+<table>
+<tr><th style="width:150px">线程数</th><th style="width:150px">超时</th><th>理论吞吐上限</th></tr>
+<tr><td class="num">200</td><td class="num">50ms</td><td class="num">4,000 QPS</td></tr>
+<tr><td class="num">200</td><td class="num">100ms</td><td class="num">2,000 QPS</td></tr>
+<tr><td class="num">200</td><td class="num">500ms</td><td class="num">400 QPS</td></tr>
+<tr><td class="num">200</td><td class="num">1000ms</td><td class="num">200 QPS</td></tr>
+<tr><td class="num">200</td><td class="num">3000ms</td><td class="num">67 QPS</td></tr>
+</table>
+
+<p>也就是说，<strong>把超时从 100ms 调到 1s 来"避免误杀"，等于把吞吐上限砍掉 10 倍</strong>。如果下游真的慢到 1s，那这个服务本来也只能每秒处理 200 个——但在此之前，它会先把线程全占住，然后新请求排队、超时、重试，进入上一节的正反馈。</p>
+
+<p>这就是为什么"超时设多少"没有标准答案，只有等式：<strong>超时必须与并发数、目标 QPS 一起决定</strong>。200 线程要扛 2000 QPS，超时就不能超过 100ms（还得给下游 99% 的余量）。</p>
+
+<figure>
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">吞吐上限 = 并发 ÷ 超时：三条等轴双曲线，横轴超时（对数）</text>
+
+  <line x1="90" y1="250" x2="860" y2="250" stroke="#d4dae1" stroke-width="1.2"/>
+  <line x1="90" y1="60" x2="90" y2="250" stroke="#d4dae1" stroke-width="1.2"/>
+  <text x="84" y="254" font-size="9.5" fill="#6b7683" text-anchor="end">50</text>
+  <text x="84" y="228" font-size="9.5" fill="#6b7683" text-anchor="end">100</text>
+  <text x="84" y="142" font-size="9.5" fill="#6b7683" text-anchor="end">1k</text>
+  <text x="84" y="66" font-size="9.5" fill="#6b7683" text-anchor="end">8k</text>
+
+  <line x1="90" y1="112" x2="860" y2="112" stroke="#c62828" stroke-width="1.2" stroke-dasharray="5 4"/>
+  <text x="700" y="106" font-size="9.5" fill="#c62828">目标 2000 QPS</text>
+
+  <polyline points="90,250 229,224 368,198 552,172 691,138 830,112"
+            fill="none" stroke="#bcd4f2" stroke-width="2.2"/>
+  <polyline points="90,224 229,198 368,172 552,138 691,112 830,86"
+            fill="none" stroke="#1a5fb4" stroke-width="2.6"/>
+  <polyline points="90,198 229,172 368,138 552,112 691,86 830,60"
+            fill="none" stroke="#6a3fa0" stroke-width="2.2"/>
+
+  <text x="700" y="196" font-size="10.5" fill="#bcd4f2" font-weight="700">C=100</text>
+  <text x="700" y="150" font-size="10.5" fill="#1a5fb4" font-weight="700">C=200</text>
+  <text x="700" y="120" font-size="10.5" fill="#6a3fa0" font-weight="700">C=400</text>
+
+  <circle cx="229" cy="112" r="4.5" fill="#c62828"/>
+  <text x="240" y="104" font-size="10" fill="#c62828" font-weight="700">200 线程 / 100ms → 刚好 2000</text>
+
+  <text x="90" y="270" font-size="9.5" fill="#6b7683">50ms</text>
+  <text x="220" y="270" font-size="9.5" fill="#6b7683">100ms</text>
+  <text x="358" y="270" font-size="9.5" fill="#6b7683">200ms</text>
+  <text x="540" y="270" font-size="9.5" fill="#6b7683">500ms</text>
+  <text x="675" y="270" font-size="9.5" fill="#6b7683">1000ms</text>
+  <text x="810" y="270" font-size="9.5" fill="#6b7683">2000ms</text>
+
+  <rect x="24" y="286" width="852" height="22" rx="5" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="36" y="301" font-size="10.5" fill="#1a5fb4" font-weight="700">曲线以上的区域才是"配置成立"：想扛 2000 QPS，要么加并发，要么减超时，没有第三条路。</text>
+</svg>
+<figcaption><b>图 10</b> 超时每翻倍，吞吐上限减半。200 线程要扛 2000 QPS，超时必须 ≤ 100ms——这是算出来的，不是拍的。</figcaption>
+</figure>
+
+<p><strong>③ 队列长度</strong>：<code>队列 ≤ QPS × 可接受的排队时间</code>。2000 QPS、可接受排队 100ms → 队列上限 200。而 <code>LinkedBlockingQueue</code> 无参构造是 <code>Integer.MAX_VALUE</code>——第 20 期说过，无界队列让 <code>maximumPoolSize</code> 彻底失效，这里补上后半句：<strong>它还会让"超时"变成"排队到超时"，把拒绝变成更贵的失败</strong>。</p>
+
+<p>一个完整的容量账（2000 QPS、P50 50ms、P99 200ms、超时 300ms）：</p>
+
+<ul>
+<li>线程数 = 2000 × 0.05 = 100，考虑 P99 与抖动，取 200；</li>
+<li>吞吐上限 = 200 / 0.3 = 667 QPS &lt; 2000 QPS —— <strong>配置不成立</strong>，必须先降超时或加并发；</li>
+<li>改超时 100ms：上限 2000 QPS，刚好卡线，没有余量；</li>
+<li>最终：线程 300、超时 100ms、上限 3000 QPS，余量 1.5 倍。</li>
+</ul>
+
+<p>这个账落到代码上就是四个参数，每一个都能从上面的算式推出来，不是拍脑袋：</p>
+
+<pre data-lang="java"><code>ThreadPoolExecutor pool = new ThreadPoolExecutor(
+    100,                                  // core：常态并发 = 2000 × 0.05
+    300,                                  // max：扛 P99 长尾用
+    60, TimeUnit.SECONDS,
+    new ArrayBlockingQueue&lt;&gt;(200),        // 队列 = QPS × 可接受排队 100ms
+    new ThreadPoolExecutor.CallerRunsPolicy()  // 满了让调用方自己跑（天然限速）
+);
+// 客户端超时必须 &lt; 端到端预算；且 ≥ 下游 P99.9，否则制造假失败
+RequestConfig.custom()
+    .setConnectTimeout(200)               // 握手，别给内核 127 秒的机会
+    .setSocketTimeout(100)                // 读：两次数据之间的间隔
+    .setConnectionRequestTimeout(50);     // 从连接池借连接的最长等待</code></pre>
+
+<p>注意 <code>setConnectionRequestTimeout(50)</code> 这一行：<strong>它才是"排队时间"的另一个来源</strong>。连接池只有 20 个连接、200 个线程在抢，第 200 个线程等的不是数据库，是连接池的锁——这段等待同样计入超时，而它在服务端监控里完全不可见。</p>
+
+<h2><span class="n">L8</span>四道闸门：限流、超时、重试、熔断各自管什么</h2>
+
+<p>这四件事经常被混着讲，其实它们管的是四个不同的问题：</p>
+
+<table>
+<tr><th style="width:110px">闸门</th><th style="width:170px">管的问题</th><th style="width:150px">作用位置</th><th>失效时的表现</th></tr>
+<tr><td>限流</td><td>进来的太多</td><td>入口</td><td>拒绝（429），保护自己</td></tr>
+<tr><td>超时</td><td>等得太久</td><td>每次调用</td><td>放弃等待，保护调用方</td></tr>
+<tr><td>重试</td><td>偶发失败</td><td>每次调用失败后</td><td>补概率，<strong>会放大流量</strong></td></tr>
+<tr><td>熔断</td><td>下游已经坏了</td><td>调用下游之前</td><td>快速失败，保护下游</td></tr>
+</table>
+
+<p>关键区分：<strong>限流保护自己，熔断保护下游，超时保护调用方，重试什么都不保护</strong>。重试是唯一一个"只会增加负载"的机制，所以它必须有预算、有退避、有幂等前提——其他三个都可以无条件开。</p>
+
+<figure>
+<svg viewBox="0 0 900 326" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">熔断三态：OPEN 的意义不是"失败得快"，而是"根本不发请求"</text>
+
+  <rect x="60" y="72" width="180" height="64" rx="10" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="150" y="100" font-size="13" font-weight="700" fill="#1e7d3c" text-anchor="middle">CLOSED</text>
+  <text x="150" y="120" font-size="10" fill="#3d454e" text-anchor="middle">放行，统计失败率</text>
+
+  <rect x="360" y="72" width="180" height="64" rx="10" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="450" y="100" font-size="13" font-weight="700" fill="#c62828" text-anchor="middle">OPEN</text>
+  <text x="450" y="120" font-size="10" fill="#3d454e" text-anchor="middle">全部快速失败，不发真实请求</text>
+
+  <rect x="660" y="72" width="180" height="64" rx="10" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="750" y="100" font-size="13" font-weight="700" fill="#9a6400" text-anchor="middle">HALF_OPEN</text>
+  <text x="750" y="120" font-size="10" fill="#3d454e" text-anchor="middle">放 5~10 个探测</text>
+
+  <line x1="240" y1="94" x2="354" y2="94" stroke="#c62828" stroke-width="1.6"/>
+  <polygon points="356,94 348,89 348,99" fill="#c62828"/>
+  <text x="246" y="86" font-size="10" fill="#c62828">失败率 &gt; 50%</text>
+  <text x="246" y="110" font-size="9.5" fill="#6b7683">且样本 ≥ 20</text>
+
+  <line x1="360" y1="118" x2="246" y2="118" stroke="#1e7d3c" stroke-width="1.6"/>
+  <polygon points="244,118 252,113 252,123" fill="#1e7d3c"/>
+  <text x="252" y="154" font-size="9.5" fill="#1e7d3c">探测全成功</text>
+
+  <line x1="540" y1="104" x2="654" y2="104" stroke="#9a6400" stroke-width="1.6"/>
+  <polygon points="656,104 648,99 648,109" fill="#9a6400"/>
+  <text x="548" y="96" font-size="10" fill="#9a6400">等 5s 后</text>
+
+  <line x1="750" y1="136" x2="750" y2="176" stroke="#c62828" stroke-width="1.6"/>
+  <polygon points="750,180 745,172 755,172" fill="#c62828"/>
+  <path d="M750 180 L470 180 L470 140" fill="none" stroke="#c62828" stroke-width="1.6"/>
+  <polygon points="470,138 465,146 475,146" fill="#c62828"/>
+  <text x="520" y="196" font-size="9.5" fill="#c62828">探测失败 → 回 OPEN 并延长等待（避免震荡）</text>
+
+  <rect x="60" y="216" width="780" height="94" rx="8" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="76" y="238" font-size="11" font-weight="700" fill="#3d454e">两个让熔断"看起来没生效"的参数</text>
+  <text x="76" y="260" font-size="10.5" fill="#c62828">① slowCallRateThreshold：只统计 5xx，下游"慢而不报错"时永远不触发</text>
+  <text x="76" y="280" font-size="10.5" fill="#c62828">② slidingWindowSize 太小：低流量服务攒不够样本，minimumNumberOfCalls 永不满足</text>
+  <text x="76" y="300" font-size="10.5" fill="#6b7683">经验值：窗口 ≥ 50、最小样本 ≥ 20、慢调用阈值 = 超时 × 0.8、半开 5 个。</text>
+</svg>
+<figcaption><b>图 11</b> 熔断的三态与两条"回 OPEN"的路径。最常见的失效不是阈值设错，而是"慢调用"根本没被统计。</figcaption>
+</figure>
+
+<p>熔断器三态的判定条件：</p>
+
+<ul>
+<li><strong>CLOSED</strong>：正常放行，统计滑动窗口内的失败率 / 慢调用率。</li>
+<li><strong>OPEN</strong>：达到阈值（如窗口内 50% 失败且请求数 &gt; 20），全部快速失败，<strong>不发真实请求</strong>——这一步最关键，它把"失败得慢"变成"失败得零成本"。</li>
+<li><strong>HALF_OPEN</strong>：OPEN 持续 <code>waitDuration</code>（如 5s）后进入，放行<strong>少量</strong>探测请求（如 10 个），成功率达标则回 CLOSED，否则重回 OPEN 并延长等待。</li>
+</ul>
+
+<p>两个常见误区：</p>
+
+<ol>
+<li><strong>熔断阈值用"失败数"而不是"失败率"</strong>：低流量服务（每秒 2 个请求）永远攒不到 20 个失败，熔断永不触发；应该用"失败率 + 最小请求数"双条件。</li>
+<li><strong>半开时放行太多</strong>：半开放 100 个探测请求，等于给刚恢复的下游又来一次小洪峰。经验值是 5~10 个，且要串行或小并发。</li>
+</ol>
+
+<p>还有一个常被忽略的：<strong>熔断要按"依赖"粒度，不是按"接口"粒度</strong>。同一个下游的 20 个接口各自熔断，等于没有熔断——下游挂了，你要 20 个接口各失败 20 次才发现。按连接池 / 主机 / 服务维度熔断才对。</p>
+
+<p>配置形态大致是这样（Resilience4j 语义，其他实现参数名不同但结构一致）：</p>
+
+<pre data-lang="java"><code>CircuitBreakerConfig cfg = CircuitBreakerConfig.custom()
+    .slidingWindowType(COUNT_BASED).slidingWindowSize(50)   // 统计窗口
+    .minimumNumberOfCalls(20)                // 样本不足不熔断，避免低流量误判
+    .failureRateThreshold(50)                 // 失败率 50%
+    .slowCallDurationThreshold(Duration.ofMillis(80))  // 慢调用阈值 = 超时 × 0.8
+    .slowCallRateThreshold(60)                // 慢调用占比，这一条最常被漏掉
+    .waitDurationInOpenState(Duration.ofSeconds(5))
+    .permittedNumberOfCallsInHalfOpenState(5) // 半开只放 5 个
+    .build();
+
+// 隔离：每个下游一个独立线程池，而不是共享
+Map&lt;String, ThreadPoolExecutor&gt; pools = downstreams.stream()
+    .collect(toMap(d -&gt; d, d -&gt; new ThreadPoolExecutor(
+        20, 40, 60, SECONDS, new ArrayBlockingQueue&lt;&gt;(50),
+        new ThreadPoolExecutor.AbortPolicy())));</code></pre>
+
+<p><code>slowCallRateThreshold</code> 和 <code>slidingWindowSize</code> 这两个参数是"熔断为什么不生效"的九成原因：前者漏了，下游慢而不报错时永远不熔断；后者太小，低流量服务攒不够样本。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">四道闸门在一条请求路径上的位置，以及下游故障时流量被逐层削掉多少</text>
+
+  <rect x="24" y="40" width="120" height="34" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="84" y="62" font-size="11" font-weight="700" fill="#1a5fb4" text-anchor="middle">请求 100%</text>
+  <rect x="180" y="40" width="120" height="34" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="240" y="62" font-size="11" font-weight="700" fill="#9a6400" text-anchor="middle">限流</text>
+  <rect x="336" y="40" width="120" height="34" rx="6" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="396" y="62" font-size="11" font-weight="700" fill="#c62828" text-anchor="middle">熔断</text>
+  <rect x="492" y="40" width="120" height="34" rx="6" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="552" y="62" font-size="11" font-weight="700" fill="#6a3fa0" text-anchor="middle">超时</text>
+  <rect x="648" y="40" width="120" height="34" rx="6" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="708" y="62" font-size="11" font-weight="700" fill="#1e7d3c" text-anchor="middle">重试预算</text>
+  <rect x="804" y="40" width="72" height="34" rx="6" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="840" y="62" font-size="11" font-weight="700" fill="#3d454e" text-anchor="middle">下游</text>
+
+  <line x1="144" y1="57" x2="176" y2="57" stroke="#3d454e" stroke-width="1.4"/>
+  <polygon points="178,57 170,53 170,61" fill="#3d454e"/>
+  <line x1="300" y1="57" x2="332" y2="57" stroke="#3d454e" stroke-width="1.4"/>
+  <polygon points="334,57 326,53 326,61" fill="#3d454e"/>
+  <line x1="456" y1="57" x2="488" y2="57" stroke="#3d454e" stroke-width="1.4"/>
+  <polygon points="490,57 482,53 482,61" fill="#3d454e"/>
+  <line x1="612" y1="57" x2="644" y2="57" stroke="#3d454e" stroke-width="1.4"/>
+  <polygon points="646,57 638,53 638,61" fill="#3d454e"/>
+  <line x1="768" y1="57" x2="800" y2="57" stroke="#3d454e" stroke-width="1.4"/>
+  <polygon points="802,57 794,53 794,61" fill="#3d454e"/>
+
+  <text x="24" y="106" font-size="11" font-weight="700" fill="#3d454e">下游 100% 超时时，各闸门之后的剩余流量</text>
+
+  <rect x="24" y="120" width="852" height="22" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="34" y="136" font-size="10" fill="#1a5fb4">100%（入口 1 万 QPS）</text>
+
+  <rect x="24" y="148" width="613" height="22" rx="4" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="34" y="164" font-size="10" fill="#9a6400">限流后 72%（超出容量的直接 429，不再往下走）</text>
+
+  <rect x="24" y="176" width="222" height="22" rx="4" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="256" y="192" font-size="10" fill="#c62828">熔断后 26%（OPEN 期间不发真实请求）</text>
+
+  <rect x="24" y="204" width="68" height="22" rx="4" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="102" y="220" font-size="10" fill="#6a3fa0">超时后 8%（一直等到期才放弃）</text>
+
+  <rect x="24" y="232" width="43" height="22" rx="4" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="76" y="248" font-size="10" fill="#1e7d3c">重试预算后 5%（真正打到下游的量）</text>
+
+  <text x="24" y="282" font-size="10.5" fill="#6b7683">反过来看：如果只有"重试"没有前三道闸门，这一条瀑布的宽度会是 100% → 2700%。</text>
+</svg>
+<figcaption><b>图 12</b> 每道闸门都在"削减流量"，只有重试在放大。所以重试必须是最后一道、且带预算的那一道。</figcaption>
+</figure>
+<h2><span class="n">L9</span>七个坑</h2>
+
+<ol>
+<li><strong>重试非幂等写</strong>：最贵的一个。转账重试 3 次 = 转 3 次。第 18 期讲过，这里只补一句：<em>HTTP 方法的幂等性是"语义约定"，不是"实现保证"</em>，PUT 也可能不幂等（如果实现成了 append）。</li>
+<li><strong>超时不算排队</strong>：线程池队列里排 4 秒，出来再调 100ms 的下游，超时 1 秒——必然失败，且每次都失败。</li>
+<li><strong>连接超时用默认值</strong>：JDK <code>HttpClient</code> 不设 <code>connectTimeout</code> 就是<strong>无限等</strong>，Linux 内核 <code>tcp_syn_retries=6</code> 会重试约 127 秒。一个 DNS 解析失败能挂住一个线程两分钟。</li>
+<li><strong>重试不带抖动</strong>：见 L3，峰值差 6.7 倍，同毫秒撞车差 80 倍。</li>
+<li><strong>熔断只统计 5xx</strong>：下游超时返回的是"读超时异常"，不是 5xx；只统计状态码的熔断器永远不会因为"慢"而熔断。慢调用要单独设 <code>slowCallDurationThreshold</code>。</li>
+<li><strong>超时预算不传递</strong>：每层各设 3 秒，端到端最坏 9 秒，用户早就走了。而且第 3 层还在为"一个已经没人等的请求"工作。</li>
+<li><strong>重试和限流打架</strong>：入口限流 1000 QPS，重试放大 27 倍——限流器看到的是 27000 QPS，直接全拒。<strong>限流要在重试之前算账，或者按"用户请求"而不是"实际调用"计数。</strong></li>
+</ol>
+
+<h2><span class="n">L10</span>数字速查</h2>
+
+<table>
+<tr><th style="width:230px">数字</th><th>含义</th></tr>
+<tr><td class="num">27 = 3³</td><td>3 层 × 3 次重试的穿透量；4 次则 64，5 次 125</td></tr>
+<tr><td class="num">10⁻² → 10⁻⁶ → 10⁻¹⁸</td><td>失败率逐层被"立方"</td></tr>
+<tr><td class="num">3× / 3×10⁻⁶</td><td>只重试最深层：成本 3 倍、失败率 3e-6（差 9 倍成本，12 个数量级可靠性）</td></tr>
+<tr><td class="num">5.25% / 24%</td><td>5% / 20% 超时率下，重试带来的额外流量</td></tr>
+<tr><td class="num">1.10×</td><td>10% 重试预算下的流量封顶</td></tr>
+<tr><td class="num">6.7× / 80×</td><td>Full Jitter 相对固定退避的峰值降幅 / 同毫秒撞车降幅</td></tr>
+<tr><td class="num">99.3 分位</td><td>100 个下游并行时，整体中位数对应的单下游分位</td></tr>
+<tr><td class="num">0.40×</td><td>10 跳串联的和 P99 相对"10×单跳 P99"的比例</td></tr>
+<tr><td class="num">23ms → 90ms</td><td>利用率 70% → 90% 的平均等待（3.9 倍）</td></tr>
+<tr><td class="num">3.5% → 33%</td><td>同一区间的超时率（9.5 倍）</td></tr>
+<tr><td class="num">0.71 / 0.72</td><td>重试反馈的临界利用率（稳定 / 发散）</td></tr>
+<tr><td class="num">29%</td><td>ρ0=0.6 开 3 次重试后的"白干"比例</td></tr>
+<tr><td class="num">1855ms / 97ms</td><td>同场景 P99 等待 vs 不重试（19 倍）</td></tr>
+<tr><td class="num">C/T</td><td>同步模型的吞吐上限（并发 ÷ 超时）</td></tr>
+<tr><td class="num">127s</td><td>Linux tcp_syn_retries=6 的连接超时</td></tr>
+<tr><td class="num">5~10</td><td>熔断半开放行的探测请求数</td></tr>
+</table>
+
+<h2><span class="n">L11</span>十四问</h2>
+
+<div class="qa"><div class="q">超时应该设多久？</div>
+<div class="a">没有一个数是对的，只有等式。三个约束联立：① 端到端预算决定上限（用户能等 1 秒，5 跳就只能每跳 200ms）；② 吞吐上限 = 并发/超时，所以超时被并发数与目标 QPS 反向约束（200 线程扛 2000 QPS，超时不能超过 100ms）；③ 超时应该 ≥ 该调用的 P99.9（低于它就是在制造假失败，假失败会触发重试，重试会放大）。三者冲突时，先改架构（降扇出、加并发、异步化），不要靠调数字硬凑。</div></div>
+
+<div class="qa"><div class="q">为什么加了重试，故障反而扩散得更快？</div>
+<div class="a">三个机制叠加。① 放大：R^D，3 层 3 次是 27 倍，而容量是按 1 倍规划的；② 反馈：过载本身制造失败，失败触发重试，重试加剧过载——ρ0=0.72 时不动点消失；③ 无效：下游整体不可用时重试不产生任何成功率，只产生流量。再叠加"客户端超时不削减服务端负载"这个物理事实，重试等于让同一份工作被做 27 遍。</div></div>
+
+<div class="qa"><div class="q">指数退避为什么还不够？</div>
+<div class="a">因为它只拉开了"重试的时间点"，没有打散"客户端之间的相位"。所有客户端在同一次故障中同时失败，指数退避后仍然同时重试（100ms、200ms、400ms 都是同步的）。实测：1 万客户端指数退避，最挤的 1ms 里有 10000 个请求；加 Full Jitter 后降到 124 个。</div></div>
+
+<div class="qa"><div class="q">Full Jitter 的缺点是什么？</div>
+<div class="a"><code>rand(0, d)</code> 可能取到接近 0，等于"立刻重试"，在最坏情况下失去退避意义。实际实现要给下限：<code>minDelay + rand(0, d - minDelay)</code>，或者用 decorrelated jitter（<code>sleep = min(cap, rand(base, prev*3))</code>）。另外 Full Jitter 的平均等待是 d/2，比无抖动短，会让重试更早到达——对"需要长时间恢复"的故障不友好，此时应该把 cap 调大而不是靠抖动。</div></div>
+
+<div class="qa"><div class="q">100 个下游并行，我的接口 P99 应该按多少规划？</div>
+<div class="a">不能按"最大单下游 P99"规划。整体分布是 <code>F(x)^N</code>，N=100 时整体中位数就落在单下游的 99.3 分位，整体 P99 落在 99.99 分位。实测（单下游 P50=20ms/P99=194ms）：100 扇出的整体 P50=228ms、P99=784ms。正确做法是：① 砍扇出（合并接口、批量化）；② 给扇出设"部分失败"语义（允许 5% 下游超时后返回降级数据）；③ 按"整体 P99"而不是"单下游 P99"做 SLO。</div></div>
+
+<div class="qa"><div class="q">串联 10 跳，端到端 P99 是 10 倍单跳 P99 吗？</div>
+<div class="a">不是，远小于。实测单跳 P99=194ms，10 跳的和 P99=769ms，只有"10×194=1941ms"的 40%。因为 10 跳同时落在各自 P99 的概率是 0.01¹⁰。但也不能反过来乐观：5 跳的端到端 P99 仍有 494ms，是单跳的 2.5 倍。<strong>分位数不能相加，也不能取最大，只能卷积。</strong></div></div>
+
+<div class="qa"><div class="q">超时和熔断有什么区别？都开会不会重复？</div>
+<div class="a">不重复，管的事不同。超时管"这一次等太久"，是每次调用的局部决策；熔断管"这个下游已经坏了"，是跨请求的全局决策。只有超时没有熔断：每个请求都要等满超时才失败，线程被慢调用占满（吞吐 = 并发/超时）。只有熔断没有超时：熔断打开前的那批请求仍然会挂很久。两个都必须有，且熔断的"慢调用阈值"要和超时对齐（慢调用阈值 ≈ 超时的 80%）。</div></div>
+
+<div class="qa"><div class="q">熔断半开时应该放多少请求？</div>
+<div class="a">5~10 个，且要小并发（1~2）。放太多等于给刚恢复的下游一次小洪峰，容易把它打回 OPEN，形成"震荡"（OPEN→HALF_OPEN→OPEN）。另外半开的判定要用"连续成功 N 次"而不是"成功率 50%"，因为样本小的时候成功率噪声极大（3 个请求 2 个成功 = 67%，毫无统计意义）。</div></div>
+
+<div class="qa"><div class="q">队列设多长？</div>
+<div class="a"><code>队列 ≤ QPS × 可接受的排队时间</code>。2000 QPS、能忍 100ms 排队 → 200。超过这个长度的排队，用户早就超时走了，请求在队列里唯一的作用是占内存 + 让服务端白干。绝不能用无界队列：它把"拒绝"（便宜、快速、可观测）换成了"排队到超时"（贵、慢、且额外触发重试）。</div></div>
+
+<div class="qa"><div class="q">怎么防止重试风暴？</div>
+<div class="a">四件事一起做。① 退避 + jitter（Full Jitter，base≈P99，cap≈2~5 个 P99）；② 重试预算（Google SRE 的 10%，超出预算直接返回错误）；③ 只在最靠近故障的一层重试，不要每层都重试；④ 熔断 + 限流兜底，保证即使重试失控，总量也有上界。</div></div>
+
+<div class="qa"><div class="q">为什么下游明明恢复了，我的系统还在崩？</div>
+<div class="a">两个原因。① 队列积压：故障期间堆积的请求还在队列里，恢复后要先消化它们（消化期间新请求继续排队）；② 重试的"回声"：故障期间发出的重试分散在退避窗口里，会在恢复后陆续到达，形成第二波（实测：5 次重试的窗口能拖到 3 秒）。所以恢复期要<strong>主动丢弃</strong>旧请求（按 deadline 判断，过期的直接 503），而不是硬扛。</div></div>
+
+<div class="qa"><div class="q">超时预算怎么在链路上传递？</div>
+<div class="a">① 入口生成 deadline（绝对时间戳或剩余毫秒），写进 header / trace 上下文；② 每一跳收到后算 <code>剩余 = deadline - now</code>，若剩余 &lt; 本服务最小处理时间，直接快速失败（503 + Retry-After），不进队列；③ 下游调用把剩余时间作为本次调用的超时（可以再留 10% 给自己处理响应）；④ 异步 / 线程池场景要用 TaskDecorator 或显式透传（第 28 期讲过 TraceId 断链，deadline 断链是同一个问题）。</div></div>
+
+<div class="qa"><div class="q">限流、熔断、降级、隔离，四个词的区别？</div>
+<div class="a">限流是"入口的流量整形"（保护自己，按 QPS / 并发）；熔断是"对坏依赖的自动断路"（保护下游，按失败率 / 慢调用率）；降级是"功能层面的有损替代"（返回缓存、默认值、空列表，是业务决策）；隔离是"资源层面的分舱"（线程池 / 连接池按依赖分组，避免一个慢依赖拖垮所有请求）。熔断和降级常配对：熔断打开时执行降级逻辑；隔离是让熔断有效的前提（不隔离的话，慢依赖已经把所有线程占满了，熔断也救不回来）。</div></div>
+
+<div class="qa"><div class="q">线上出现"RT 正常但超时率飙升"，怎么查？</div>
+<div class="a">先分清是"真慢"还是"假超时"。① 看排队：线程池队列长度、<code>getQueue().size()</code>、连接池等待时间——排队时间算在超时里，但不算在服务端 RT 里，这是最常见的"RT 正常但客户端超时"；② 看超时设置是否被改过（配置中心）；③ 看重试率：重试率高会把 P99 拉长，而平均 RT 不变；④ 看时钟：客户端与服务端时钟漂移会让 deadline 计算偏移；⑤ 看网络：TCP 重传率、连接建立耗时（新建连接多的话，握手时间没算进服务端 RT）。</div></div>
+
+<h2><span class="n">L12</span>三道模拟面试题</h2>
+
+<div class="mt">
+<div class="qh"><span>题 1 · 中级</span>大促前压测，单机 QPS 从 2000 掉到 800，RT 从 50ms 涨到 300ms，超时率 40%。你怎么定位和止损？</div>
+
+<div class="lv l1"><span class="lb">不及格</span>加机器。</div>
+<div class="lv l2"><span class="lb">及格</span>看监控，发现线程池满了、队列堆积；把超时从 1s 调到 3s；加重试。</div>
+<div class="lv l3"><span class="lb">良好</span>先算账——200 线程、超时 1s，吞吐上限只有 200 QPS，但实际跑 800，说明大量请求在排队；队列无界，<code>getQueue().size()</code> 上万；把队列改成有界（200）、超时降到 300ms、拒绝策略改成 <code>CallerRuns</code>；同时关闭重试（大促期间重试只会放大）。压测复现：QPS 回到 1600，超时率降到 8%。</div>
+<div class="lv l4"><span class="lb">优秀</span>进一步指出根因是<strong>超时与并发不匹配</strong>（<code>C/T = 200/1.0 = 200</code>，而目标是 2000），所以第一步不是调参而是改等式：① 超时 100ms（下游 P99 是 80ms，100ms 是 P99.9 的 1.2 倍，合理）；② 线程数按 <code>QPS × RT × 1.5 = 2000 × 0.05 × 1.5 = 150</code> 配，但因为有 P99 长尾，取 300；③ 队列 200（= 2000 × 100ms），满了直接拒绝；④ 关闭跨层重试，只保留"最深层 1 次"；⑤ 加熔断（慢调用阈值 80ms、失败率 50%、半开 5 个）。最后给出验证方式：压测要压到"超时点"而不是"最大 QPS"——即找到"超时率开始非线性上升"的那个 QPS，那个数才是真实容量（本例约 1700）。</div>
+</div>
+
+<div class="mt">
+<div class="qh"><span>题 2 · 高级</span>设计一个"跨 5 个服务的下单链路"的超时与重试方案，要求 P99 &lt; 1s，且下游故障时不雪崩。</div>
+
+<div class="lv l1"><span class="lb">不及格</span>每层设 3 秒超时，失败重试 3 次。</div>
+<div class="lv l2"><span class="lb">及格</span>端到端预算 1s，每跳 200ms；只对超时和 503 重试；重试 2 次带退避。</div>
+<div class="lv l3"><span class="lb">良好</span>预算传递（header 带 deadline），每跳 <code>budget = remaining / remainingHops</code>；重试只放在最深层（库存扣减）且必须幂等；指数退避 + Full Jitter；熔断按依赖粒度；队列有界。</div>
+<div class="lv l4"><span class="lb">优秀</span>先分层——① <strong>链路分层</strong>：下单主链路（订单、库存、支付）共享 1s 预算，非关键链路（推荐、风控异步、埋点）不占预算，各给 100ms 且不重试；② <strong>预算算法</strong>：进入第 k 跳 <code>budget_k = (deadline - now) / hops_left</code>，剩余 &lt; 最小处理时间（如 30ms）直接 503 快速失败，不进队列；③ <strong>重试策略</strong>：只对"幂等 + 可重试错误"重试，且只在最深层重试 1 次（成本 2 倍而不是 27 倍），带 Full Jitter（base = 该跳 P99，cap = 200ms），并受 10% 重试预算约束；④ <strong>熔断与隔离</strong>：每个下游独立线程池 / 连接池（隔离），熔断按依赖维度，慢调用阈值 = 超时的 80%；⑤ <strong>正确性兜底</strong>：库存用条件更新（<code>qty &gt;= n</code>）保证不超卖，订单用唯一索引 + 幂等键保证不重复，支付用状态机保证不重复扣款——<strong>正确性永远不依赖超时和重试，只依赖幂等与约束</strong>；⑥ <strong>可观测</strong>：重试率、超时率（区分"排队超时"和"处理超时"）、熔断状态、预算耗尽率四个指标，并在压测中验证"下游 100% 超时"时链路能在 1s 内全部快速失败（而不是 27 倍放大）。</div>
+</div>
+
+<div class="mt">
+<div class="qh"><span>题 3 · 资深</span>线上出现"下游恢复了，我们还在崩"，已经是第三次了。你要做的不只是止血，而是让它不再发生。怎么做？</div>
+
+<div class="lv l1"><span class="lb">不及格</span>重启、扩容、回滚。</div>
+<div class="lv l2"><span class="lb">及格</span>加熔断、加限流、加重试退避。</div>
+<div class="lv l3"><span class="lb">良好</span>定位到"故障期间堆积的请求 + 重试回声"两个原因；恢复期按 deadline 丢弃过期请求；重试加 jitter 和预算；补监控。</div>
+<div class="lv l4"><span class="lb">优秀</span>分三层回答。① <strong>机制层（为什么恢复后还崩）</strong>：故障期的三类"遗产"——队列里的旧请求（排队 30 秒的请求已经没有价值，还会白干）、退避窗口里的重试回声（实测 5 次重试拖 3 秒）、以及被慢调用占满的线程 / 连接（熔断打开后也要等它们自然超时才释放）。② <strong>设计层（怎么让它不再发生）</strong>：所有请求带 deadline 且<strong>过期即丢弃</strong>（进入服务的第一件事是 <code>if (now &gt; deadline) return 503</code>）；重试受 10% 预算约束；熔断按依赖粒度 + 半开小样本；队列有界 + 队列满即拒绝；用"负载卸载"（load shedding）按优先级丢弃低价值请求；引入"恢复期保护"——熔断从 OPEN 转 HALF_OPEN 后，若连续失败则<strong>指数延长</strong> waitDuration（而不是固定 5s），避免震荡。③ <strong>组织层（怎么证明它不会再来）</strong>：把"下游 100% 挂 30 秒"做成常态化的混沌实验（每月一次），断言三个不变量：入口 QPS 不超过 1.1 倍基线、失败在 1s 内返回、恢复后 60s 内 P99 回到基线。<em>能用一个自动化实验证明的不变量，比一份应急预案更有价值。</em></div>
+</div>
+
+<h2><span class="n">L13</span>三十期地图</h2>
+
+<table>
+<tr><th style="width:120px">板块</th><th style="width:170px">期号</th><th>一句话抓手</th></tr>
+<tr><td>集合与并发基础</td><td class="num">01 / 14 / 03 / 20</td><td>树化泊松账；1.5 倍扩容台阶；锁升级与 AQS；ctl 位运算</td></tr>
+<tr><td>JVM</td><td class="num">02 / 12 / 21 / 22</td><td>三色标记；Eden=速率×间隔；支配树与引用链；内联阈值 35/325</td></tr>
+<tr><td>语言底层</td><td class="num">13 / 23 / 26</td><td>双亲委派四次打破；擦除与桥方法；agent 改字节码</td></tr>
+<tr><td>框架</td><td class="num">04 / 15 / 24</td><td>refresh 十二步；自动配置六阶段；MyBatis 九站链</td></tr>
+<tr><td>存储</td><td class="num">05 / 16 / 25</td><td>B+ 树三层与 MVCC；分片键四炸点；倒排三层与段不可变</td></tr>
+<tr><td>中间件</td><td class="num">06 / 07 / 17 / 19</td><td>单线程为什么快；零拷贝与 ISR；缓存一致性算账；epoll 与 Pipeline</td></tr>
+<tr><td>分布式</td><td class="num">08 / 10 / 18 / 29</td><td>注册发现三级缓存；秒杀四道闸门；幂等键由意图决定；锁的两次失效</td></tr>
+<tr><td>工程与治理</td><td class="num">09 / 11 / 27 / 28 / <strong>30</strong></td><td>三分钟分诊；策略替 if-else；类身份=loader+类名；信号的成本；<strong>本篇：超时的吞吐代价</strong></td></tr>
+</table>
+
+<p>30 期下来，这条主线越来越清楚：<strong>面试的区分度不在"知道多少名词"，而在"能不能把一个定性判断换算成一个数，并且说清它在什么条件下不成立"。</strong></p>
+
+<p>这一期最典型的三处：</p>
+
+<ul>
+<li>"加 3 次重试提高可用性" → 3 层就是 <strong>27 倍流量</strong>，失败率从 10⁻² 变成 10⁻¹⁸，而 10⁻⁶ 早就够用了。<em>你花 27 倍的钱买了一个没人需要的指标。</em></li>
+<li>"超时调大点，避免误杀" → 吞吐上限 = <strong>并发 ÷ 超时</strong>，200 线程、1 秒超时就是 200 QPS 天花板。<em>超时不只决定等多久，它还是一个吞吐旋钮。</em></li>
+<li>"每个下游 P99 都达标了" → 100 个并行，整体中位数就落在单下游的 <strong>99.3 分位</strong>。<em>扇出不是加法，是"最慢者胜"的乘法。</em></li>
+</ul>
+
+<div class="next">
+<strong>下一期预告</strong>：第 31 期讲<strong>连接池与资源隔离</strong>——为什么 <code>maxPoolSize</code> 调到 100 反而更慢、连接泄漏的三种形态、"数据库连接池 20 个够不够"的完整推导，以及 HikariCP 的 <code>connectionTimeout</code> 与 <code>validationTimeout</code> 在链路预算里的位置。会把本期的超时预算和第 20 期的线程池串起来，回答"资源池的大小到底由谁决定"。
+</div>
+
+<div class="foot">
+<p>本期实验代码：<code>exp_retry.py</code>（重试放大与蒙特卡洛 20 万次）、<code>exp_queue.py</code>（M/M/1 不动点 + 20 秒事件仿真）、<code>exp_jitter.py</code>（1 万客户端抖动对照）、<code>exp_fanout.py</code>（扇出 / 串联分位数，20 万样本）、<code>TExp.java</code>（invokeAll / orTimeout / 无界队列三组实测）。全部在本机 Python 3.13 / JDK 21.0.7 实跑。</p>
+<p>标注"经验值"的（Google SRE 10% 重试预算、熔断半开 5~10 个探测、base ≈ P99）为业界实践约定，非本机实测；M/M/1 与对数正态是模型假设，用于给出量级与拐点，不代表任何具体生产系统的绝对数值。</p>
+</div>
+
+</div>
+<script>
+(function () {
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  var KW = 'abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|true|false|null|var|record|String|Integer|Map|List|Object|System|Thread|Math|Duration|TimeUnit|Callable|Future|CompletableFuture|ThreadPoolExecutor|ArrayBlockingQueue|Random|SELECT|FROM|WHERE|LIMIT|BY|sum|rate';
+  var RE = new RegExp('(\\/\\/[^\\n]*)|("(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\')|(\\b(?:' + KW + ')\\b)|(\\b\\d+(?:\\.\\d+)?\\b)', 'g');
+  document.querySelectorAll('pre code').forEach(function (el) {
+    var t = el.textContent, out = '', last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(t)) !== null) {
+      out += esc(t.slice(last, m.index));
+      var cls = m[1] ? 'c' : (m[2] ? 's' : (m[3] ? 'k' : 'n'));
+      out += '<span class="' + cls + '">' + esc(m[0]) + '</span>';
+      last = m.index + m[0].length;
+      if (m[0].length === 0) RE.lastIndex++;
+    }
+    out += esc(t.slice(last));
+    el.innerHTML = out;
+  });
+})();
+</script>
+</body>
+</html>

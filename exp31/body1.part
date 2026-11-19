@@ -1,0 +1,367 @@
+<div class="wrap">
+
+<div class="hero">
+  <div class="kicker">Java 面试深挖 · 第 31 期</div>
+  <h1>连接池与资源隔离<br><span style="color:#6b7683;font-size:24px;font-weight:700">从「池子开多大」到「慢依赖为什么能把快依赖拖死」</span></h1>
+  <div class="sub">连接池不是缓存，是闸门。它不创造容量，只决定你的请求在哪一层排队。本期用 9 组本机实测（含真 HikariCP 5.1.0）把容量、等待、超时、隔离四本账算成数字。</div>
+  <div class="meta">
+    <span class="tag b">M/M/c 排队论</span>
+    <span class="tag b">HikariCP 实测</span>
+    <span class="tag r">泄漏断崖</span>
+    <span class="tag r">嵌套死锁</span>
+    <span class="tag g">舱壁隔离</span>
+    <span class="tag a">3 道模拟题</span>
+  </div>
+</div>
+
+<h2><span class="n">01</span>先定性：连接池是闸门，不是缓存</h2>
+
+<p class="lead">面试里问连接池，八成人第一反应是「<code>maximumPoolSize</code> 设多大」。这是个答案，但不是问题。真正的问题是三个：</p>
+
+<ol>
+<li><strong>闸门开几道</strong>——并发访问数据库的上限是多少；</li>
+<li><strong>排队排多久</strong>——闸门满了，请求是等还是立刻失败；</li>
+<li><strong>一扇门堵了会不会堵死全部</strong>——慢 SQL 会不会把整个应用拖垮。</li>
+</ol>
+
+<p>这三个问题对应四条账：<strong>容量账（c/S）、等待账（M/M/c）、超时账（谁先响）、隔离账（舱壁）</strong>。把池子当缓存讲的人，只会背「连接复用省了建连开销」；把池子当闸门讲的人，才答得出「为什么 100 个连接比 20 个慢」。</p>
+
+<div class="box blue">
+<div class="h">一句话定性</div>
+<p><strong>连接池不创造容量，它只决定你的请求在哪一层排队。</strong>同一个 5000 QPS 的数据库，你给 10 个连接，请求排在<em>池</em>里；你给 100 个连接，请求排在<em>数据库的 CPU 队列</em>里。总量不变，只是等待的地方换了名字——而后者的代价更高，因为连接要占内存、要做上下文切换、要在 DB 侧抢同一把闩。</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a1" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#8c97a3"/></marker>
+  </defs>
+  <text x="20" y="24" font-size="13" font-weight="700" fill="#1a1d21">请求进不来、连接不够、数据库过载：三层资源各有一个上限</text>
+
+  <!-- 应用线程层 -->
+  <rect x="20" y="44" width="200" height="86" rx="8" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="34" y="66" font-size="12" font-weight="700" fill="#1a5fb4">Tomcat 线程池</text>
+  <text x="34" y="86" font-size="11.5" fill="#3d454e">200 个工作线程</text>
+  <text x="34" y="104" font-size="11.5" fill="#6b7683">线程 = 请求的「载体」</text>
+  <text x="34" y="122" font-size="11.5" fill="#c62828">满了 → 请求直接被拒</text>
+
+  <!-- 池 -->
+  <rect x="270" y="44" width="330" height="86" rx="8" fill="#fdf4e3" stroke="#e8cf9a"/>
+  <text x="284" y="66" font-size="12" font-weight="700" fill="#9a6400">连接池（闸门）</text>
+  <!-- 10 个小方块 -->
+  <g fill="#fff" stroke="#9a6400" stroke-width="1.2">
+    <rect x="284" y="70" width="22" height="16" rx="3"/><rect x="313" y="70" width="22" height="16" rx="3"/>
+    <rect x="342" y="70" width="22" height="16" rx="3"/><rect x="371" y="70" width="22" height="16" rx="3"/>
+    <rect x="400" y="70" width="22" height="16" rx="3"/><rect x="429" y="70" width="22" height="16" rx="3"/>
+    <rect x="458" y="70" width="22" height="16" rx="3"/><rect x="487" y="70" width="22" height="16" rx="3"/>
+    <rect x="516" y="70" width="22" height="16" rx="3"/><rect x="545" y="70" width="22" height="16" rx="3"/>
+  </g>
+  <text x="284" y="104" font-size="11" fill="#9a6400">10 个物理连接（复用，不是缓存）</text>
+  <text x="284" y="122" font-size="10.5" fill="#6b7683">active / idle / total / waiting 四个计数就是现场</text>
+
+  <!-- DB -->
+  <rect x="650" y="44" width="230" height="86" rx="8" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="664" y="66" font-size="12" font-weight="700" fill="#c62828">数据库（真正的上限）</text>
+  <text x="664" y="86" font-size="11.5" fill="#3d454e">12 核 = 并行度上限 k</text>
+  <text x="664" y="104" font-size="11.5" fill="#3d454e">max_connections 默认 151</text>
+  <text x="664" y="122" font-size="11.5" fill="#c62828">超配 → 只加延迟不加吞吐</text>
+
+  <line x1="222" y1="87" x2="266" y2="87" stroke="#8c97a3" stroke-width="1.6" marker-end="url(#a1)"/>
+  <line x1="602" y1="87" x2="646" y2="87" stroke="#8c97a3" stroke-width="1.6" marker-end="url(#a1)"/>
+  <text x="222" y="78" font-size="10.5" fill="#6b7683">borrow</text>
+  <text x="604" y="78" font-size="10.5" fill="#6b7683">持有连接</text>
+
+  <!-- 下方：两个排队位置 -->
+  <line x1="20" y1="152" x2="880" y2="152" stroke="#e4e8ed" stroke-width="1"/>
+  <text x="20" y="176" font-size="12" font-weight="700" fill="#1a1d21">同一个 5000 QPS，池子大小只是把队列挪个位置</text>
+
+  <rect x="20" y="190" width="410" height="110" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="34" y="212" font-size="12" font-weight="700" fill="#1a5fb4">c = 10：排在池里</text>
+  <g fill="#1a5fb4">
+    <circle cx="42" cy="232" r="4"/><circle cx="60" cy="232" r="4"/><circle cx="78" cy="232" r="4"/>
+    <circle cx="96" cy="232" r="4"/><circle cx="114" cy="232" r="4"/><circle cx="132" cy="232" r="4"/>
+    <circle cx="150" cy="232" r="4"/><circle cx="168" cy="232" r="4"/>
+  </g>
+  <text x="186" y="236" font-size="11" fill="#3d454e">… 190 个线程在 waiting</text>
+  <rect x="34" y="248" width="382" height="1" fill="#e4e8ed"/>
+  <text x="34" y="268" font-size="11.5" fill="#3d454e">等待时间可控（池内有 10 个在干活）</text>
+  <text x="34" y="288" font-size="11.5" fill="#c62828">代价：连接数是瓶颈，P99 由排队决定</text>
+
+  <rect x="460" y="190" width="420" height="110" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="474" y="212" font-size="12" font-weight="700" fill="#c62828">c = 100：排在数据库</text>
+  <g fill="#c62828">
+    <circle cx="482" cy="232" r="4"/><circle cx="496" cy="232" r="4"/><circle cx="510" cy="232" r="4"/>
+    <circle cx="524" cy="232" r="4"/><circle cx="538" cy="232" r="4"/><circle cx="552" cy="232" r="4"/>
+    <circle cx="566" cy="232" r="4"/><circle cx="580" cy="232" r="4"/><circle cx="594" cy="232" r="4"/>
+    <circle cx="608" cy="232" r="4"/><circle cx="622" cy="232" r="4"/><circle cx="636" cy="232" r="4"/>
+  </g>
+  <text x="654" y="236" font-size="11" fill="#3d454e">… 抢 12 个核</text>
+  <rect x="474" y="248" width="392" height="1" fill="#e4e8ed"/>
+  <text x="474" y="268" font-size="11.5" fill="#3d454e">池里不排队了，但每个请求在核上等</text>
+  <text x="474" y="288" font-size="11.5" fill="#c62828">代价：闩竞争 + 上下文切换 + 内存，吞吐不涨</text>
+</svg>
+<figcaption><b>图 1</b>　三层资源各有上限。池子只改变队列位置，不改变总容量。</figcaption>
+</figure>
+
+<h2><span class="n">02</span>为什么要池：一次建连到底贵在哪</h2>
+
+<p>一次 JDBC 建连不是「开个 socket」这么简单，它至少包含四段往返（RTT）。</p>
+
+<table>
+<thead><tr><th>阶段</th><th class="num">往返数</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>TCP 三次握手</td><td class="num">1 RTT</td><td>SYN → SYN/ACK → ACK，第三个 ACK 已可带数据</td></tr>
+<tr><td>TLS 握手（1.3）</td><td class="num">1 RTT</td><td>复用会话可 0-RTT，但服务端通常不给你</td></tr>
+<tr><td>数据库认证</td><td class="num">1 RTT</td><td>服务端发 greeting（含 salt），客户端回认证包</td></tr>
+<tr><td>会话初始化</td><td class="num">1 RTT</td><td><code>SET NAMES</code> / 时区 / autocommit / 只读标记</td></tr>
+</tbody>
+</table>
+
+<p><strong>四段往返 = 4 RTT，这是纯物理开销，跟你的 SQL 写得好不好没有任何关系。</strong>换算成时间：</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1a5fb4"/></marker>
+    <marker id="a2r" markerWidth="8" markerHeight="8" refX="1" refY="4" orient="auto"><path d="M8,0 L0,4 L8,8 z" fill="#c62828"/></marker>
+  </defs>
+  <text x="20" y="24" font-size="13" font-weight="700" fill="#1a1d21">建连 = 4 段往返。跨地域时这 4 段就是 120ms</text>
+
+  <rect x="30" y="42" width="120" height="30" rx="5" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="90" y="62" font-size="12" text-anchor="middle" fill="#1a5fb4" font-weight="700">客户端</text>
+  <rect x="330" y="42" width="120" height="30" rx="5" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="390" y="62" font-size="12" text-anchor="middle" fill="#c62828" font-weight="700">数据库</text>
+  <line x1="90" y1="76" x2="90" y2="250" stroke="#bcd4f2" stroke-dasharray="3 3"/>
+  <line x1="390" y1="76" x2="390" y2="250" stroke="#f0c4c2" stroke-dasharray="3 3"/>
+
+  <!-- 4 segments -->
+  <line x1="92" y1="96" x2="386" y2="96" stroke="#1a5fb4" stroke-width="1.6" marker-end="url(#a2)"/>
+  <line x1="388" y1="112" x2="94" y2="112" stroke="#c62828" stroke-width="1.6" marker-end="url(#a2r)"/>
+  <text x="410" y="108" font-size="11.5" fill="#3d454e">① TCP 握手　1 RTT</text>
+
+  <line x1="92" y1="132" x2="386" y2="132" stroke="#1a5fb4" stroke-width="1.6" marker-end="url(#a2)"/>
+  <line x1="388" y1="148" x2="94" y2="148" stroke="#c62828" stroke-width="1.6" marker-end="url(#a2r)"/>
+  <text x="410" y="144" font-size="11.5" fill="#3d454e">② TLS 握手　1 RTT</text>
+
+  <line x1="92" y1="168" x2="386" y2="168" stroke="#1a5fb4" stroke-width="1.6" marker-end="url(#a2)"/>
+  <line x1="388" y1="184" x2="94" y2="184" stroke="#c62828" stroke-width="1.6" marker-end="url(#a2r)"/>
+  <text x="410" y="180" font-size="11.5" fill="#3d454e">③ 认证（greeting + auth）1 RTT</text>
+
+  <line x1="92" y1="204" x2="386" y2="204" stroke="#1a5fb4" stroke-width="1.6" marker-end="url(#a2)"/>
+  <line x1="388" y1="220" x2="94" y2="220" stroke="#c62828" stroke-width="1.6" marker-end="url(#a2r)"/>
+  <text x="410" y="216" font-size="11.5" fill="#3d454e">④ SET NAMES / autocommit　1 RTT</text>
+
+  <line x1="30" y1="238" x2="880" y2="238" stroke="#e4e8ed"/>
+  <text x="30" y="260" font-size="11.5" fill="#1a5fb4" font-weight="700">同机房 0.2ms RTT</text>
+  <text x="30" y="280" font-size="11.5" fill="#3d454e">建连 0.8ms　=　一次索引查询的 4 倍</text>
+  <text x="330" y="260" font-size="11.5" fill="#9a6400" font-weight="700">跨可用区 1ms RTT</text>
+  <text x="330" y="280" font-size="11.5" fill="#3d454e">建连 4.0ms　=　13 倍</text>
+  <text x="600" y="260" font-size="11.5" fill="#c62828" font-weight="700">跨地域 30ms RTT</text>
+  <text x="600" y="280" font-size="11.5" fill="#3d454e">建连 120ms　=　60 倍</text>
+</svg>
+<figcaption><b>图 2</b>　四段往返的物理成本。池化省的就是这 4 段——而且是每用一次省一次。</figcaption>
+</figure>
+
+<p>本机回环实测（Python socket，4 次往返，2000 次中位数）：</p>
+
+<pre data-lang="text"><code>新建连接+4次往返 : 410.0 us
+复用连接+4次往返 : 106.2 us
+建连占比         : 74.1%   倍数 3.9x</code></pre>
+
+<p>回环上建连占 74%，其中相当一部分是脚本语言自身的 accept/线程开销，真实 C 驱动会更低——但趋势是对的：<strong>复用一次就省一次建连，而复用一万次仍然是那一个连接。</strong></p>
+
+<p>还有一笔账常被忽略：<strong>连接是数据库侧的资源，不是客户端的</strong>。每个连接在 MySQL 里对应一个线程（8.0 起还有额外的内存上下文），经验区间 256KB~1MB/连接（估算，取决于排序缓冲、连接缓冲等会话级参数）。200 个连接 × 500KB ≈ 100MB，只是「闲着」的内存。加上 <code>max_connections</code> 默认 151，你一台应用开 100，两台就把库顶死了。</p>
+
+<h2><span class="n">03</span>池的解剖：借还状态机与四个计数</h2>
+
+<p>一个连接池对外只有两个动作：<code>borrow</code>（借）和 <code>return</code>（还）。内部却要维护四个数字，面试时能报出这四个数，档次立刻不一样：</p>
+
+<table>
+<thead><tr><th>计数</th><th>含义</th><th>异常时的信号</th></tr></thead>
+<tbody>
+<tr><td><code>total</code></td><td>池内连接总数（含空闲与在用）</td><td>长期等于 max，说明池已撑满</td></tr>
+<tr><td><code>active</code></td><td>已借出未归还</td><td>只增不减 → 泄漏</td></tr>
+<tr><td><code>idle</code></td><td>空闲可借</td><td>长期为 0 且 <code>waiting &gt; 0</code> → 容量不足</td></tr>
+<tr><td><code>waiting</code></td><td>正在等连接的线程数</td><td>有值就说明有排队，看它比看 P99 更早</td></tr>
+</tbody>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 310" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a3" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#1a5fb4"/></marker>
+    <marker id="a3r" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#c62828"/></marker>
+    <marker id="a3g" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#1e7d3c"/></marker>
+  </defs>
+  <text x="20" y="24" font-size="13" font-weight="700" fill="#1a1d21">四个计数就是一条流水线：waiting → active → idle → 淘汰</text>
+
+  <rect x="20" y="60" width="150" height="66" rx="7" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="95" y="84" font-size="12" text-anchor="middle" font-weight="700" fill="#c62828">waiting</text>
+  <text x="95" y="104" font-size="11" text-anchor="middle" fill="#3d454e">等连接的线程</text>
+  <text x="95" y="119" font-size="10.5" text-anchor="middle" fill="#6b7683">超时 → 抛异常</text>
+
+  <rect x="230" y="60" width="150" height="66" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="305" y="84" font-size="12" text-anchor="middle" font-weight="700" fill="#1a5fb4">active</text>
+  <text x="305" y="104" font-size="11" text-anchor="middle" fill="#3d454e">已借出未归还</text>
+  <text x="305" y="119" font-size="10.5" text-anchor="middle" fill="#6b7683">做完 SQL 才回落</text>
+
+  <rect x="440" y="60" width="150" height="66" rx="7" fill="#e9f5ec" stroke="#b9dcc2"/>
+  <text x="515" y="84" font-size="12" text-anchor="middle" font-weight="700" fill="#1e7d3c">idle</text>
+  <text x="515" y="104" font-size="11" text-anchor="middle" fill="#3d454e">空闲可借</text>
+  <text x="515" y="119" font-size="10.5" text-anchor="middle" fill="#6b7683">close() 后就到这儿</text>
+
+  <rect x="650" y="60" width="150" height="66" rx="7" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="725" y="84" font-size="12" text-anchor="middle" font-weight="700" fill="#3d454e">evicted</text>
+  <text x="725" y="104" font-size="11" text-anchor="middle" fill="#3d454e">超 maxLifetime</text>
+  <text x="725" y="119" font-size="10.5" text-anchor="middle" fill="#6b7683">或校验失败</text>
+
+  <line x1="172" y1="86" x2="226" y2="86" stroke="#1a5fb4" stroke-width="1.6" marker-end="url(#a3)"/>
+  <text x="178" y="76" font-size="10.5" fill="#1a5fb4">借到</text>
+  <line x1="382" y1="86" x2="436" y2="86" stroke="#1e7d3c" stroke-width="1.6" marker-end="url(#a3g)"/>
+  <text x="390" y="76" font-size="10.5" fill="#1e7d3c">close()</text>
+  <line x1="592" y1="86" x2="646" y2="86" stroke="#c62828" stroke-width="1.6" marker-end="url(#a3r)"/>
+  <text x="596" y="76" font-size="10.5" fill="#c62828">淘汰</text>
+
+  <!-- total 包住 -->
+  <rect x="196" y="140" width="618" height="60" rx="7" fill="none" stroke="#9a6400" stroke-dasharray="5 4"/>
+  <text x="206" y="162" font-size="11.5" font-weight="700" fill="#9a6400">total = active + idle</text>
+  <text x="206" y="182" font-size="11" fill="#3d454e">total 长期顶到 max 且 idle=0 → 池已满，加连接才可能有用（且要先确认 DB 撑得住）</text>
+
+  <!-- 借出六步 -->
+  <text x="20" y="234" font-size="12" font-weight="700" fill="#1a1d21">borrow 的六步：</text>
+  <text x="130" y="234" font-size="11.5" fill="#3d454e">① ThreadLocal 取上次用的 → ② ConcurrentBag 领取 → ③ 超时出口</text>
+  <text x="130" y="256" font-size="11.5" fill="#3d454e">④ 校验 / 超 maxLifetime 则淘汰重建 → ⑤ 包成代理（close 变成归还）→ ⑥ 抛四元组</text>
+  <text x="130" y="282" font-size="11" fill="#c62828">第 ③ 步的出口文案自带 total/active/idle/waiting —— 这是最快的现场诊断入口</text>
+</svg>
+<figcaption><b>图 3</b>　借还状态机。四个计数不是监控指标，是四个可以直接读出的故障信号。</figcaption>
+</figure>
+
+<p>HikariCP 的借出流程可以简化成六步，两个设计点值得单独说：</p>
+
+<pre data-lang="java"><code>// HikariPool.getConnection 的核心路径（简化伪码，保留语义）
+Connection getConnection(long hardTimeout) throws SQLException {
+    final long startTime = currentTime();
+    long timeout = hardTimeout;
+    do {
+        // 1. 先看 ThreadLocal 里这个线程上次用的连接——绝大多数请求能命中
+        PoolEntry entry = threadLocalList.pop();
+        if (entry == null) {
+            // 2. 从 ConcurrentBag 的公共区窃取/领取
+            entry = connectionBag.borrow(timeout, MILLISECONDS);
+            if (entry == null) break;              // 3. 超时出口
+        }
+        if (entry.isMarkedEvicted() || elapsed(entry.lastAccessed, entry.lastBorrowed) &gt; maxLifetime) {
+            closeConnection(entry, "(connection is evicted or dead)");   // 4. 淘汰重建
+            continue;
+        }
+        metricsTracker.recordBorrowStats(entry, startTime);
+        // 5. 包装成代理，close() 时不是真关，而是还给池
+        return ProxyFactory.getProxyConnection(this, entry, poolEntryState);
+    } while (timeout &gt; 0);
+    // 6. 走到这里就是池耗尽
+    throw new SQLTransientConnectionException(poolName + " - Connection is not available, "
+        + "request timed out after " + elapsed + "ms (total=" + total + ", active=" + active
+        + ", idle=" + idle + ", waiting=" + waiting + ")");
+}</code></pre>
+
+<div class="box amber">
+<div class="h">两个必须讲到的设计点</div>
+<p><strong>① ThreadLocal 优先。</strong>同一个线程上一次用的连接，大概率还在空闲，直接拿回来能省掉并发结构上的竞争。代价是连接在线程间分布不均——所以 HikariCP 会定期清理「在 ThreadLocal 里躺太久」的连接。</p>
+<p><strong>② close() 是归还，不是关闭。</strong>池返回的是 <code>ProxyConnection</code>，你调 <code>close()</code> 只是把 entry 放回 bag。这也解释了为什么「用 try-with-resources 就不会泄漏」是错觉——它保证的是<em>有人调了 close</em>，不保证<em>每条路径都走到了 close</em>。</p>
+</div>
+
+<h2><span class="n">04</span>容量公式：c = λ × S</h2>
+
+<p>先把最硬的一条摆出来，它是 Little 定律在连接池上的直接推论：</p>
+
+<div class="box blue">
+<div class="h">两条公式，一张嘴就能算</div>
+<p><strong>稳态占用：L = λ × S</strong>（到达率 × 单次耗时）。<strong>容量上限：c / S</strong>。</p>
+<p>所以「池子开多大」根本不是拍脑袋，是一道除法题。</p>
+</div>
+
+<table>
+<thead><tr><th class="num">目标 QPS</th><th class="num">平均耗时</th><th class="num">理论 c</th><th class="num">建议 c（×1.3 余量）</th></tr></thead>
+<tbody>
+<tr><td class="num">500</td><td class="num">2ms</td><td class="num">1.0</td><td class="num">1</td></tr>
+<tr><td class="num">1000</td><td class="num">5ms</td><td class="num">5.0</td><td class="num">6</td></tr>
+<tr><td class="num">2000</td><td class="num">5ms</td><td class="num">10.0</td><td class="num">13</td></tr>
+<tr><td class="num">300</td><td class="num">20ms</td><td class="num">6.0</td><td class="num">8</td></tr>
+<tr><td class="num">100</td><td class="num">50ms</td><td class="num">5.0</td><td class="num">6</td></tr>
+</tbody>
+</table>
+
+<p>注意最后两行：<strong>QPS 低但 SQL 慢，需要的连接反而不少。</strong>这就是「存储过程跑 50ms」的项目为什么老是连接池打满——不是流量大，是单次占坑时间长。</p>
+
+<figure>
+<svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6b7683"/></marker>
+  </defs>
+  <text x="20" y="24" font-size="13" font-weight="700" fill="#1a1d21">c=10、S=2ms：吞吐封顶 5000，等待在 80% 之后开始失控</text>
+
+  <!-- 坐标 -->
+  <line x1="80" y1="290" x2="560" y2="290" stroke="#6b7683" stroke-width="1.2" marker-end="url(#a4)"/>
+  <line x1="80" y1="290" x2="80" y2="56" stroke="#6b7683" stroke-width="1.2" marker-end="url(#a4)"/>
+  <text x="500" y="308" font-size="11" fill="#3d454e">到达率 λ（QPS）</text>
+  <text x="24" y="60" font-size="11" fill="#3d454e">吞吐</text>
+
+  <!-- 刻度 -->
+  <text x="72" y="294" font-size="10.5" fill="#6b7683" text-anchor="end">0</text>
+  <text x="150" y="294" font-size="10.5" fill="#6b7683" text-anchor="end">1000</text>
+  <text x="242" y="294" font-size="10.5" fill="#6b7683" text-anchor="end">2500</text>
+  <text x="352" y="294" font-size="10.5" fill="#6b7683" text-anchor="end">4000</text>
+  <text x="392" y="294" font-size="10.5" fill="#6b7683" text-anchor="end">4500</text>
+  <text x="420" y="294" font-size="10.5" fill="#6b7683" text-anchor="end">4800</text>
+  <text x="448" y="294" font-size="10.5" fill="#6b7683" text-anchor="end">4950</text>
+  <text x="74" y="86" font-size="10.5" fill="#6b7683" text-anchor="end">5000</text>
+
+  <!-- 吞吐线：贴着 y=x 到 5000 后平台 -->
+  <polyline points="80,290 150,258 242,212 352,150 392,130 420,107 448,90 500,86 540,86"
+            fill="none" stroke="#1a5fb4" stroke-width="2.4"/>
+  <text x="452" y="76" font-size="11.5" font-weight="700" fill="#1a5fb4">吞吐封顶 5000</text>
+
+  <!-- 平台虚线 -->
+  <line x1="80" y1="86" x2="540" y2="86" stroke="#bcd4f2" stroke-dasharray="4 4"/>
+
+  <!-- 等待曲线（右轴） -->
+  <polyline points="80,288 150,287 242,286 352,284 392,277 420,262 448,222 500,150"
+            fill="none" stroke="#c62828" stroke-width="2.2" stroke-dasharray="6 3"/>
+  <text x="512" y="146" font-size="11.5" font-weight="700" fill="#c62828">Wq 等待</text>
+
+  <!-- 关键点标注 -->
+  <circle cx="352" cy="284" r="3.5" fill="#c62828"/>
+  <text x="300" y="272" font-size="10.5" fill="#c62828">80%：0.39ms</text>
+  <circle cx="448" cy="222" r="3.5" fill="#c62828"/>
+  <text x="466" y="212" font-size="10.5" fill="#c62828">99%：19.1ms</text>
+
+  <!-- 右侧说明 -->
+  <rect x="590" y="60" width="290" height="212" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="606" y="84" font-size="12" font-weight="700" fill="#1a1d21">实测（40 万请求）</text>
+  <text x="606" y="108" font-size="11" fill="#3d454e">λ=2500　Wq 0.01ms　p99 0.5ms</text>
+  <text x="606" y="130" font-size="11" fill="#3d454e">λ=4000　Wq 0.39ms　p99 3.4ms</text>
+  <text x="606" y="152" font-size="11" fill="#3d454e">λ=4500　Wq 1.35ms　p99 9.0ms</text>
+  <text x="606" y="174" font-size="11" fill="#3d454e">λ=4800　Wq 4.01ms　p99 21.2ms</text>
+  <text x="606" y="196" font-size="11" fill="#c62828">λ=4950　Wq 19.1ms　p99 65.1ms</text>
+  <line x1="606" y1="212" x2="864" y2="212" stroke="#e4e8ed"/>
+  <text x="606" y="234" font-size="11" fill="#3d454e">吞吐吃不满的那部分没消失，它变成了排队。</text>
+  <text x="606" y="254" font-size="11" fill="#c62828">p99 比均值早 3.4 倍报警 —— 只看平均值永远觉得够。</text>
+
+  <text x="20" y="328" font-size="11" fill="#6b7683">仿真与 Erlang-C 解析解的最大相对误差 6.7%（先对齐解析解，再引用仿真）</text>
+</svg>
+<figcaption><b>图 4</b>　容量曲线与等待曲线。80% 之后是断崖，不是斜坡。</figcaption>
+</figure>
+
+<p>这张图有三层信息：</p>
+<ul>
+<li><strong>吞吐天花板是 5000</strong>，给到 4950 的负载它也只能吃 4953，多出来的排队；</li>
+<li><strong>等待不是线性的</strong>：利用率从 80% 到 99%，平均等待从 0.39ms 涨到 19.10ms，<strong>放大 49 倍</strong>；</li>
+<li><strong>p99 比均值更早报警</strong>：99% 利用率下 p99 是 65ms，均值只有 19ms，差 3.4 倍。</li>
+</ul>
+
+<p>还有一个反直觉的推论：<strong>同样的 90% 利用率，池子越大，等待越短。</strong>这是排队论的「汇聚效应」——c=2 与 c=40 在同样利用率下等待差 53 倍（8.57ms vs 0.16ms）。</p>
+
+<div class="box green">
+<div class="h">面试口径</div>
+<p>这条恰好说明「池子大一点没坏处」——<strong>但前提是服务端真的能并行。</strong>下一节就是那个前提失效的场景。</p>
+</div>

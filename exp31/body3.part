@@ -1,0 +1,329 @@
+<h2><span class="n">09</span>资源隔离：舱壁模式为什么值那点钱</h2>
+
+<p>第 07、08 节讲的是「一个池子内部出事」。这一节讲「一个池子出事，会不会带走整个应用」。</p>
+
+<p>实测场景：A 是快依赖（2ms），B 是慢依赖（500ms），各 50 个线程打，2.5 秒窗口。</p>
+
+<figure>
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="20" y="24" font-size="13" font-weight="700" fill="#1a1d21">同一个 B（500ms 慢依赖），两种池子布局，A 的生死完全不同</text>
+
+  <!-- 共享 -->
+  <text x="30" y="54" font-size="12" font-weight="700" fill="#c62828">共享池 20</text>
+  <rect x="30" y="66" width="380" height="96" rx="7" fill="#fdeceb" stroke="#f0c4c2"/>
+  <g fill="#c62828" opacity="0.85">
+    <rect x="44" y="80" width="26" height="16" rx="2"/><rect x="76" y="80" width="26" height="16" rx="2"/>
+    <rect x="108" y="80" width="26" height="16" rx="2"/><rect x="140" y="80" width="26" height="16" rx="2"/>
+    <rect x="172" y="80" width="26" height="16" rx="2"/><rect x="204" y="80" width="26" height="16" rx="2"/>
+    <rect x="236" y="80" width="26" height="16" rx="2"/><rect x="268" y="80" width="26" height="16" rx="2"/>
+  </g>
+  <text x="306" y="93" font-size="10.5" fill="#c62828">B 占 12 个</text>
+  <g fill="#1a5fb4">
+    <rect x="44" y="104" width="26" height="16" rx="2"/><rect x="76" y="104" width="26" height="16" rx="2"/>
+    <rect x="108" y="104" width="26" height="16" rx="2"/><rect x="140" y="104" width="26" height="16" rx="2"/>
+    <rect x="172" y="104" width="26" height="16" rx="2"/><rect x="204" y="104" width="26" height="16" rx="2"/>
+    <rect x="236" y="104" width="26" height="16" rx="2"/><rect x="268" y="104" width="26" height="16" rx="2"/>
+  </g>
+  <text x="306" y="117" font-size="10.5" fill="#1a5fb4">A 抢到 8 个</text>
+  <text x="44" y="146" font-size="11" fill="#3d454e">B 的 50 个线程每秒抢空池子，A 只能排到队尾或超时</text>
+
+  <!-- 隔离 -->
+  <text x="470" y="54" font-size="12" font-weight="700" fill="#1e7d3c">隔离池 20 + 20</text>
+  <rect x="470" y="66" width="185" height="96" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="482" y="84" font-size="10.5" font-weight="700" fill="#1a5fb4">A 的池（20）</text>
+  <g fill="#1a5fb4">
+    <rect x="482" y="94" width="24" height="14" rx="2"/><rect x="512" y="94" width="24" height="14" rx="2"/>
+    <rect x="542" y="94" width="24" height="14" rx="2"/><rect x="572" y="94" width="24" height="14" rx="2"/>
+    <rect x="482" y="114" width="24" height="14" rx="2"/><rect x="512" y="114" width="24" height="14" rx="2"/>
+    <rect x="542" y="114" width="24" height="14" rx="2"/><rect x="572" y="114" width="24" height="14" rx="2"/>
+  </g>
+  <text x="482" y="150" font-size="10.5" fill="#3d454e">B 抢不到这里的一个</text>
+
+  <rect x="665" y="66" width="205" height="96" rx="7" fill="#fdf4e3" stroke="#e8cf9a"/>
+  <text x="677" y="84" font-size="10.5" font-weight="700" fill="#9a6400">B 的池（20）</text>
+  <g fill="#c62828" opacity="0.8">
+    <rect x="677" y="94" width="24" height="14" rx="2"/><rect x="707" y="94" width="24" height="14" rx="2"/>
+    <rect x="737" y="94" width="24" height="14" rx="2"/><rect x="767" y="94" width="24" height="14" rx="2"/>
+    <rect x="677" y="114" width="24" height="14" rx="2"/><rect x="707" y="114" width="24" height="14" rx="2"/>
+    <rect x="737" y="114" width="24" height="14" rx="2"/><rect x="767" y="114" width="24" height="14" rx="2"/>
+  </g>
+  <text x="677" y="150" font-size="10.5" fill="#9a6400">它堵死的是自己</text>
+
+  <!-- 数据对比 -->
+  <line x1="20" y1="186" x2="880" y2="186" stroke="#e4e8ed"/>
+  <text x="20" y="212" font-size="11.5" fill="#3d454e">2.5 秒窗口内 A 的表现：</text>
+
+  <rect x="20" y="226" width="410" height="72" rx="7" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="36" y="248" font-size="11.5" fill="#3d454e">共享池　成功 <tspan font-weight="700" font-size="15" fill="#c62828">588</tspan> ／ 超时 <tspan font-weight="700" fill="#c62828">219</tspan></text>
+  <text x="36" y="272" font-size="11" fill="#3d454e">成功率 72.9%　A 什么都没做错，只是和 B 住同一间屋子</text>
+  <text x="36" y="290" font-size="10.5" fill="#6b7683">B 的 50 线程各占连接 500ms，20 个连接一秒内被抢空</text>
+
+  <rect x="450" y="226" width="420" height="72" rx="7" fill="#e9f5ec" stroke="#b9dcc2"/>
+  <text x="466" y="248" font-size="11.5" fill="#3d454e">隔离池　成功 <tspan font-weight="700" font-size="15" fill="#1e7d3c">3270</tspan> ／ 超时 <tspan font-weight="700" fill="#1e7d3c">18</tspan></text>
+  <text x="466" y="272" font-size="11" fill="#3d454e">成功率 99.5%　吞吐 5.6 倍</text>
+  <text x="466" y="290" font-size="10.5" fill="#6b7683">隔离不消灭痛苦，只是把痛苦集中给那个依赖</text>
+</svg>
+<figcaption><b>图 9</b>　舱壁模式。同样的负载、同样的连接总数，只因为「分不分屋」，A 的吞吐差 5.6 倍。</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>模式</th><th class="num">A 成功</th><th class="num">A 超时</th><th class="num">A 成功率</th></tr></thead>
+<tbody>
+<tr><td><strong>共享池</strong>（A、B 共用一个 20 连接池）</td><td class="num">588</td><td class="num">219</td><td class="num">72.9%</td></tr>
+<tr><td><strong>隔离池</strong>（A 20 + B 20）</td><td class="num">3270</td><td class="num">18</td><td class="num">99.5%</td></tr>
+</tbody>
+</table>
+
+<p>A 的吞吐从 588 涨到 3270（<strong>5.6 倍</strong>），失败的 219 次直接归零到 18 次。原因不复杂：B 的 50 个线程各占连接 500ms，共享池 20 个连接被 B 一秒内抢光，A 连「借」的资格都没有，只能等到 500ms 超时——<strong>A 根本没做错任何事，它只是和 B 住在同一间屋子。</strong></p>
+
+<p>隔离的三个层次，从粗到细：</p>
+
+<table>
+<thead><tr><th>隔离方式</th><th>隔离的东西</th><th>成本</th><th>适用</th></tr></thead>
+<tbody>
+<tr><td>连接池隔离</td><td>连接</td><td>连接总数翻倍，DB 侧预算要重算</td><td>同一应用访问多个库 / 多种慢查询</td></tr>
+<tr><td>线程池隔离</td><td>线程（+ 连接）</td><td>线程数翻倍，上下文切换上升</td><td>强弱依赖混部，限制慢依赖并发</td></tr>
+<tr><td>信号量隔离</td><td>并发数（不换线程）</td><td>最轻，无线程切换</td><td>只限制并发，不关心排队时长</td></tr>
+</tbody>
+</table>
+
+<pre data-lang="java"><code>// 按依赖拆池：快查询一个池，报表/慢查询另一个池
+@Bean("fastDs")
+@ConfigurationProperties("app.datasource.fast")
+public HikariDataSource fastDs() { return new HikariDataSource(); }   // max=20
+
+@Bean("slowDs")
+@ConfigurationProperties("app.datasource.slow")
+public HikariDataSource slowDs() { return new HikariDataSource(); }   // max=5，故意小
+
+// 慢查询路由到小池：它再怎么堵，也只能堵自己那 5 个连接
+@Transactional("slowTx")
+public Report buildReport() { ... }</code></pre>
+
+<div class="box red">
+<div class="h">隔离不是免费的，三笔成本必须说清楚</div>
+<p><strong>1. 连接总数上升。</strong>两个池各 20，实例从 4 台扩到 20 台，就是 20 × 20 × 2 = 800 个连接，MySQL 默认 <code>max_connections=151</code> 直接顶死。所以隔离前先算总账：<code>池大小 × 实例数 × 池个数 ≤ max_connections × 0.8</code>。</p>
+<p><strong>2. 小池会放大尾部延迟。</strong>慢依赖只给 5 个连接，它的 P99 一定比给 20 个更差——隔离是把痛苦集中给一个依赖，不是消灭痛苦。</p>
+<p><strong>3. 多数据源就没有本地事务了。</strong>跨池操作要么走分布式事务，要么接受最终一致，别指望 <code>@Transactional</code> 还能救你。</p>
+</div>
+
+<h2><span class="n">10</span>HikariCP 参数速查：默认值就是答案，改之前先想清楚</h2>
+
+<table>
+<thead><tr><th>参数</th><th>默认值</th><th>什么时候改</th><th>改错的后果</th></tr></thead>
+<tbody>
+<tr><td><code>maximumPoolSize</code></td><td>10</td><td>按 <code>c = λ × S</code> 算出来明显大于 10，且 DB 核数撑得住</td><td>调大 → DB 超配，延迟升、吞吐不升</td></tr>
+<tr><td><code>minimumIdle</code></td><td>与 max 相同</td><td>一般不改</td><td>调小 → 流量突增要现场建连，尖刺</td></tr>
+<tr><td><code>connectionTimeout</code></td><td>30000ms</td><td>按上游请求预算倒推</td><td>太大 → 线程被拖死；太小 → 误伤慢查询</td></tr>
+<tr><td><code>validationTimeout</code></td><td>5000ms</td><td>一般不动</td><td>大于 connectionTimeout 会启动报错</td></tr>
+<tr><td><code>idleTimeout</code></td><td>600000ms（10min）</td><td>只有 <code>minimumIdle &lt; maximumPoolSize</code> 时生效</td><td>设了没用，因为默认 min=max</td></tr>
+<tr><td><code>maxLifetime</code></td><td>1800000ms（30min）</td><td>云上必须 &lt; LB/DB 的空闲回收时间</td><td>太大 → 借到死连接，报 Communications link failure</td></tr>
+<tr><td><code>keepaliveTime</code></td><td>0（关闭）</td><td>中间有防火墙掐空闲连接时设 30~60s</td><td>探测本身要一条 SQL，别设太密</td></tr>
+<tr><td><code>leakDetectionThreshold</code></td><td>0（关闭）</td><td>排查期设「最长事务 × 2」，且 ≥2000ms</td><td>小于 2000 被静默禁用；太小会误报成噪声</td></tr>
+<tr><td><code>connectionTestQuery</code></td><td>无（用 JDBC4 <code>isValid</code>）</td><td>驱动不支持 <code>isValid</code> 才需要</td><td>设了等于每次借出多一个 RTT</td></tr>
+</tbody>
+</table>
+
+<p><code>minimumIdle</code> 等于 <code>maximumPoolSize</code> 是 HikariCP 的默认，也是它跟很多老池子最大的理念差异：<strong>固定大小的池，行为最可预测</strong>。C3P0/DBCP 那种「最小 5 最大 50」的配置，在流量突增时会出现「先排队建连、再排队拿连接」的二次延迟，而且你永远测不出稳态。</p>
+
+<h2><span class="n">11</span>七个反直觉，背下来能挡掉一半追问</h2>
+
+<table>
+<thead><tr><th class="num">#</th><th>直觉</th><th>事实</th><th>证据</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>池子大吞吐就高</td><td>超过服务端并行度后只加延迟。8 倍并发只换来 +15.5% 吞吐</td><td>12→96 线程实测</td></tr>
+<tr><td class="num">2</td><td>泄漏会先变慢再报错</td><td>没有过渡带，直接从 2ms 平线跳到 100% 超时</td><td>第 201 次请求断崖</td></tr>
+<tr><td class="num">3</td><td>配了 leakDetectionThreshold 就有用</td><td>小于 2000ms 被静默改成 0（关闭），只在启动日志留一行 WARN</td><td>真 HikariCP 日志</td></tr>
+<tr><td class="num">4</td><td>池满的锅在 SQL 慢</td><td>更常见的是「事务里调 RPC / 嵌套借连接」，SQL 2ms 也照样满</td><td>10/10 失败实测</td></tr>
+<tr><td class="num">5</td><td>池大小是应用的事</td><td>分母在数据库：<code>池 × 实例 × 数据源 ≤ max_connections</code></td><td>默认 151</td></tr>
+<tr><td class="num">6</td><td>隔离越多越稳</td><td>每多一个池连接总数乘一份；小池会放大那个依赖的尾延迟</td><td>800 连接算例</td></tr>
+<tr><td class="num">7</td><td>连接池满只是报错</td><td>线程池会跟着被占满：200 线程 × 30s = 6000 线程·秒瞬间蒸发</td><td>预算相乘</td></tr>
+</tbody>
+</table>
+
+<p>第 7 条值得单独展开，因为它是级联故障的起点：</p>
+
+<figure>
+<svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a10" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#c62828"/></marker>
+  </defs>
+  <text x="20" y="24" font-size="13" font-weight="700" fill="#1a1d21">从「有点慢」到「整个集群雪崩」，只需要三分钟</text>
+
+  <rect x="20" y="46" width="150" height="58" rx="7" fill="#fdf4e3" stroke="#e8cf9a"/>
+  <text x="34" y="68" font-size="11.5" font-weight="700" fill="#9a6400">① 池满</text>
+  <text x="34" y="88" font-size="10.5" fill="#3d454e">业务线程卡在</text>
+  <text x="34" y="100" font-size="10.5" fill="#3d454e">getConnection(30s)</text>
+
+  <rect x="205" y="46" width="150" height="58" rx="7" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="219" y="68" font-size="11.5" font-weight="700" fill="#c62828">② 线程被占满</text>
+  <text x="219" y="88" font-size="10.5" fill="#3d454e">200 个工作线程</text>
+  <text x="219" y="100" font-size="10.5" fill="#3d454e">逐个耗尽</text>
+
+  <rect x="390" y="46" width="150" height="58" rx="7" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="404" y="68" font-size="11.5" font-weight="700" fill="#c62828">③ 健康检查超时</text>
+  <text x="404" y="88" font-size="10.5" fill="#3d454e">/actuator/health</text>
+  <text x="404" y="100" font-size="10.5" fill="#3d454e">心跳拿不到线程</text>
+
+  <rect x="575" y="46" width="150" height="58" rx="7" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="589" y="68" font-size="11.5" font-weight="700" fill="#c62828">④ 实例被摘除</text>
+  <text x="589" y="88" font-size="10.5" fill="#3d454e">注册中心剔除</text>
+  <text x="589" y="100" font-size="10.5" fill="#3d454e">流量转移到别处</text>
+
+  <rect x="760" y="46" width="120" height="58" rx="7" fill="#c62828" stroke="#c62828"/>
+  <text x="774" y="68" font-size="11.5" font-weight="700" fill="#ffffff">⑤ 更快雪崩</text>
+  <text x="774" y="88" font-size="10.5" fill="#ffffff">剩余实例</text>
+  <text x="774" y="100" font-size="10.5" fill="#ffffff">更快被占满</text>
+
+  <line x1="172" y1="75" x2="201" y2="75" stroke="#c62828" stroke-width="1.6" marker-end="url(#a10)"/>
+  <line x1="357" y1="75" x2="386" y2="75" stroke="#c62828" stroke-width="1.6" marker-end="url(#a10)"/>
+  <line x1="542" y1="75" x2="571" y2="75" stroke="#c62828" stroke-width="1.6" marker-end="url(#a10)"/>
+  <line x1="727" y1="75" x2="756" y2="75" stroke="#c62828" stroke-width="1.6" marker-end="url(#a10)"/>
+
+  <rect x="20" y="128" width="860" height="50" rx="7" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="36" y="150" font-size="11.5" fill="#1a1d21" font-weight="700">唯一的刹车片：把 connectionTimeout 从 30s 降到 1s</text>
+  <text x="36" y="168" font-size="11" fill="#3d454e">救的不是数据库，是你的线程池 —— 30s 的等待不会让请求成功，只会让 200 个线程一起变成人质。</text>
+
+  <text x="20" y="204" font-size="11" fill="#3d454e">第 1 分钟看起来只是「有点慢」；第 3 分钟就是整个集群雪崩。</text>
+  <text x="20" y="226" font-size="11" fill="#c62828">所以「连接池满」的正确处置顺序永远是：先砍超时保住线程池 → 再定位慢依赖 → 最后才是调池子大小。</text>
+</svg>
+<figcaption><b>图 10</b>　级联链。连接池满不是终点，它是雪崩的起点。</figcaption>
+</figure>
+
+<h2><span class="n">12</span>数字清单：20 个能被追问的数字</h2>
+
+<table>
+<thead><tr><th class="num">#</th><th>数字</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>4 RTT</td><td>建连 = TCP 1 + TLS 1 + 认证 1 + 会话初始化 1</td></tr>
+<tr><td class="num">2</td><td>410µs / 106µs</td><td>本机回环建连+4 往返 vs 复用，建连占 74%</td></tr>
+<tr><td class="num">3</td><td>4x / 13x / 60x</td><td>建连相当于几次查询：同机房 / 跨 AZ / 跨地域</td></tr>
+<tr><td class="num">4</td><td>L = λ × S，c / S</td><td>稳态占用与容量上限，两条公式</td></tr>
+<tr><td class="num">5</td><td>5000 QPS</td><td>c=10、S=2ms 的容量上限（实测 4953）</td></tr>
+<tr><td class="num">6</td><td>1.21ms → 19.10ms</td><td>90% → 99% 利用率，等待放大 16 倍</td></tr>
+<tr><td class="num">7</td><td>53 倍</td><td>同 90% 利用率，c=2（8.57ms）vs c=40（0.16ms）</td></tr>
+<tr><td class="num">8</td><td>+15.5%，×8</td><td>12→96 并发：吞吐微增，排队 8 倍</td></tr>
+<tr><td class="num">9</td><td>k=12 → 6000 QPS</td><td>服务端并行度决定吞吐上限，c=96 时延迟 16ms</td></tr>
+<tr><td class="num">10</td><td>第 201 次</td><td>pool=10、每 20 次漏 1 个 → 断崖点</td></tr>
+<tr><td class="num">11</td><td>10/10 失败</td><td>10 线程各借 2 连接，3040ms 后统一超时</td></tr>
+<tr><td class="num">12</td><td>72.9% vs 99.5%</td><td>共享池 vs 隔离池，A 的成功率；吞吐 5.6 倍</td></tr>
+<tr><td class="num">13</td><td>10 / 30s / 30min</td><td>HikariCP 默认 maxPoolSize / connectionTimeout / maxLifetime</td></tr>
+<tr><td class="num">14</td><td>≥2000ms</td><td>leakDetectionThreshold 的有效下限，小于则被禁用</td></tr>
+<tr><td class="num">15</td><td>1508ms</td><td>配置 1500 实测 1508，多 0.5%，预算要留余量</td></tr>
+<tr><td class="num">16</td><td>借出 + 阈值</td><td>泄漏告警时刻 = 借出时刻 + 阈值，不是 30s 巡检周期</td></tr>
+<tr><td class="num">17</td><td>256KB~1MB</td><td>每连接 DB 侧内存（估算）</td></tr>
+<tr><td class="num">18</td><td>151 / 28800s</td><td>MySQL max_connections / wait_timeout 默认值</td></tr>
+<tr><td class="num">19</td><td>1200 连接</td><td>20 实例 × 3 数据源 × 20 连接，远超 151</td></tr>
+<tr><td class="num">20</td><td>20~30 分钟</td><td>maxLifetime 建议值，且 &lt; 中间设备空闲回收（300~900s）</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">13</span>十四问答：从入门问到追命</h2>
+
+<p><strong>Q1：连接池大小怎么定？</strong><br>
+按 <code>c = λ × S</code> 算：QPS 乘平均耗时，再乘 1.2~1.3 的余量。然后用「服务端并行度」封顶——DB 是 12 核，就别指望 48 个连接有用。最后用 <code>池 × 实例 × 数据源 ≤ max_connections × 0.8</code> 做总闸校验。三步都过才是答案。</p>
+
+<p><strong>Q2：为什么 HikariCP 默认 10？</strong><br>
+因为分母在服务端。官方经验式是 <code>核数 × 2 + 有效磁盘数</code>，4 核 1 盘 ≈ 9。10 是个保守的起点，不是普适最优。真按公式算出来是 20，就配 20——但要有压测数据支撑，别凭感觉往上加。</p>
+
+<p><strong>Q3：池满了会发生什么，怎么快速判断？</strong><br>
+调用线程阻塞在 <code>getConnection</code>，等 <code>connectionTimeout</code> 后抛 <code>SQLTransientConnectionException</code>，文案里有 <code>total/active/idle/waiting</code> 四元组。判断顺序：<code>active == total &amp;&amp; idle == 0</code> → 池满；<code>waiting &gt; 0</code> → 有排队；<code>active</code> 不回落 → 泄漏；<code>total &lt; max</code> 却在等 → 建连失败或连接全被 evict。</p>
+
+<p><strong>Q4：<code>connectionTimeout=30s</code> 有什么问题？</strong><br>
+比大多数上游的请求超时还长。网关 3 秒就断了，你的线程还在这儿等 27 秒——这 27 秒纯属浪费，而且会累积成线程池雪崩。正确做法是从请求预算倒推，一般 500ms~2s。</p>
+
+<p><strong>Q5：线上连接泄漏怎么排查（不停机）？</strong><br>
+① 开 <code>leakDetectionThreshold=10000</code>（≥2000），等 WARN，堆栈直指借出点；② 看 <code>active</code> 是否单调不减，配合 <code>/actuator/metrics/hikaricp.connections.active</code>；③ dump 线程栈，找停在 <code>getConnection</code> 或长时间停在业务方法里的线程；④ 查异步路径（<code>CompletableFuture</code>、<code>@Async</code>、自定义线程池）里借了没还的连接。注意 <code>(unleaked)</code> 那条——如果连接后来还了，就不是泄漏，是慢。</p>
+
+<p><strong>Q6：为什么 <code>minimumIdle</code> 默认等于 <code>maximumPoolSize</code>？</strong><br>
+固定大小的池行为可预测。min &lt; max 时，突发流量要先花 4 个 RTT 建连，再排队拿连接，双重延迟；而且「什么时候扩容」取决于 <code>idleTimeout</code>，这个时机你控制不了。</p>
+
+<p><strong>Q7：<code>maxLifetime</code> 为什么要小于 <code>wait_timeout</code>？</strong><br>
+因为要让池主动淘汰可能已死的连接，而不是借出去才发现。中间还有防火墙、SLB 的空闲连接回收（常见 300~900s），所以 20~30 分钟是安全区。HikariCP 还会加 ±2.5% 随机抖动，防止集体退休造成建连尖峰。</p>
+
+<p><strong>Q8：连接池和线程池什么关系？</strong><br>
+两层闸门串联。线程池决定「同时有多少请求在处理」，连接池决定「同时有多少请求在访问 DB」。上游宽下游窄 = 大量线程在池外排队，白占内存还拖高延迟；下游宽上游窄 = 连接闲着浪费。合理比例是「线程池略大于连接池」，差额就是允许在 CPU 计算、外部调用上并行的部分。</p>
+
+<p><strong>Q9：一个请求要查两个库，事务怎么办？</strong><br>
+先问「真的需要原子性吗」。多数场景是伪需求，用本地消息表 / 最终一致就够了。真需要跨库原子性，<code>@Transactional</code> 帮不了你——它只管一个 <code>DataSource</code>。要么上 XA/Seata（性能代价大），要么改业务模型。<strong>绝对不要在一个事务里借两个数据源的连接然后嵌套调用</strong>，那就是第 08 节的死锁。</p>
+
+<p><strong>Q10：为什么不能在事务里调 RPC？</strong><br>
+三个理由：① 占着连接等网络，把 2ms 的查询变成 200ms 的长占坑，池子利用率暴跌；② 远程调用可能超时重试，重试风暴下事务越积越多；③ 事务持有行锁的时间被外部系统决定，别的事务被连带阻塞，可能锁超时。正确做法是把 RPC 挪到事务外面：先查、再调、最后在短事务里写。</p>
+
+<p><strong>Q11：HikariCP 为什么比 DBCP 快？</strong><br>
+核心是 <code>ConcurrentBag</code>：用 <code>ThreadLocal</code> 存本线程上次归还的连接（绝大多数请求零竞争命中），加上 <code>CopyOnWriteArrayList</code> 做无锁的公共区，再用 handoff 队列做「手递手」传递（borrow 和 return 直接配对，不经过队列）。加上关键路径手写优化、<code>FastList</code> 替代 <code>ArrayList</code> 去掉范围检查，整体比 DBCP 少一个数量级的锁竞争。</p>
+
+<p><strong>Q12：长连接、短连接、连接池怎么选？</strong><br>
+短连接只在「一次性的运维脚本」里合理。长连接在「客户端数量固定且少」时够用，但一旦客户端是水平扩容的实例，就会打爆 <code>max_connections</code>。连接池是唯一能同时控制「并发上限」和「建连次数」的方案——<strong>它本质是一个限流器，顺带做了复用。</strong></p>
+
+<p><strong>Q13：怎么压测确定池大小？</strong><br>
+固定下游负载，扫池大小（5/10/20/40/80），画两条曲线：吞吐和 P99。吞吐曲线的拐点就是答案；如果吞吐一直涨但 P99 已经翻倍，说明拐点早过了，你在为不需要的吞吐付延迟。注意压测机自身要够，且必须打真实 SQL——用 <code>SELECT 1</code> 压出来的池大小毫无意义。</p>
+
+<p><strong>Q14：只做连接池隔离够不够？</strong><br>
+不够。连接池隔离只隔离了「数据库访问」这一种资源。如果慢依赖是 HTTP 调用，它根本不占数据库连接，照样能把 Tomcat 线程吃光。完整方案是分层的：<strong>线程池隔离（挡所有阻塞）→ 连接池隔离（挡 DB 慢查询）→ 信号量 / 熔断（挡瞬时尖峰）</strong>。三层都上才是舱壁，只上一层的叫「心理安慰」。</p>
+
+<h2><span class="n">14</span>三道模拟面试题（含四档答法）</h2>
+
+<h3>题 1：早高峰订单服务大量报 <code>Connection is not available, request timed out after 30000ms</code>，QPS 没涨、DB CPU 只有 30%。怎么查？</h3>
+
+<table>
+<thead><tr><th style="width:88px">档位</th><th>答法</th></tr></thead>
+<tbody>
+<tr><td><strong>不合格</strong></td><td>连接池太小，调大 <code>maximumPoolSize</code>。<br><span style="color:#c62828">→ DB CPU 才 30%，说明不是容量问题；调大只会让更多线程去抢同一把闩。</span></td></tr>
+<tr><td><strong>及格</strong></td><td>看连接池监控，<code>active</code> 是不是等于 <code>total</code>、<code>idle</code> 是不是 0，确认池耗尽；再看慢 SQL 日志。<br><span style="color:#9a6400">→ 方向对，但没解释「CPU 30% 却耗尽」。</span></td></tr>
+<tr><td><strong>良好</strong></td><td>先确认四元组。<code>active == total &amp;&amp; idle == 0</code> 说明连接全被借走且没还；DB CPU 低说明这些连接<strong>没在干活</strong>，典型是持有连接等外部资源。查三处：① 事务里有 RPC/HTTP 调用；② <code>REQUIRES_NEW</code> 或双数据源导致嵌套借连接；③ 泄漏（<code>active</code> 单调不减）。用 <code>leakDetectionThreshold=10000</code> + 线程栈 dump 定位。</td></tr>
+<tr><td><strong>优秀</strong></td><td>在良好基础上补三层。<br><strong>① 定位</strong>：抓 3 个时间点的四元组，看 <code>active</code> 是「锯齿」（正常还是了）还是「平顶不落」（泄漏/长事务）；<code>waiting</code> 从 0 涨到 200 的时刻，和某个接口 RT 突增的时刻对齐——大概率能找到那个慢依赖。<br><strong>② 机制</strong>：解释为什么 CPU 30% 也能满池——连接是被「占着」不是被「算着」，<code>active</code> 反映持有时间不是计算量。<br><strong>③ 止损与根治</strong>：止血先把 <code>connectionTimeout</code> 从 30s 砍到 1s（保住线程池，避免级联），必要时重启实例回收泄漏连接；根治按「事务里不许有远程调用」做代码规约，<code>leakDetectionThreshold</code> 常开，并把该依赖的池独立出去做舱壁。</td></tr>
+</tbody>
+</table>
+
+<h3>题 2：大促前 DBA 说 <code>max_connections</code> 最多 500，你们 20 个实例、每实例 3 个数据源（订单/商品/报表），怎么配？</h3>
+
+<table>
+<thead><tr><th style="width:88px">档位</th><th>答法</th></tr></thead>
+<tbody>
+<tr><td><strong>不合格</strong></td><td>每个池配 20，20×3×20=1200 超了，那就配 8。<br><span style="color:#c62828">→ 账算对了，但三个库负载完全不同，平均分配是最差的分法。</span></td></tr>
+<tr><td><strong>及格</strong></td><td>先算总量 500×0.8=400 可用，400/20 实例=20 连接/实例，3 个数据源分 20 个。<br><span style="color:#9a6400">→ 保住不超限，但没说明「怎么分」。</span></td></tr>
+<tr><td><strong>良好</strong></td><td>按实测 QPS 分配，不平均分。订单库是核心写路径给 10，商品库读多给 6，报表库是慢查询给 4；报表池配 <code>connectionTimeout=800ms</code>，快速失败，让它堵不到别人。同时给报表加信号量限流（2），防止 4 个连接全占了还排队。</td></tr>
+<tr><td><strong>优秀</strong></td><td>在良好基础上补四点。<br><strong>① 算式写清</strong>：<code>池 × 实例 × 数据源 ≤ max_connections × 0.8</code>，留 20% 给 DBA 运维、备份、DDL、监控账号——这些都要连接。<br><strong>② 说明为什么报表池最小</strong>：慢 SQL 单次占坑 8 秒，4 个连接的理论吞吐只有 0.5 QPS，它的瓶颈是延迟不是并发；给多了纯浪费，还会把 buffer pool 搅浑（大查询刷脏页）。<br><strong>③ 弹性预案</strong>：大促扩到 40 实例总量翻倍，所以池要改成配置中心动态可调（<code>setMaximumPoolSize</code> 支持运行时改），并约定「扩容前先降池」。<br><strong>④ 兜底</strong>：接 PgBouncer/ProxySQL 这类连接池中间件，把「实例数 × 池大小」和「DB 连接数」解耦——应用侧开 40 个逻辑连接，中间件收敛成 5 个物理连接。这是实例数弹性扩缩时唯一不炸的解法。</td></tr>
+</tbody>
+</table>
+
+<h3>题 3：报表接口上线后，订单接口 P99 从 50ms 涨到 2s，订单代码和 SQL 都没改。为什么？</h3>
+
+<table>
+<thead><tr><th style="width:88px">档位</th><th>答法</th></tr></thead>
+<tbody>
+<tr><td><strong>不合格</strong></td><td>机器负载高了，加机器。<br><span style="color:#c62828">→ 加机器可能更糟（连接总数上升），且没解释「为什么偏偏是订单接口」。</span></td></tr>
+<tr><td><strong>及格</strong></td><td>报表查询慢，把连接池占满了，订单接口拿不到连接。<br><span style="color:#9a6400">→ 对，但只答到「抢资源」，没答「为什么是 2s 这个数量级」。</span></td></tr>
+<tr><td><strong>良好</strong></td><td>报表走共享池，20 个连接被它占掉大半，订单接口在池里排队，排队时间正好是报表的查询耗时（~2s），所以 P99 从 50ms 跳到 2s。证据链：报表上线时间与 P99 拐点对齐；<code>waiting</code> 同时段从 0 涨到 x；DB 侧 <code>SHOW PROCESSLIST</code> 能看到报表的长查询。修法是给报表独立连接池 + 限流。</td></tr>
+<tr><td><strong>优秀</strong></td><td>把因果讲成一条链，并给出可验证判据。<br><strong>① 机制</strong>：报表是「长占坑」型负载，单次 2 秒，即使 QPS 只有 0.5，稳态占用 <code>L = λ × S = 1</code>；但它并发一高（运营同时点 5 个导出），<code>L</code> 瞬间到 10，池里 20 个连接去一半，订单接口的排队时间就被拉长到「报表的剩余执行时间」。<br><strong>② 为什么是 2s 而不是 50ms</strong>：排队时间不由订单自己的 2ms SQL 决定，由<strong>前面那个人什么时候走</strong>决定——这是「等待服从服务时间分布」的直接体现。P99 恰好落在报表的查询时长附近，这个「数值巧合」本身就是最强的定位证据。<br><strong>③ 修复优先级</strong>：先隔离（独立池 + 信号量限流，立刻止血）→ 再治理（报表改走列存/从库/预聚合，2s 降到 200ms）→ 最后是机制（按依赖分池成为默认规范，CI 加规则：<code>@Transactional</code> 内禁止 <code>RestTemplate</code>/<code>Feign</code> 调用）。<br><strong>④ 反思</strong>：根因不是「报表写得太慢」，而是「没有任何机制阻止一个慢依赖抢别人的资源」——<strong>连接池的默认配置就是共享，共享就是没有隔离。</strong></td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">15</span>31 期地图与下期预告</h2>
+
+<table>
+<thead><tr><th>板块</th><th class="num">期号</th><th>一句话抓手</th></tr></thead>
+<tbody>
+<tr><td>并发基础</td><td class="num">03 / 14 / 20</td><td>锁、并发容器、线程池七参数</td></tr>
+<tr><td>容量与放大</td><td class="num">30</td><td>重试、超时、扇出三本账</td></tr>
+<tr><td><strong>资源池与隔离</strong></td><td class="num"><strong>31</strong></td><td><strong>池是闸门：容量 c/S，等待 M/M/c，出事看四元组</strong></td></tr>
+<tr><td>可观测性</td><td class="num">28</td><td>分位数不可平均，P99 对不上先查口径</td></tr>
+<tr><td>排查方法论</td><td class="num">09</td><td>五步归因：先看时间线，再看资源</td></tr>
+</tbody>
+</table>
+
+<p>面试官问连接池，往往不是考「你背没背 HikariCP 参数」，而是考<strong>你有没有把「资源」当有限量来思考</strong>。会算 <code>c = λ × S</code> 的人知道池子该多大；知道 <code>L = λ × S</code> 的人明白为什么慢依赖会传染；知道四元组的人能在 30 秒内定位线上故障。这三个层次，对应初级、中级、高级。</p>
+
+<div class="box blue">
+<div class="h">下期预告 · 第 32 期</div>
+<p><strong>JVM 与容器的边界——为什么 Pod 里 <code>-Xmx4g</code> 还是被 OOMKilled。</strong></p>
+<p>会讲清楚：容器 CPU limit 与 <code>ParallelGCThreads</code>、<code>MaxRAMPercentage</code> 到底怎么算堆、为什么 JDK 8u191 之前不认 cgroup、JVM 看到的「内存」和 Kubernetes 看到的「memory」差在哪、<code>-XX:+UseContainerSupport</code> 打开后还有哪些坑（<code>/proc/meminfo</code> vs cgroup v2、<code>ActiveProcessorCount</code>、sidecar 共享 cgroup）。这是第 12 期 JVM 调优在云原生场景下的续集。</p>
+</div>
+
+<div class="foot">
+<p>本期实验代码：<code>sim.py</code>（M/M/c 离散事件仿真，对齐 Erlang-C）、<code>conn.py</code>（回环建连 vs 复用）、<code>Exp31.java</code>（池大小 / 超配 / 嵌套死锁 / 泄漏 / 隔离五组）、<code>Hikari31.java</code> + <code>HikariLeak.java</code>（真 HikariCP 5.1.0 + 假 DataSource）。全部在本机 JDK 21.0.7 / Python 3.13 实跑。</p>
+<p>标注「估算」的（每连接 256KB~1MB、4 RTT 建连模型）为经验区间与模型推算，非本机实测；M/M/c 与 Erlang-C 是排队论模型，用于给拐点与量级，不代表任何具体生产系统的绝对数值。</p>
+</div>
+
+</div>

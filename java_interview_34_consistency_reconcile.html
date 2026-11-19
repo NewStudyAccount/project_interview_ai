@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 面试深挖 34 · 微服务数据一致性与对账</title>
+<style>
+:root{
+  --ink:#1a1d21; --ink2:#3d454e; --muted:#6b7683; --line:#e4e8ed; --line2:#d4dae1;
+  --bg:#ffffff; --panel:#f7f9fb; --panel2:#eef2f6;
+  --blue:#1a5fb4; --blue-soft:#e8f0fb;
+  --red:#c62828; --red-soft:#fdeceb;
+  --green:#1e7d3c; --green-soft:#e9f5ec;
+  --amber:#9a6400; --amber-soft:#fdf4e3;
+  --purple:#6a3fa0; --purple-soft:#f2ecfb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.78; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px; margin:0 auto; padding:0 28px 80px}
+.hero{padding:56px 0 30px; border-bottom:2px solid var(--ink)}
+.hero .kicker{font-size:12.5px; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; font-weight:600}
+.hero h1{margin:14px 0 10px; font-size:35px; line-height:1.26; letter-spacing:-.5px; font-weight:800}
+.hero .sub{color:var(--ink2); font-size:16.5px; max-width:820px}
+.hero .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+.tag{font-size:12.5px; padding:4px 11px; border-radius:999px; background:var(--panel2); color:var(--ink2); font-weight:600}
+.tag.b{background:var(--blue-soft); color:var(--blue)}
+.tag.r{background:var(--red-soft); color:var(--red)}
+.tag.g{background:var(--green-soft); color:var(--green)}
+.tag.a{background:var(--amber-soft); color:var(--amber)}
+h2{
+  margin:56px 0 18px; padding:14px 0 14px 18px; font-size:23px; font-weight:800; letter-spacing:-.2px;
+  border-left:4px solid var(--blue); background:linear-gradient(90deg,var(--blue-soft),transparent 62%);
+  border-radius:0 6px 6px 0;
+}
+h2 .n{display:inline-block; min-width:38px; color:var(--blue); font-variant-numeric:tabular-nums}
+h3{margin:32px 0 12px; font-size:17.5px; font-weight:750; color:var(--ink)}
+h3::before{content:""; display:inline-block; width:6px; height:6px; background:var(--blue); border-radius:1px; margin-right:9px; vertical-align:2px}
+p{margin:12px 0}
+strong{font-weight:700; color:#101418}
+em{font-style:normal; background:linear-gradient(transparent 62%, #ffe9a8 62%); padding:0 1px}
+code{font-family:"JetBrains Mono",Consolas,"Courier New",monospace; font-size:13px; background:var(--panel2);
+  padding:1.5px 5px; border-radius:4px; color:#a03060}
+.lead{font-size:16px; color:var(--ink2)}
+ul,ol{margin:12px 0; padding-left:22px}
+li{margin:7px 0}
+li::marker{color:var(--muted)}
+table{width:100%; border-collapse:collapse; margin:20px 0; font-size:13.5px; background:#fff}
+th{background:var(--panel2); text-align:left; padding:10px 12px; font-weight:700; border-bottom:2px solid var(--line2); font-size:13px}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:1px solid var(--line2)}
+td code{font-size:12.5px}
+pre{
+  position:relative; margin:20px 0; padding:18px 18px 16px; background:#1c2128; color:#d7dde5;
+  border-radius:9px; overflow-x:auto; font-size:13px; line-height:1.68;
+  font-family:"JetBrains Mono",Consolas,"Courier New",monospace;
+}
+pre::before{content:attr(data-lang); position:absolute; top:0; right:0; font-size:10.5px; letter-spacing:.1em;
+  color:#7d8794; background:#252b33; padding:3px 10px; border-radius:0 9px 0 6px; text-transform:uppercase}
+pre code{background:none; padding:0; color:inherit; font-size:inherit}
+.k{color:#ff7b72}
+.s{color:#a5d6a7}
+.c{color:#8b949e; font-style:italic}
+.n{color:#79c0ff}
+figure{margin:26px 0; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:18px 18px 10px}
+figure svg{display:block; width:100%; height:auto}
+figcaption{margin-top:8px; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.6}
+figcaption b{color:var(--ink2)}
+.box{border-radius:9px; padding:14px 18px; margin:20px 0; border:1px solid var(--line2); background:var(--panel)}
+.box .h{font-weight:750; font-size:13.5px; letter-spacing:.02em; margin-bottom:6px; display:flex; align-items:center; gap:8px}
+.box p:last-child{margin-bottom:0}
+.box.blue{background:var(--blue-soft); border-color:#bcd4f2} .box.blue .h{color:var(--blue)}
+.box.red{background:var(--red-soft); border-color:#f3c9c6} .box.red .h{color:var(--red)}
+.box.green{background:var(--green-soft); border-color:#c2e2cc} .box.green .h{color:var(--green)}
+.box.amber{background:var(--amber-soft); border-color:#efd9ab} .box.amber .h{color:var(--amber)}
+.box.purple{background:var(--purple-soft); border-color:#d7c9ef} .box.purple .h{color:var(--purple)}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0}
+.card{background:#fff; border:1px solid var(--line); border-radius:9px; padding:14px 16px}
+.card .t{font-weight:750; font-size:14px; margin-bottom:5px; color:var(--ink)}
+.card .d{font-size:13px; color:var(--ink2); line-height:1.65}
+.card.r{border-top:3px solid var(--red)} .card.g{border-top:3px solid var(--green)}
+.card.b{border-top:3px solid var(--blue)} .card.a{border-top:3px solid var(--amber)}
+.qa{border-left:3px solid var(--line2); padding:2px 0 2px 16px; margin:18px 0}
+.qa .q{font-weight:750; color:var(--ink); font-size:14.5px}
+.qa .q::before{content:"Q "; color:var(--blue); font-weight:800}
+.qa .a{color:var(--ink2); font-size:14px; margin-top:5px}
+.qa .a::before{content:"A "; color:var(--green); font-weight:800}
+.mt{background:#fff; border:1px solid var(--line); border-radius:11px; padding:20px 22px; margin:24px 0}
+.mt .qh{font-weight:800; font-size:15.5px; margin-bottom:10px; color:var(--ink)}
+.mt .qh span{background:var(--ink); color:#fff; font-size:11.5px; padding:2px 8px; border-radius:4px; margin-right:9px; letter-spacing:.05em}
+.lv{margin-top:14px; padding:11px 14px; border-radius:7px; font-size:13.5px; line-height:1.7}
+.lv .lb{font-weight:750; font-size:12px; letter-spacing:.05em; margin-right:8px}
+.lv.l1{background:#fbeceb; border-left:3px solid #d9534f} .lv.l1 .lb{color:#c62828}
+.lv.l2{background:#fdf6e6; border-left:3px solid #d9a441} .lv.l2 .lb{color:#9a6400}
+.lv.l3{background:#eaf2fd; border-left:3px solid #4a86c8} .lv.l3 .lb{color:#1a5fb4}
+.lv.l4{background:#eaf6ee; border-left:3px solid #3f9b5c} .lv.l4 .lb{color:#1e7d3c}
+.foot{margin-top:70px; padding-top:26px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+.next{margin-top:26px; background:var(--panel2); border-radius:9px; padding:16px 20px; font-size:13.5px; color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <div class="kicker">Java Interview Deep Dive · No.34</div>
+  <h1>微服务数据一致性与对账</h1>
+  <div class="sub">从「本地消息表那一行状态」到「钱账对不上的五步排查」。本期数字全部给算式：消息表写放大 200KB/s（16GB/天）、回查窗口 60s×15=15 分钟、半消息 4 小时强回滚、1000 万笔漏斗剩 100 笔差异、对账数据 1.86GB/天·一年 680GB。</div>
+  <div class="meta">
+    <span class="tag b">本地消息表</span>
+    <span class="tag b">事务消息 half message</span>
+    <span class="tag r">TCC 三坑</span>
+    <span class="tag g">对账与修复</span>
+    <span class="tag a">五步排查法</span>
+    <span class="tag">14 问答 · 3 模拟题</span>
+  </div>
+</div>
+
+<h2 id="s01"><span class="n">01</span> 先定性：一致性不是一个词，是四个档位</h2>
+<p class="lead">「数据一致性」在面试里被当成一个词用，但它实际是四个档位，代价完全不同。分不清档位的人，会拿强一致的成本去做最终一致就够的业务。</p>
+<ul>
+  <li><strong>强一致（线性一致）</strong>：写完立刻读到。跨服务要 2PC/XA 或共识协议，每次操作多 1~2 个 RTT，可用性打折。</li>
+  <li><strong>单调读</strong>：不会读到比自己上次读更旧的数据。读从库 + 会话粘滞即可，成本低。</li>
+  <li><strong>读己之写</strong>：自己写的自己能读到。写后读定向主库即可。</li>
+  <li><strong>最终一致</strong>：允许短暂旧值，保证收敛。<em>微服务 99% 的业务只要这一档</em>，剩下的靠对账兜底。</li>
+</ul>
+<p>「钱账对不上」是最终一致档位没做兜底时的典型症状。它的根因只有三类——<strong>丢、重、乱</strong>——对应三道防线：</p>
+
+<figure>
+<svg viewBox="0 0 900 300" font-family="Microsoft YaHei,sans-serif">
+  <rect x="20" y="18" width="860" height="264" rx="10" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="450" y="46" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1d21">1000 万笔业务（日终）的三类根因 → 三道防线</text>
+  <!-- 三个根因盒子 -->
+  <rect x="50" y="70" width="230" height="96" rx="8" fill="#fdeceb" stroke="#e6b3ae"/>
+  <text x="165" y="96" text-anchor="middle" font-size="13" font-weight="bold" fill="#c62828">① 丢（少记）</text>
+  <text x="65" y="120" font-size="10.5" fill="#3d454e">消息丢 / 事务回滚后消息已发</text>
+  <text x="65" y="138" font-size="10.5" fill="#3d454e">/ 下游宕机未恢复</text>
+  <text x="65" y="156" font-size="10.5" fill="#c62828">→ 该有的状态没写进去</text>
+  <rect x="335" y="70" width="230" height="96" rx="8" fill="#fdf4e3" stroke="#e3c98d"/>
+  <text x="450" y="96" text-anchor="middle" font-size="13" font-weight="bold" fill="#9a6400">② 重（多记）</text>
+  <text x="350" y="120" font-size="10.5" fill="#3d454e">重复投递 / 用户双击</text>
+  <text x="350" y="138" font-size="10.5" fill="#3d454e">/ 重试风暴</text>
+  <text x="350" y="156" font-size="10.5" fill="#9a6400">→ 同一笔做了两次</text>
+  <rect x="620" y="70" width="230" height="96" rx="8" fill="#f2ecfb" stroke="#cdbce6"/>
+  <text x="735" y="96" text-anchor="middle" font-size="13" font-weight="bold" fill="#6a3fa0">③ 乱（错记）</text>
+  <text x="635" y="120" font-size="10.5" fill="#3d454e">时序倒挂 / 部分成功</text>
+  <text x="635" y="138" font-size="10.5" fill="#3d454e">/ 部分失败</text>
+  <text x="635" y="156" font-size="10.5" fill="#6a3fa0">→ 状态机卡在中间态</text>
+  <!-- 三个箭头 -->
+  <polygon points="165,172 165,186 158,186 172,204 186,186 179,186 179,172" fill="#c62828"/>
+  <polygon points="450,172 450,186 443,186 457,204 471,186 464,186 464,172" fill="#9a6400"/>
+  <polygon points="735,172 735,186 728,186 742,204 756,186 749,186 749,172" fill="#6a3fa0"/>
+  <!-- 防线盒子 -->
+  <rect x="50" y="208" width="230" height="56" rx="8" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="165" y="232" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#1a5fb4">防线：本地消息表 / 事务消息</text>
+  <text x="165" y="252" text-anchor="middle" font-size="10.5" fill="#3d454e">保证「该发的一定发」</text>
+  <rect x="335" y="208" width="230" height="56" rx="8" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="450" y="232" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#1e7d3c">防线：幂等键（第 18 期）</text>
+  <text x="450" y="252" text-anchor="middle" font-size="10.5" fill="#3d454e">保证「做了两次结果一样」</text>
+  <rect x="620" y="208" width="230" height="56" rx="8" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="735" y="232" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#3d454e">防线：状态机 + 对账兜底</text>
+  <text x="735" y="252" text-anchor="middle" font-size="10.5" fill="#3d454e">保证「错了能被发现修复」</text>
+</svg>
+<figcaption><b>图 1</b> · 三类根因与三道防线——幂等（18 期）与对账（本期）是同一问题的两半</figcaption>
+</figure>
+
+<div class="box blue">
+  <div class="h">一条高频追问：「用了事务消息，是不是就不用对账了？」</div>
+  <p>不是。事务消息解决的是「本地事务与消息发送的原子性」，它管不了消费侧宕机、管不了第三方渠道（支付、物流）的口径差异，更管不了自己代码里的 bug。<strong>对账是所有方案失效后的最后一道防线</strong>，钱相关的系统必须有。</p>
+</div>
+
+<h2 id="s02"><span class="n">02</span> 本地消息表：一行状态换一次可靠投递</h2>
+<p class="lead">本地消息表（Transactional Outbox）的全部思想一句话：<strong>把「发消息」变成「写一行」</strong>。业务事务内同时插入消息表，同库同事务天然原子；提交后由扫描线程把消息发出去。</p>
+
+<pre data-lang="java"><code><span class="c">// 业务事务内写消息表：业务与消息原子落库</span>
+<span class="k">@Transactional</span>
+<span class="k">public void</span> createOrder(Order order) {
+    orderMapper.insert(order);                    <span class="c">// 1. 业务表</span>
+    outboxMapper.insert(Outbox.builder()          <span class="c">// 2. 消息表：同事务！</span>
+        .bizId(order.getId())
+        .topic(<span class="s">"order-created"</span>)
+        .payload(toJson(order))
+        .status(Outbox.PENDING)                   <span class="c">// 初始态 PENDING</span>
+        .retryCount(<span class="n">0</span>)
+        .build());
+    <span class="c">// 事务提交 = 二者要么都在，要么都不在</span>
+}
+
+<span class="c">// 扫描线程：把 PENDING 的消息发出去</span>
+<span class="k">@Scheduled</span>(fixedDelay = <span class="n">5000</span>)                    <span class="c">// 每 5s 扫一次</span>
+<span class="k">public void</span> dispatch() {
+    List&lt;Outbox&gt; batch = outboxMapper.scanPending(<span class="n">200</span>);
+    <span class="k">for</span> (Outbox o : batch) {
+        <span class="k">try</span> {
+            mq.send(o.getTopic(), o.getPayload());   <span class="c">// 至少一次投递</span>
+            outboxMapper.markSent(o.getId());        <span class="c">// SENT</span>
+        } <span class="k">catch</span> (Exception e) {
+            outboxMapper.incrRetry(o.getId());       <span class="c">// 重试计数</span>
+        }
+    }
+}</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 260" font-family="Microsoft YaHei,sans-serif">
+  <rect x="20" y="14" width="860" height="232" rx="10" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="450" y="42" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1d21">消息表五态状态机（业务事务内 insert 为唯一入口）</text>
+  <!-- PENDING -->
+  <rect x="70" y="112" width="130" height="52" rx="8" fill="#e8f0fb" stroke="#1a5fb4" stroke-width="1.5"/>
+  <text x="135" y="134" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1a5fb4">PENDING</text>
+  <text x="135" y="152" text-anchor="middle" font-size="10" fill="#3d454e">初始态（事务内）</text>
+  <!-- SENT -->
+  <rect x="330" y="70" width="130" height="52" rx="8" fill="#e9f5ec" stroke="#1e7d3c" stroke-width="1.5"/>
+  <text x="395" y="92" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1e7d3c">SENT</text>
+  <text x="395" y="110" text-anchor="middle" font-size="10" fill="#3d454e">终态，T+7 归档</text>
+  <!-- FAILED -->
+  <rect x="330" y="164" width="130" height="52" rx="8" fill="#fdf4e3" stroke="#9a6400" stroke-width="1.5"/>
+  <text x="395" y="186" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#9a6400">FAILED</text>
+  <text x="395" y="204" text-anchor="middle" font-size="10" fill="#3d454e">发送异常，retry+1</text>
+  <!-- DEAD -->
+  <rect x="620" y="164" width="130" height="52" rx="8" fill="#fdeceb" stroke="#c62828" stroke-width="1.5"/>
+  <text x="685" y="186" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#c62828">DEAD</text>
+  <text x="685" y="204" text-anchor="middle" font-size="10" fill="#3d454e">retry ≥ N，转人工</text>
+  <!-- 箭头 PENDING->SENT -->
+  <polygon points="202,124 306,124 306,118 328,132 306,146 306,140 202,140" fill="#1e7d3c"/>
+  <text x="252" y="114" text-anchor="middle" font-size="10.5" fill="#1e7d3c">扫描发送成功</text>
+  <!-- 箭头 PENDING->FAILED -->
+  <polygon points="135,166 135,178 128,178 142,196 156,178 149,178 149,166" fill="#9a6400"/>
+  <polygon points="156,190 328,190 328,184 348,196 328,208 328,202 156,202" fill="#9a6400"/>
+  <text x="230" y="182" text-anchor="middle" font-size="10.5" fill="#9a6400">发送异常</text>
+  <!-- 箭头 FAILED->PENDING 重试 -->
+  <path d="M 330 168 C 260 152, 260 152, 202 142" fill="none" stroke="#1a5fb4" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <polygon points="198,142 218,130 218,154" fill="#1a5fb4"/>
+  <text x="268" y="146" text-anchor="middle" font-size="10.5" fill="#1a5fb4">retry &lt; N 回队</text>
+  <!-- 箭头 FAILED->DEAD -->
+  <polygon points="462,190 618,190 618,184 638,196 618,208 618,202 462,202" fill="#c62828"/>
+  <text x="540" y="182" text-anchor="middle" font-size="10.5" fill="#c62828">retry ≥ N</text>
+  <!-- 右侧注释 -->
+  <rect x="620" y="70" width="230" height="66" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="635" y="92" font-size="10.5" fill="#3d454e">发送成功但 markSent 前宕机</text>
+  <text x="635" y="110" font-size="10.5" fill="#3d454e">→ 重启后重复发送（至少一次）</text>
+  <text x="635" y="128" font-size="10.5" fill="#c62828">→ 消费侧幂等键兜住</text>
+</svg>
+<figcaption><b>图 2</b> · 消息表五态状态机——「发送成功但标记失败」的重复窗口是至少一次语义的必然结果</figcaption>
+</figure>
+
+<p><strong>为什么不能直接在事务里发消息</strong>：事务提交前发消息，消费方可能先于生产方看到消息（读到未提交数据）；事务提交后发消息，提交成功但发消息前宕机，消息就丢了。<em>同库同事务写消息表是唯一不引入分布式事务的解法</em>。</p>
+<ul>
+  <li><strong>扫描延迟账</strong>：<code>fixedDelay = 5s</code> 意味着消息最坏延迟 5s、平均延迟 2.5s。要更低延迟就加 LISTEN/NOTIFY 或把间隔调到 1s——但扫描频率与数据库压力是一对矛盾，5s 是工程甜点位。</li>
+  <li><strong>写放大账（区分度数字）</strong>：每笔业务多写一行 ≈200B，1000 TPS = 200KB/s = <strong>16GB/天</strong>。SENT 必须定期归档（T+7 删除），<code>status + created_at</code> 联合索引本身 1000 万行 × 24B ≈ 229MB 也是一笔要算的内存。</li>
+</ul>
+<h2 id="s03"><span class="n">03</span> 本地消息表的三个坑</h2>
+<p class="lead">本地消息表代码 20 行，但生产环境的坑有三个，每个都对应一种「钱账对不上」的形态。面试官追问「你们上线后出过什么问题」时，这三个坑就是标准答案。</p>
+
+<div class="grid3">
+  <div class="card r">
+    <div class="t">坑一：重复发送 → 多记</div>
+    <div class="d">消息发成功了，<code>markSent</code> 前宕机，重启后再发一次。这是至少一次语义的必然结果，<strong>发送侧无解，必须消费侧幂等</strong>（第 18 期）。这也回答了「有了本地消息表为什么还要幂等键」。</div>
+  </div>
+  <div class="card a">
+    <div class="t">坑二：扫描风暴 → 拖垮业务库</div>
+    <div class="d"><code>scanPending</code> 不带索引全表扫，1000 万行消息表会把业务库拖死。正确写法：<code>WHERE status='PENDING' AND created_at &lt; now()-5s</code> ORDER BY created_at LIMIT 200，走联合索引；多实例加锁或 <code>FOR UPDATE SKIP LOCKED</code>。</div>
+  </div>
+  <div class="card b">
+    <div class="t">坑三：乱序 → 错记</div>
+    <div class="d">同一 bizId 的「订单创建」「订单取消」被并发发出、顺序颠倒。解法：<strong>同一 bizId 发到同一队列分区</strong>（RocketMQ MessageGroup / Kafka key），顺序保证是分区粒度的，不是 topic 粒度的。</div>
+  </div>
+</div>
+
+<pre data-lang="sql"><code><span class="c">-- 消息表最小可用 DDL（MySQL）</span>
+<span class="k">CREATE TABLE</span> outbox (
+  id          <span class="k">BIGINT AUTO_INCREMENT PRIMARY KEY</span>,
+  biz_id      <span class="k">VARCHAR</span>(<span class="n">64</span>)  <span class="k">NOT NULL</span>,
+  topic       <span class="k">VARCHAR</span>(<span class="n">128</span>) <span class="k">NOT NULL</span>,
+  payload     <span class="k">JSON</span>         <span class="k">NOT NULL</span>,
+  status      <span class="k">TINYINT</span>      <span class="k">NOT NULL DEFAULT</span> <span class="n">0</span>,  <span class="c">-- 0=PENDING 1=SENT 2=FAILED 3=DEAD</span>
+  retry_count <span class="k">INT</span>          <span class="k">NOT NULL DEFAULT</span> <span class="n">0</span>,
+  created_at  <span class="k">DATETIME</span>(<span class="n">3</span>)  <span class="k">NOT NULL DEFAULT</span> <span class="k">CURRENT_TIMESTAMP</span>(<span class="n">3</span>),
+  updated_at  <span class="k">DATETIME</span>(<span class="n">3</span>)  <span class="k">NOT NULL DEFAULT</span> <span class="k">CURRENT_TIMESTAMP</span>(<span class="n">3</span>) <span class="k">ON UPDATE CURRENT_TIMESTAMP</span>(<span class="n">3</span>),
+  <span class="k">KEY</span> idx_scan (status, created_at),   <span class="c">-- 扫描专用，缺它必炸</span>
+  <span class="k">KEY</span> idx_biz  (biz_id)
+) <span class="k">ENGINE</span>=InnoDB;</code></pre>
+
+<h2 id="s04"><span class="n">04</span> 事务消息：把消息表搬进 MQ（RocketMQ half message）</h2>
+<p class="lead">本地消息表要自己写扫描线程、自己归档；事务消息把这套脏活交给 MQ。RocketMQ 的实现是 <strong>half message（半消息）</strong>：先把消息藏起来，等本地事务有结论再决定露不露面。</p>
+
+<figure>
+<svg viewBox="0 0 900 320" font-family="Microsoft YaHei,sans-serif">
+  <rect x="20" y="14" width="860" height="292" rx="10" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="450" y="42" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1d21">事务消息六步时序（half message + 回查）</text>
+  <!-- 三条泳道 -->
+  <line x1="150" y1="62" x2="150" y2="292" stroke="#d4dae1" stroke-dasharray="4 3"/>
+  <line x1="440" y1="62" x2="440" y2="292" stroke="#d4dae1" stroke-dasharray="4 3"/>
+  <line x1="720" y1="62" x2="720" y2="292" stroke="#d4dae1" stroke-dasharray="4 3"/>
+  <text x="90" y="80" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#1a5fb4">生产者</text>
+  <text x="440" y="80" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#9a6400">Broker</text>
+  <text x="800" y="80" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#1e7d3c">消费者</text>
+  <!-- step 1 -->
+  <polygon points="150,104 398,104 398,98 420,110 398,122 398,116 150,116" fill="#1a5fb4"/>
+  <text x="285" y="96" text-anchor="middle" font-size="10.5" fill="#1a5fb4">① send(half 消息)</text>
+  <text x="446" y="112" font-size="10" fill="#3d454e">存 RMQ_SYS_TRANS_HALF_TOPIC</text>
+  <!-- step 2 -->
+  <rect x="60" y="134" width="180" height="34" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="150" y="155" text-anchor="middle" font-size="10.5" fill="#1a5fb4">② 执行本地事务（扣款）</text>
+  <!-- step 3 -->
+  <polygon points="150,188 398,188 398,182 420,194 398,206 398,200 150,200" fill="#1a5fb4"/>
+  <text x="285" y="180" text-anchor="middle" font-size="10.5" fill="#1a5fb4">③ commit / rollback / UNKNOWN</text>
+  <!-- step 4 -->
+  <polygon points="440,224 688,224 688,218 710,230 688,242 688,236 440,236" fill="#1e7d3c"/>
+  <text x="575" y="216" text-anchor="middle" font-size="10.5" fill="#1e7d3c">④ commit → 转真实 topic</text>
+  <text x="736" y="232" font-size="10" fill="#1e7d3c">消费</text>
+  <text x="446" y="256" font-size="10" fill="#c62828">rollback → 丢弃，消费者永远看不见</text>
+  <!-- step 5 回查 -->
+  <polygon points="398,278 172,278 172,272 150,284 172,296 172,290 398,290" fill="#9a6400"/>
+  <text x="285" y="270" text-anchor="middle" font-size="10.5" fill="#9a6400">⑤ 回查 checkLocalTransaction（UNKNOWN/宕机时）</text>
+</svg>
+<figcaption><b>图 3</b> · 半消息先藏进系统 topic，commit 后才搬到真实 topic——「先藏起来」就是预提交的 MQ 版本</figcaption>
+</figure>
+
+<p><strong>回查的账（官方默认值，必须记数字）</strong>：</p>
+<table>
+<tr><th>参数</th><th>默认值</th><th>含义</th></tr>
+<tr><td>事务异常检查间隔</td><td><strong>60s</strong></td><td>半消息未决时 Broker 回查生产者的间隔</td></tr>
+<tr><td>最大回查次数</td><td><strong>15 次</strong></td><td>超过则丢弃（按回滚处理）</td></tr>
+<tr><td>回查总窗口</td><td>60s × 15 = <strong>15 分钟</strong></td><td>超过窗口仍 UNKNOWN → 回滚</td></tr>
+<tr><td>半消息最大超时</td><td><strong>4 小时</strong></td><td>超时强制回滚，不可自定义</td></tr>
+<tr><td>消息发送重试</td><td>3 次</td><td>客户端内置，应用不可见</td></tr>
+<tr><td>消息消费重试</td><td>16 次</td><td>超过进死信队列</td></tr>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 180" font-family="Microsoft YaHei,sans-serif">
+  <rect x="20" y="14" width="860" height="152" rx="10" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="450" y="42" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1d21">回查时间轴：15 分钟窗口 vs 4 小时硬上限</text>
+  <!-- 时间轴 -->
+  <line x1="80" y1="110" x2="820" y2="110" stroke="#6b7683" stroke-width="2"/>
+  <!-- 15 分钟窗口区 -->
+  <rect x="80" y="96" width="300" height="28" rx="4" fill="#fdf4e3" stroke="#e3c98d"/>
+  <text x="230" y="114" text-anchor="middle" font-size="10.5" fill="#9a6400">回查窗口 60s × 15 = 15 分钟</text>
+  <!-- 15 个回查点 -->
+  <circle cx="90" cy="110" r="4" fill="#9a6400"/><circle cx="110" cy="110" r="4" fill="#9a6400"/>
+  <circle cx="130" cy="110" r="4" fill="#9a6400"/><circle cx="150" cy="110" r="4" fill="#9a6400"/>
+  <circle cx="170" cy="110" r="4" fill="#9a6400"/><circle cx="190" cy="110" r="4" fill="#9a6400"/>
+  <circle cx="210" cy="110" r="4" fill="#9a6400"/><circle cx="230" cy="110" r="4" fill="#9a6400"/>
+  <circle cx="250" cy="110" r="4" fill="#9a6400"/><circle cx="270" cy="110" r="4" fill="#9a6400"/>
+  <circle cx="290" cy="110" r="4" fill="#9a6400"/><circle cx="310" cy="110" r="4" fill="#9a6400"/>
+  <circle cx="330" cy="110" r="4" fill="#9a6400"/><circle cx="350" cy="110" r="4" fill="#9a6400"/>
+  <circle cx="370" cy="110" r="4" fill="#c62828"/>
+  <text x="230" y="88" text-anchor="middle" font-size="10.5" fill="#9a6400">每 60s 一次，共 15 次（第 15 次后丢弃）</text>
+  <!-- 4 小时点 -->
+  <polygon points="820,92 820,102 812,102 830,116 848,102 840,102 840,92" fill="#c62828"/>
+  <text x="770" y="84" text-anchor="middle" font-size="10.5" fill="#c62828">4 小时强制回滚</text>
+  <text x="600" y="132" text-anchor="middle" font-size="10" fill="#6b7683">中间区域：半消息一直对消费者不可见，生产者可继续回查</text>
+  <text x="96" y="152" font-size="10" fill="#6b7683">0s</text>
+  <text x="382" y="152" font-size="10" fill="#6b7683">15min</text>
+  <text x="806" y="152" font-size="10" fill="#6b7683">4h</text>
+</svg>
+<figcaption><b>图 4</b> · 回查窗口 15 分钟是「找人的耐心」，4 小时是「半消息的寿命」——两个数字都要能脱口而出</figcaption>
+</figure>
+
+<ul>
+  <li><strong>为什么半消息对消费者不可见</strong>：半消息写入系统 topic <code>RMQ_SYS_TRANS_HALF_TOPIC</code>，等 commit 后才搬到真实 topic。</li>
+  <li><strong>回查找谁</strong>：生产者进程挂了，Broker 会找<strong>同一 ProducerGroup 的其他实例</strong>回查。所以 producerGroup 不能随意设置——填错了回查找不到人，15 次后消息被丢弃，账就少了。</li>
+  <li><strong>事务消息的边界</strong>：不支持延迟消息与批量消息，只支持同步发送。消费侧<strong>仍必须幂等</strong>——commit 后的重投递与本地消息表无异。</li>
+</ul>
+
+<table>
+<tr><th>维度</th><th>本地消息表</th><th>事务消息（RocketMQ）</th></tr>
+<tr><td>原子性来源</td><td>同库同事务</td><td>half message + 回查</td></tr>
+<tr><td>自己要写的代码</td><td>扫描线程 + 归档</td><td>TransactionListener 两方法</td></tr>
+<tr><td>消息延迟</td><td>扫描间隔（5s 级）</td><td>毫秒级</td></tr>
+<tr><td>依赖</td><td>只依赖自己的 DB</td><td>强依赖 MQ 且限 RocketMQ</td></tr>
+<tr><td>写放大</td><td>+16GB/天（1000 TPS）</td><td>无（MQ 侧存储）</td></tr>
+<tr><td>失败兜底</td><td>消息表里永远有一行</td><td>回查 15 次后丢弃，需对账兜底</td></tr>
+<tr><td>适用</td><td>任何 DB、不想引 MQ</td><td>已用 RocketMQ、要低延迟</td></tr>
+</table>
+<h2 id="s05"><span class="n">05</span> TCC：两阶段搬到业务层，三个坑等着</h2>
+<p class="lead">TCC（Try-Confirm-Cancel）把 2PC 的「预提交」搬进业务代码：Try 预留资源（冻结）、Confirm 提交、Cancel 回滚。它不锁数据库行，锁的是<strong>业务语义上的资源</strong>，所以吞吐比 XA 高一个量级——代价是每个接口要写三段。</p>
+<p>TCC 的三个坑全部源于<strong>网络乱序</strong>，这是面试的区分度所在：</p>
+
+<figure>
+<svg viewBox="0 0 900 340" font-family="Microsoft YaHei,sans-serif">
+  <rect x="20" y="14" width="860" height="312" rx="10" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="450" y="42" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1d21">TCC 三坑：空回滚 · 悬挂 · 幂等（全部来自网络乱序）</text>
+  <!-- 坑一 -->
+  <rect x="50" y="62" width="250" height="120" rx="8" fill="#fdeceb" stroke="#e6b3ae"/>
+  <text x="175" y="86" text-anchor="middle" font-size="12" font-weight="bold" fill="#c62828">坑一：空回滚</text>
+  <text x="66" y="110" font-size="10.5" fill="#3d454e">Try 超时（实际没执行）</text>
+  <polygon points="66,122 284,122 284,116 302,128 284,140 284,134 66,134" fill="#9a6400"/>
+  <text x="66" y="158" font-size="10.5" fill="#3d454e">Cancel 先到 → 没有 Try 记录</text>
+  <text x="66" y="176" font-size="10.5" fill="#1e7d3c">✓ Cancel 幂等空转成功</text>
+  <!-- 坑二 -->
+  <rect x="325" y="62" width="250" height="120" rx="8" fill="#fdf4e3" stroke="#e3c98d"/>
+  <text x="450" y="86" text-anchor="middle" font-size="12" font-weight="bold" fill="#9a6400">坑二：悬挂</text>
+  <text x="341" y="110" font-size="10.5" fill="#3d454e">Try 超时 → Cancel 已执行完</text>
+  <text x="341" y="130" font-size="10.5" fill="#3d454e">Try 迟到（网络重传）又到了</text>
+  <polygon points="341,142 559,142 559,136 577,148 559,160 559,154 341,154" fill="#c62828"/>
+  <text x="341" y="176" font-size="10.5" fill="#c62828">✗ 冻结资源没人释放 → 拒绝迟到 Try</text>
+  <!-- 坑三 -->
+  <rect x="600" y="62" width="250" height="120" rx="8" fill="#f2ecfb" stroke="#cdbce6"/>
+  <text x="725" y="86" text-anchor="middle" font-size="12" font-weight="bold" fill="#6a3fa0">坑三：幂等</text>
+  <text x="616" y="110" font-size="10.5" fill="#3d454e">Confirm 网络重试 3 次</text>
+  <text x="616" y="130" font-size="10.5" fill="#c62828">✗ 加了三次钱</text>
+  <text x="616" y="154" font-size="10.5" fill="#3d454e">✓ 幂等键 = xid + branchId</text>
+  <text x="616" y="172" font-size="10.5" fill="#1e7d3c">✓ 二次调用返回上次结果</text>
+  <!-- 状态机 -->
+  <line x1="50" y1="204" x2="850" y2="204" stroke="#e4e8ed"/>
+  <text x="450" y="228" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1d21">一表三态：tcc_branch 状态机把三个坑全部挡住</text>
+  <rect x="120" y="248" width="140" height="44" rx="8" fill="#e8f0fb" stroke="#1a5fb4"/>
+  <text x="190" y="266" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#1a5fb4">TRIED (0)</text>
+  <text x="190" y="284" text-anchor="middle" font-size="10" fill="#3d454e">Try 成功</text>
+  <rect x="390" y="248" width="150" height="44" rx="8" fill="#e9f5ec" stroke="#1e7d3c"/>
+  <text x="465" y="266" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#1e7d3c">CONFIRMED (1)</text>
+  <text x="465" y="284" text-anchor="middle" font-size="10" fill="#3d454e">仅允许 TRIED→1</text>
+  <rect x="660" y="248" width="150" height="44" rx="8" fill="#fdeceb" stroke="#c62828"/>
+  <text x="735" y="266" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#c62828">CANCELLED (2)</text>
+  <text x="735" y="284" text-anchor="middle" font-size="10" fill="#3d454e">终态，拒绝迟到 Try</text>
+  <polygon points="262,262 388,262 388,256 410,270 388,284 388,278 262,278" fill="#1e7d3c"/>
+  <polygon points="262,296 656,296 656,290 678,304 656,318 656,312 262,312" fill="#c62828"/>
+  <text x="460" y="332" text-anchor="middle" font-size="10.5" fill="#c62828">Cancel 允许 TRIED 或无记录 → CANCELLED（空回滚落 CANCELLED 一条）</text>
+</svg>
+<figcaption><b>图 5</b> · TCC 三坑与状态机迁移——「影响行数 = 0」就是幂等语义本身</figcaption>
+</figure>
+
+<pre data-lang="sql"><code><span class="c">-- 参与者侧的最小状态机（一张表全解决）</span>
+<span class="k">CREATE TABLE</span> tcc_branch (
+  xid       <span class="k">VARCHAR</span>(<span class="n">64</span>) <span class="k">NOT NULL</span>,   <span class="c">-- 全局事务 id</span>
+  branch_id <span class="k">VARCHAR</span>(<span class="n">64</span>) <span class="k">NOT NULL</span>,   <span class="c">-- 分支 id</span>
+  status    <span class="k">TINYINT</span>     <span class="k">NOT NULL</span>,   <span class="c">-- 0=TRIED 1=CONFIRMED 2=CANCELLED</span>
+  <span class="k">PRIMARY KEY</span> (xid, branch_id)
+);
+
+<span class="c">-- Try：只允许从无到 TRIED（防悬挂：CANCELLED 后到的 Try 插不进来）</span>
+<span class="k">INSERT INTO</span> tcc_branch (xid, branch_id, status) <span class="k">VALUES</span> (?,?,<span class="n">0</span>)
+  <span class="k">ON DUPLICATE KEY UPDATE</span> status = <span class="k">IF</span>(status = <span class="n">2</span>, status, <span class="n">0</span>);
+
+<span class="c">-- Confirm：仅允许 TRIED → CONFIRMED</span>
+<span class="k">UPDATE</span> tcc_branch <span class="k">SET</span> status = <span class="n">1</span> <span class="k">WHERE</span> xid = ? <span class="k">AND</span> branch_id = ? <span class="k">AND</span> status = <span class="n">0</span>;
+
+<span class="c">-- Cancel：允许 TRIED/无记录 → CANCELLED（空回滚时 INSERT 一条 CANCELLED）</span>
+<span class="k">INSERT INTO</span> tcc_branch (xid, branch_id, status) <span class="k">VALUES</span> (?,?,<span class="n">2</span>)
+  <span class="k">ON DUPLICATE KEY UPDATE</span> status = <span class="k">IF</span>(status = <span class="n">1</span>, status, <span class="n">2</span>);</code></pre>
+
+<div class="box amber">
+  <div class="h">为什么 Confirm 不允许从 CANCELLED 迁移</div>
+  <p>确认与回滚互斥，先到者定终态。所有「二次调用」都靠这张表的 <code>WHERE status = ...</code> 条件更新挡住，<strong>影响行数 = 0 就是幂等语义本身</strong>——比 Redis 锁更可靠，没有锁超时问题。TCC 的适用边界：资金冻结、库存预占这类「资源可预留」的场景；订单状态这种不可预留的资源应该用 SAGA 或本地消息表。</p>
+</div>
+
+<h2 id="s06"><span class="n">06</span> 最后一道防线：对账系统长什么样</h2>
+<p class="lead">对账的本质一句话：<strong>把「分布式事务没做完的事」变成「离线可修复的差异单」</strong>。它不追求实时，追求可发现、可归因、可修复。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" font-family="Microsoft YaHei,sans-serif">
+  <rect x="20" y="14" width="860" height="272" rx="10" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="450" y="42" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1d21">对账系统四层结构</text>
+  <rect x="60" y="62" width="780" height="46" rx="8" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="80" y="82" font-size="11.5" font-weight="bold" fill="#1a5fb4">① 数据准备层</text>
+  <text x="240" y="82" font-size="10.5" fill="#3d454e">自己的 DB 流水表 vs 渠道对账文件（支付宝/微信日切）</text>
+  <text x="240" y="100" font-size="10.5" fill="#1a5fb4">关键动作：统一口径——金额分转元、时区、状态映射表</text>
+  <polygon points="430,110 430,118 424,118 438,132 452,118 446,118 446,110" fill="#6b7683"/>
+  <rect x="60" y="134" width="780" height="46" rx="8" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="80" y="154" font-size="11.5" font-weight="bold" fill="#1e7d3c">② 差异检测层</text>
+  <text x="240" y="154" font-size="10.5" fill="#3d454e">逐笔比对，输出差异单——按订单号 FULL OUTER JOIN 或分桶哈希归并</text>
+  <text x="240" y="172" font-size="10.5" fill="#1e7d3c">容量：1000 万笔/天 × 200B ≈ 1.86GB，一年 680GB</text>
+  <polygon points="430,182 430,190 424,190 438,204 452,190 446,190 446,182" fill="#6b7683"/>
+  <rect x="60" y="206" width="780" height="30" rx="8" fill="#fdf4e3" stroke="#e3c98d"/>
+  <text x="80" y="226" font-size="11.5" font-weight="bold" fill="#9a6400">③ 差异分类层</text>
+  <text x="240" y="226" font-size="10.5" fill="#3d454e">丢 / 重 / 乱 三类，各有标准处理动作（见第 07 节）</text>
+  <polygon points="430,238 430,246 424,246 438,260 452,246 446,246 446,238" fill="#6b7683"/>
+  <rect x="60" y="262" width="780" height="30" rx="8" fill="#fdeceb" stroke="#e6b3ae"/>
+  <text x="80" y="282" font-size="11.5" font-weight="bold" fill="#c62828">④ 修复与告警层</text>
+  <text x="240" y="282" font-size="10.5" fill="#3d454e">自动修复 + 人工工单 + 当日差异率告警（阈值 = 基线 × 3）</text>
+</svg>
+<figcaption><b>图 6</b> · 对账四层——80% 的「对不上」根因在口径映射表，不在业务，所以第 ① 层最关键</figcaption>
+</figure>
+
+<p><strong>比对的容量账（面试爱问「你们对账数据多大」）</strong>：1000 万笔/天 × 200B/笔 = <strong>1.86GB/天</strong>，一年 680GB。全量进内存比对不现实，工程做法是<strong>按订单号哈希分桶</strong>（如 1024 桶），每桶约 2MB 有序归并比对——内存恒定、可并行、可重跑：</p>
+
+<pre data-lang="java"><code><span class="c">// 分桶归并比对骨架（重点在口径与断言）</span>
+<span class="k">int</span> bucket = Math.floorMod(orderId.hashCode(), <span class="n">1024</span>);
+<span class="c">// 两边各自按 (bucket, orderId) 排序导出后逐桶归并：</span>
+<span class="c">//   a 有 b 无 → 疑似「我方多记 / 渠道漏单」</span>
+<span class="c">//   a 无 b 有 → 疑似「我方漏记 / 渠道多记」</span>
+<span class="c">//   两边都有但金额/状态不等 → 「错记」</span>
+<span class="c">// 断言：差异笔数 ≤ 历史基线 × 3，否则整批重跑并告警</span></code></pre>
+
+<ul>
+  <li><strong>为什么不用「直接 SELECT 全表 JOIN」</strong>：两表都上亿行时 JOIN 的临时表会把 DB 打挂；分桶把问题切成 1024 个 2MB 的小问题，还能在从库/离线库跑。</li>
+  <li><strong>口径不统一对账必然全是差异</strong>：金额分 vs 元、<code>SUCCESS</code> vs <code>TRADE_SUCCESS</code>、T+1 日切 vs 自然日——<em>80% 的「对不上」根因在口径映射表，不在业务</em>。</li>
+</ul>
+<h2 id="s07"><span class="n">07</span> 差异三分类：每类差异的修复动作与责任方</h2>
+<p class="lead">差异单不能只说「对不上」，必须分类——因为三类的修复动作、责任方、时效完全不同。</p>
+
+<table>
+<tr><th>差异类型</th><th>现象</th><th>典型根因</th><th>修复动作</th><th>时效</th></tr>
+<tr><td><strong>少记（丢）</strong></td><td>我方有流水、渠道无；状态停在中间态</td><td>消息丢、回查 15 次后丢弃、下游宕机</td><td>补偿：重推消息/补状态；先查能否原单重放</td><td>当日</td></tr>
+<tr><td><strong>多记（重）</strong></td><td>同一交易号出现两笔</td><td>重复消费、重复回调、用户双击</td><td>冲正：红字冲销多记的一笔，留审计痕迹</td><td>当日</td></tr>
+<tr><td><strong>错记（乱）</strong></td><td>金额不一致、状态与渠道相反</td><td>状态机乱序、汇率/手续费口径错</td><td>人工定责后修数，禁止自动覆盖</td><td>24h 内出工单</td></tr>
+</table>
+
+<p><strong>三个不能自动修、必须人工的场景（自动修复的边界）</strong>：</p>
+<ul>
+  <li><strong>金额不一致</strong>：两边都有单但钱不一样（手续费、汇率、部分退款）。机器无法判断哪边是对的，只能出工单。</li>
+  <li><strong>状态相反</strong>（我方成功渠道失败）：这是资金风险信号，除了工单还要<strong>当日告警到值班</strong>——它可能是系统性故障的前 10 笔。</li>
+  <li><strong>差异率超阈值</strong>：当日差异笔数超过基线 3 倍时，<em>先停下来找系统性原因，不要埋头修单</em>——修单掩盖故障是事故扩大的经典路径。</li>
+</ul>
+
+<div class="box red">
+  <div class="h">铁律：修复动作本身也要幂等</div>
+  <p>冲正、补状态都必须带幂等键（第 18 期），否则修复脚本自己就制造出新的「多记」。验收标准一条：<strong>修复脚本跑三遍结果必须一样</strong>。</p>
+</div>
+
+<h2 id="s08"><span class="n">08</span> 「钱账对不上」排查五步法（实战框架）</h2>
+<p class="lead">线上真的报「账对不上」时，按这五步走，每步都有产出物，避免原地打转。</p>
+
+<figure>
+<svg viewBox="0 0 900 220" font-family="Microsoft YaHei,sans-serif">
+  <rect x="20" y="14" width="860" height="192" rx="10" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="450" y="42" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1d21">「钱账对不上」排查五步法——每步都有产出物</text>
+  <!-- 五个步骤盒子 -->
+  <rect x="40" y="62" width="148" height="66" rx="8" fill="#e8f0fb" stroke="#1a5fb4"/>
+  <text x="114" y="84" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a5fb4">① 统一口径</text>
+  <text x="114" y="102" text-anchor="middle" font-size="9.5" fill="#3d454e">拉 10 笔逐字段比对</text>
+  <text x="114" y="118" text-anchor="middle" font-size="9.5" fill="#1a5fb4">产出：口径映射表</text>
+  <rect x="212" y="62" width="148" height="66" rx="8" fill="#e9f5ec" stroke="#1e7d3c"/>
+  <text x="286" y="84" text-anchor="middle" font-size="11" font-weight="bold" fill="#1e7d3c">② 圈定范围</text>
+  <text x="286" y="102" text-anchor="middle" font-size="9.5" fill="#3d454e">时间窗/渠道/业务线</text>
+  <text x="286" y="118" text-anchor="middle" font-size="9.5" fill="#1e7d3c">产出：排查面缩小 100 倍</text>
+  <rect x="384" y="62" width="148" height="66" rx="8" fill="#fdf4e3" stroke="#9a6400"/>
+  <text x="458" y="84" text-anchor="middle" font-size="11" font-weight="bold" fill="#9a6400">③ 分类计数</text>
+  <text x="458" y="102" text-anchor="middle" font-size="9.5" fill="#3d454e">丢/重/乱三类分桶</text>
+  <text x="458" y="118" text-anchor="middle" font-size="9.5" fill="#9a6400">产出：主因类型定位</text>
+  <rect x="556" y="62" width="148" height="66" rx="8" fill="#f2ecfb" stroke="#6a3fa0"/>
+  <text x="630" y="84" text-anchor="middle" font-size="11" font-weight="bold" fill="#6a3fa0">④ 回放链路</text>
+  <text x="630" y="102" text-anchor="middle" font-size="9.5" fill="#3d454e">TraceId 画完整时间轴</text>
+  <text x="630" y="118" text-anchor="middle" font-size="9.5" fill="#6a3fa0">产出：断在哪一跳</text>
+  <rect x="728" y="62" width="148" height="66" rx="8" fill="#fdeceb" stroke="#c62828"/>
+  <text x="802" y="84" text-anchor="middle" font-size="11" font-weight="bold" fill="#c62828">⑤ 修复与复盘</text>
+  <text x="802" y="102" text-anchor="middle" font-size="9.5" fill="#3d454e">跑三遍验证幂等</text>
+  <text x="802" y="118" text-anchor="middle" font-size="9.5" fill="#c62828">产出：修复单+监控</text>
+  <!-- 步骤间箭头 -->
+  <polygon points="190,90 208,90 208,84 226,95 208,106 208,100 190,100" fill="#6b7683"/>
+  <polygon points="362,90 380,90 380,84 398,95 380,106 380,100 362,100" fill="#6b7683"/>
+  <polygon points="534,90 552,90 552,84 570,95 552,106 552,100 534,100" fill="#6b7683"/>
+  <polygon points="706,90 724,90 724,84 742,95 724,106 724,100 706,100" fill="#6b7683"/>
+  <!-- 底部注释 -->
+  <rect x="40" y="146" width="836" height="48" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="60" y="166" font-size="10.5" fill="#3d454e">纪律：差异率先定性——200 笔/千万 ≈ 0.002% 是常态波动；200 笔/10 万 = 0.2% 是事故，先止血再修数。</text>
+  <text x="60" y="184" font-size="10.5" fill="#c62828">哪一类占 80% 就查哪道防线：丢→消息表/回查，重→幂等键，乱→状态机迁移。</text>
+</svg>
+<figcaption><b>图 7</b> · 五步排查法——第一步「统一口径」不做，后面四步全是噪音</figcaption>
+</figure>
+
+<ul>
+  <li><strong>① 统一口径</strong>：先别查代码。拉 10 笔「差异单」逐字段比对，大概率是金额单位、状态枚举、日切时区不一致。</li>
+  <li><strong>② 圈定范围</strong>：差异是全量还是集中在某时间窗/某渠道/某业务线？<em>「只在 11-15 支付宝渠道」这一句，能把排查面缩小 100 倍</em>。</li>
+  <li><strong>③ 分类计数</strong>：丢/重/乱分桶，哪类占 80% 就查哪类的防线。</li>
+  <li><strong>④ 回放链路</strong>：挑一笔差异单，用 TraceId 画完整时间轴。一笔看透胜过一万笔猜测。</li>
+  <li><strong>⑤ 修复与复盘</strong>：修复跑三遍验证幂等；差异率做成日报监控（阈值 = 基线 × 3）；根因落成防线补丁。</li>
+</ul>
+
+<div class="box green">
+  <div class="h">高频追问：「差异率多少算正常？」</div>
+  <p>经验数字：稳定系统常态差异率 <strong>0.001%</strong>（1000 万笔里约 100 笔，大部分 24h 内自愈）；<strong>0.1%（1 万笔）就是事故</strong>，先止血再修数。这两个数量级记在心里，接到告警的第一秒就能定性。</p>
+</div>
+
+<h2 id="s09"><span class="n">09</span> 数字速查</h2>
+<div class="grid2">
+  <div class="card b">
+    <div class="t">本地消息表</div>
+    <div class="d">写放大 200B × 1000 TPS = 200KB/s = <strong>16GB/天</strong>（SENT T+7 归档）<br>扫描 5s → 平均延迟 <strong>2.5s</strong>，最坏 5s<br>索引 <code>(status, created_at)</code>：1000 万行 × 24B ≈ <strong>229MB</strong></div>
+  </div>
+  <div class="card a">
+    <div class="t">事务消息（官方默认）</div>
+    <div class="d">回查间隔 <strong>60s</strong> × 最多 <strong>15 次</strong> = 窗口 <strong>15 分钟</strong><br>半消息 <strong>4 小时</strong>强制回滚（不可自定义）<br>发送重试 3 次、消费重试 16 次</div>
+  </div>
+  <div class="card g">
+    <div class="t">对账容量</div>
+    <div class="d">1000 万笔/天 × 200B = <strong>1.86GB/天</strong>，一年 <strong>680GB</strong><br>哈希分桶 1024 → 每桶约 <strong>2MB</strong>，内存恒定可并行<br>口径不统一 = 80% 假差异</div>
+  </div>
+  <div class="card r">
+    <div class="t">差异率定性</div>
+    <div class="d">常态 <strong>0.001%</strong>（100 笔/千万）→ 24h 自愈<br><strong>0.1%（1 万笔）= 事故</strong> → 先止血再修数<br>超基线 <strong>3 倍</strong> → 停手查系统性原因<br>修复脚本验收：<strong>跑三遍结果一致</strong></div>
+  </div>
+</div>
+<h2 id="s10"><span class="n">10</span> 十四问答</h2>
+
+<div class="qa"><div class="q">为什么不直接在事务里发消息？</div><div class="a">事务提交前发，消费方可能读到未提交数据；提交后发，提交成功但发送前宕机消息就丢。同库同事务写消息表是唯一不引入分布式事务的解法。</div></div>
+<div class="qa"><div class="q">本地消息表的 scanPending 为什么必须建联合索引？</div><div class="a">不建索引就是全表扫 1000 万行消息表，把业务库拖死。<code>(status, created_at)</code> 让扫描退化成索引区间扫描，LIMIT 200 一次拿一批。</div></div>
+<div class="qa"><div class="q">本地消息表至少一次投递，重复怎么消？</div><div class="a">发送侧无解，必须消费侧幂等键（bizId + 事件类型）。这也是为什么说幂等是分布式系统的地基（第 18 期）。</div></div>
+<div class="qa"><div class="q">RocketMQ 半消息为什么对消费者不可见？</div><div class="a">半消息写入系统 topic <code>RMQ_SYS_TRANS_HALF_TOPIC</code>，commit 后才搬到真实 topic。「先藏起来」就是预提交的 MQ 版本，保证消费者不会读到未决事务。</div></div>
+<div class="qa"><div class="q">事务消息回查几次、间隔多少、超时会怎样？</div><div class="a">默认 60s 一次、最多 15 次（窗口 15 分钟）；仍 UNKNOWN 按回滚丢弃。半消息 4 小时强制回滚，不可自定义。</div></div>
+<div class="qa"><div class="q">回查时生产者进程已经挂了，找谁？</div><div class="a">找同一 ProducerGroup 的其他实例。所以 producerGroup 不能随意起名——填错了回查找不到人，15 次后消息被丢弃，账就少一笔。</div></div>
+<div class="qa"><div class="q">TCC 的空回滚是什么？怎么处理？</div><div class="a">Try 超时未执行、Cancel 先到。处理：Cancel 必须容忍「没有 Try 记录」，空转返回成功，并落一条 CANCELLED 状态。</div></div>
+<div class="qa"><div class="q">TCC 的悬挂是什么？怎么处理？</div><div class="a">Try 迟到落在 Cancel 之后，资源被冻结没人释放。处理：分支状态机里 CANCELLED 是终态，拒绝后续 Try 的插入/迁移。</div></div>
+<div class="qa"><div class="q">TCC 为什么要状态迁移表而不是打个标记？</div><div class="a">因为幂等与乱序都要靠 <code>WHERE status = X</code> 的条件更新挡住，影响行数 = 0 就是幂等语义本身。打标记做不到「只允许 TRIED → CONFIRMED」这种迁移约束。</div></div>
+<div class="qa"><div class="q">本地消息表和事务消息怎么选？</div><div class="a">任何 DB、不想引 MQ、延迟容忍 5s → 本地消息表；已用 RocketMQ、要毫秒级延迟、愿意让回查 15 次兜底 → 事务消息。资金场景两者都要对账兜底。</div></div>
+<div class="qa"><div class="q">对账为什么要做口径映射？</div><div class="a">金额分 vs 元、状态枚举映射、日切时区不一致，会让对账全是假差异。80% 的「对不上」根因在口径不在业务。</div></div>
+<div class="qa"><div class="q">对账数据 1.86GB/天怎么比对？</div><div class="a">按订单号哈希分 1024 桶，每桶约 2MB 有序归并比对。内存恒定、可并行、可重跑，不会把 DB 打挂。</div></div>
+<div class="qa"><div class="q">差异率 0.1% 和 0.001% 的区别是什么？</div><div class="a">0.001%（100 笔/千万）是常态，24h 自愈；0.1%（1 万笔）是事故，先止血再修数。接到告警第一秒就该用这两个数量级定性。</div></div>
+<div class="qa"><div class="q">修复脚本怎么验收幂等？</div><div class="a">跑三遍结果一致。任何修复动作（冲正、补状态）都必须带幂等键，否则修复脚本自己制造新的「多记」。</div></div>
+
+<h2 id="s11"><span class="n">11</span> 三道模拟面试（四档对照）</h2>
+
+<div class="mt">
+  <div class="qh"><span>题 1</span>订单支付成功后要给用户加积分，怎么保证「钱到了、积分一定到」？</div>
+  <div class="lv l1"><span class="lb">不及格</span>「支付成功后同步调积分服务」——积分服务超时/宕机时积分丢失，且阻塞支付主流程。</div>
+  <div class="lv l2"><span class="lb">及格</span>「发 MQ，积分服务消费」——方向对，但没说支付成功和发消息怎么保证原子，也没说重复消费怎么办。</div>
+  <div class="lv l3"><span class="lb">良好</span>「支付事务里同库写 outbox（PENDING），提交后扫描线程发 MQ；积分消费侧用 bizId 幂等。最坏延迟 = 扫描间隔 5s，平均 2.5s。」</div>
+  <div class="lv l4"><span class="lb">优秀</span>在良好基础上补：① 若已用 RocketMQ 可改事务消息（half message），延迟降到毫秒级，但要写好 TransactionListener 与 ProducerGroup（回查要找对人）；② 明确至少一次语义下消费侧幂等是硬前提；③ 加 T+1 对账兜底：积分流水与支付流水按订单号比对，差异 0.001% 内自动补、超阈值告警；④ 给出写放大账（200KB/s = 16GB/天）与归档策略（SENT T+7 清理）。</div>
+</div>
+
+<div class="mt">
+  <div class="qh"><span>题 2</span>TCC 的 Try 超时了，框架自动调了 Cancel，之后 Try 的回包才到。会出什么问题？怎么解决？</div>
+  <div class="lv l1"><span class="lb">不及格</span>「重试 Try 直到成功」——悬挂就地发生，资源被冻结没人释放。</div>
+  <div class="lv l2"><span class="lb">及格</span>「记录日志人工处理」——能兜底但没有防线，人工工单会堆积。</div>
+  <div class="lv l3"><span class="lb">良好</span>「这是悬挂问题。参与者侧建 tcc_branch 状态机（TRIED/CONFIRMED/CANCELLED），Cancel 落 CANCELLED 终态后拒绝 Try 的迁移，Try 的 INSERT/UPDATE 影响行数为 0 就直接返回失败。」</div>
+  <div class="lv l4"><span class="lb">优秀</span>在良好基础上补：① 同一张表同时解决空回滚（Cancel 对无 Try 记录幂等成功）与幂等（Confirm/Cancel 条件更新）；② 指出「影响行数 = 0」就是幂等语义本身，比 Redis 锁更可靠（无锁超时问题）；③ 说明 Try/Confirm/Cancel 都必须可重入，全局 xid + branchId 是幂等键；④ 补 TCC 适用边界：可预留资源（冻结/预占）才用 TCC，不可预留（订单状态）应选 SAGA 或本地消息表。</div>
+</div>
+
+<div class="mt">
+  <div class="qh"><span>题 3</span>财务说「今天账对不上，差 200 多笔」，你接手后第一小时做什么？</div>
+  <div class="lv l1"><span class="lb">不及格</span>「马上写脚本把差异修掉」——连差异是什么都不知道就修数，是事故扩大的经典路径。</div>
+  <div class="lv l2"><span class="lb">及格</span>「拉差异单出来看看」——方向对，但没有方法论，容易在数据里打转。</div>
+  <div class="lv l3"><span class="lb">良好</span>「按五步法：先统一口径（拉 10 笔逐字段比对，80% 是口径问题）→ 圈范围（时间窗/渠道/业务线）→ 丢/重/乱分类计数 → 挑一笔用 TraceId 回放完整时间轴 → 修复且修复脚本跑三遍验证幂等。」</div>
+  <div class="lv l4"><span class="lb">优秀</span>在良好基础上补：① 先看差异率定性：200 笔/千万 ≈ 0.002% 是常态波动，200 笔/10 万 = 0.2% 是事故要先止血；② 分类计数后按主因查防线：丢→查消息表扫描与回查日志，重→查幂等键是否缺失，乱→查状态机迁移；③ 修复分三类给动作（少记补状态、多记冲正、金额不一致出工单禁止自动覆盖）；④ 复盘落成监控：差异率日报 + 阈值告警（基线 × 3）；⑤ 指出「停手查系统性原因」的纪律与修复动作自身的幂等验收。</div>
+</div>
+
+<h2 id="s12"><span class="n">12</span> 34 期地图与下期预告</h2>
+<p>34 期下来，Java 后端面试的主线已经覆盖完：</p>
+<ul>
+  <li><strong>Java 语言与底层</strong>：01 HashMap / 03 并发 / 13 类加载与新特性 / 14 集合 / 19 NIO·Netty / 20 线程池 / 22 JIT / 23 泛型反射代理 / 26 字节码 Agent</li>
+  <li><strong>JVM</strong>：02 GC / 12 调优 / 21 内存泄漏 / 32 容器边界</li>
+  <li><strong>框架</strong>：04 Spring / 15 Spring Boot / 24 MyBatis / 27 依赖与模块化</li>
+  <li><strong>数据与存储</strong>：05 MySQL / 06 Redis / 16 分库分表 / 17 缓存一致性 / 25 Elasticsearch</li>
+  <li><strong>分布式</strong>：07 MQ 与分布式事务 / 08 Spring Cloud / 18 幂等 / 29 共识 / 30 超时重试 / 31 连接池 / 34 一致性与对账</li>
+  <li><strong>工程与质量</strong>：09 排查 / 10 场景设计 / 11 设计模式 / 28 可观测性 / 33 认证授权与会话</li>
+</ul>
+<p>本期与前后期的接缝：07 讲事务方案选型（2PC/TCC/SAGA/本地消息表），34 把本地消息表与 TCC 拆到实现层并补上对账；18 讲幂等键，34 复用它作为消费去重与修复幂等的同一块地基——<em>幂等是一切一致性方案的公共依赖</em>；30 讲超时重试的放大效应，34 的「差异率超 3 倍停手」正是同一思想在对账域的映射。</p>
+
+<div class="next">
+  <strong>下期建议主题：第 35 期 限流与配额治理深水区</strong>（滑动窗口与令牌桶的数学边界 / 分布式限流 Redis+Lua 与 Sentinel 的取舍 / 热点限流与集群总闸 / 配额维度设计与计费对账的衔接），可在文末预告。
+</div>
+
+<div class="foot">
+  <p>Java 面试深挖 · 第 34 期 · 微服务数据一致性与对账｜数字口径：RocketMQ 官方「参数约束和建议」文档（回查间隔 60s、最大回查 15 次、半消息超时 4 小时强制回滚、消费重试 16 次）。正文数字均可由算式复核。</p>
+</div>
+
+</div>
+</body>
+</html>

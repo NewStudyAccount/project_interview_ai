@@ -1,0 +1,359 @@
+<h2><span class="n">05</span>为什么 maxPoolSize=100 会让系统更慢</h2>
+
+<p>上面说大池等待短，这里说大池更慢，矛盾吗？不矛盾——差别在「服务端的并行能力是不是无限的」。</p>
+
+<p>连接池的容量幻觉在于：<strong>它把并发压力原封不动地转给了数据库。</strong>数据库的并行度上限是核数 k，一旦 c &gt; k，多出来的连接不会带来任何吞吐，只会带来三样东西：</p>
+
+<ul>
+<li><strong>上下文切换</strong>：k 个核上跑 c 个可运行线程，切换开销随 c/k 上升；</li>
+<li><strong>闩竞争</strong>：Buffer Pool 的 page latch、redo log 的写锁、B+ 树路径上的锁，都在更少的核上抢更多次；</li>
+<li><strong>内存与文件句柄</strong>：每连接一份会话缓冲。</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="20" y="24" font-size="13" font-weight="700" fill="#1a1d21">本机 12 核 / 16 逻辑核：8 倍并发只换来 15.5% 吞吐</text>
+
+  <!-- 柱状：吞吐 -->
+  <line x1="70" y1="230" x2="600" y2="230" stroke="#6b7683" stroke-width="1.1"/>
+  <text x="20" y="86" font-size="11" fill="#3d454e">吞吐</text>
+  <text x="70" y="246" font-size="10.5" fill="#6b7683" text-anchor="middle">4</text>
+  <text x="155" y="246" font-size="10.5" fill="#6b7683" text-anchor="middle">8</text>
+  <text x="240" y="246" font-size="10.5" fill="#6b7683" text-anchor="middle">12</text>
+  <text x="325" y="246" font-size="10.5" fill="#6b7683" text-anchor="middle">16</text>
+  <text x="410" y="246" font-size="10.5" fill="#6b7683" text-anchor="middle">24</text>
+  <text x="495" y="246" font-size="10.5" fill="#6b7683" text-anchor="middle">48</text>
+  <text x="580" y="246" font-size="10.5" fill="#6b7683" text-anchor="middle">96</text>
+  <text x="335" y="268" font-size="11" fill="#3d454e">线程数（= 连接数）</text>
+
+  <!-- 柱：值映射 吞吐/16783*130 -->
+  <rect x="56" y="173" width="28" height="57" fill="#c9d9ef" stroke="#1a5fb4" stroke-width="1"/>
+  <rect x="141" y="147" width="28" height="83" fill="#a8c4e8" stroke="#1a5fb4" stroke-width="1"/>
+  <rect x="226" y="121" width="28" height="109" fill="#7ba6db" stroke="#1a5fb4" stroke-width="1"/>
+  <rect x="311" y="103" width="28" height="127" fill="#4a86c8" stroke="#1a5fb4" stroke-width="1.4"/>
+  <rect x="396" y="107" width="28" height="123" fill="#2f6fb7" stroke="#1a5fb4" stroke-width="1"/>
+  <rect x="481" y="100" width="28" height="130" fill="#1a5fb4" stroke="#1a5fb4" stroke-width="1"/>
+  <rect x="566" y="104" width="28" height="126" fill="#1a5fb4" stroke="#1a5fb4" stroke-width="1"/>
+
+  <text x="70" y="167" font-size="10" fill="#3d454e" text-anchor="middle">7295</text>
+  <text x="155" y="141" font-size="10" fill="#3d454e" text-anchor="middle">10762</text>
+  <text x="240" y="115" font-size="10" fill="#3d454e" text-anchor="middle">14035</text>
+  <text x="325" y="97" font-size="10" font-weight="700" fill="#1a5fb4" text-anchor="middle">16438</text>
+  <text x="410" y="101" font-size="10" fill="#3d454e" text-anchor="middle">15894</text>
+  <text x="495" y="94" font-size="10" fill="#3d454e" text-anchor="middle">16783</text>
+  <text x="580" y="98" font-size="10" fill="#3d454e" text-anchor="middle">16216</text>
+
+  <!-- 12 核参照线 -->
+  <line x1="70" y1="121" x2="600" y2="121" stroke="#9a6400" stroke-dasharray="4 4"/>
+  <text x="474" y="132" font-size="10.5" fill="#9a6400">12 核基准</text>
+
+  <!-- 右侧：延迟 -->
+  <rect x="640" y="60" width="240" height="200" rx="8" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="656" y="84" font-size="12" font-weight="700" fill="#c62828">同时发生的另一件事</text>
+  <text x="656" y="110" font-size="11.5" fill="#3d454e">并发 12 → 96（8 倍）</text>
+  <text x="656" y="132" font-size="11.5" fill="#3d454e">吞吐 +15.5%</text>
+  <text x="656" y="154" font-size="11.5" fill="#3d454e">排队延迟 ×8</text>
+  <line x1="656" y1="168" x2="864" y2="168" stroke="#f0c4c2"/>
+  <text x="656" y="190" font-size="11" fill="#3d454e">16 线程之后基本是平的。</text>
+  <text x="656" y="210" font-size="11" fill="#3d454e">超过逻辑核数，加人没有产出，</text>
+  <text x="656" y="230" font-size="11" fill="#c62828">只有排队和切换开销。</text>
+
+  <text x="20" y="296" font-size="11" fill="#6b7683">CPU 密集任务、2400 个任务、含预热、两轮取最优。真实 DB 还有 IO 等待，k 不等于核数，但拐点形状一致。</text>
+</svg>
+<figcaption><b>图 5</b>　并发度与吞吐。拐点在「逻辑核数」附近，之后是一条平线加一条陡峭的延迟线。</figcaption>
+</figure>
+
+<pre data-lang="text"><code>threads  elapsed_ms  thruput_ops_s  vs_12
+4        329         7295           0.52x
+8        223         10762          0.77x
+12       171         14035          1.00x
+16       146         16438          1.17x
+24       151         15894          1.13x
+48       143         16783          1.20x
+96       148         16216          1.16x</code></pre>
+
+<p><strong>从 12 到 96，并发度翻了 8 倍，吞吐只从 14035 涨到 16216（+15.5%），而每个请求的排队延迟按 96/12 = 8 倍放大。</strong>换成连接数的说法就是纯算术：</p>
+
+<table>
+<thead><tr><th class="num">连接数 c</th><th class="num">吞吐</th><th class="num">单次延迟</th><th>结论</th></tr></thead>
+<tbody>
+<tr><td class="num">4</td><td class="num">2000</td><td class="num">2.0ms</td><td>未饱和，随 c 线性增长</td></tr>
+<tr><td class="num">8</td><td class="num">4000</td><td class="num">2.0ms</td><td>未饱和</td></tr>
+<tr><td class="num">12</td><td class="num">6000</td><td class="num">2.0ms</td><td>刚好打满 k 核</td></tr>
+<tr><td class="num">24</td><td class="num">6000</td><td class="num">4.0ms</td><td>超配 2x，<strong>只加延迟</strong></td></tr>
+<tr><td class="num">48</td><td class="num">6000</td><td class="num">8.0ms</td><td>超配 4x，<strong>只加延迟</strong></td></tr>
+<tr><td class="num">96</td><td class="num">6000</td><td class="num">16.0ms</td><td>超配 8x，<strong>只加延迟</strong></td></tr>
+</tbody>
+</table>
+
+<p><strong>所以 HikariCP 默认 <code>maximumPoolSize=10</code> 不是偷懒。</strong>它给的经验式是 <code>connections = core_count × 2 + effective_spindle_count</code>——4 核 + 1 块盘的小库，9~10 个连接就是并行上限。这个公式不是让你照抄，是让你意识到<em>分母是服务端</em>。</p>
+
+<div class="box red">
+<div class="h">最容易被忽略的一条：池大小必须和线程池一起看</div>
+<p>Tomcat 200 线程配 10 个连接，意味着 190 个线程在池外等着；此时你把连接池调到 200，数据库当场超配 20 倍。反过来，线程池 200、连接池 100、<code>connectionTimeout</code> 30s，最坏情况是 200 个线程各卡 30 秒——<strong>6000 个线程·秒的容量瞬间蒸发</strong>。这才是「连接池满」真正致命的形态。</p>
+</div>
+
+<h2><span class="n">06</span>四种超时：出事时到底谁先响</h2>
+
+<p>连接池相关超时至少有四层，配置错顺序就会出现「明明 SQL 只要 2ms，接口却卡了 30 秒」：</p>
+
+<table>
+<thead><tr><th>超时</th><th>归属</th><th>典型值</th><th>管的是</th></tr></thead>
+<tbody>
+<tr><td><code>connectionTimeout</code></td><td>连接池</td><td>30s（HikariCP 默认）</td><td>在池里等一个<strong>可用连接</strong>的最长时间</td></tr>
+<tr><td><code>validationTimeout</code></td><td>连接池</td><td>5s</td><td>借出前校验连接是否还活着</td></tr>
+<tr><td><code>socketTimeout</code></td><td>驱动</td><td>0（不超时！）</td><td>一条 SQL 发出去后等结果的最长时间</td></tr>
+<tr><td>事务 / 请求超时</td><td>框架</td><td>3s / 5s</td><td>整个业务操作的时间预算</td></tr>
+</tbody>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="20" y="24" font-size="13" font-weight="700" fill="#1a1d21">超时必须层层向内收紧：内层比外层大 = 白等</text>
+
+  <!-- 错配示例 -->
+  <text x="20" y="56" font-size="12" font-weight="700" fill="#c62828">✗ 反例：内层 30s 比外层 3s 还大</text>
+  <rect x="20" y="66" width="180" height="26" rx="4" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="30" y="84" font-size="11" fill="#c62828">网关 3s</text>
+  <rect x="20" y="98" width="700" height="26" rx="4" fill="#fdf4e3" stroke="#e8cf9a"/>
+  <text x="30" y="116" font-size="11" fill="#9a6400">connectionTimeout 30s</text>
+  <text x="732" y="116" font-size="11" fill="#c62828">← 后 27 秒纯属浪费</text>
+
+  <!-- 正确示例 -->
+  <text x="20" y="162" font-size="12" font-weight="700" fill="#1e7d3c">✓ 正例：按预算倒推，每层留余量</text>
+  <rect x="20" y="172" width="660" height="24" rx="4" fill="#e9f5ec" stroke="#b9dcc2"/>
+  <text x="30" y="189" font-size="11" fill="#1e7d3c">请求 3000ms</text>
+  <rect x="20" y="204" width="440" height="24" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="30" y="221" font-size="11" fill="#1a5fb4">事务 2000ms</text>
+  <rect x="20" y="236" width="330" height="24" rx="4" fill="#f2ecfb" stroke="#d8c9ee"/>
+  <text x="30" y="253" font-size="11" fill="#6a3fa0">SQL 1500ms</text>
+  <rect x="20" y="268" width="176" height="24" rx="4" fill="#fdf4e3" stroke="#e8cf9a"/>
+  <text x="30" y="285" font-size="11" fill="#9a6400">池等待 800ms</text>
+
+  <text x="700" y="189" font-size="11" fill="#6b7683">谁先响？最内层。</text>
+  <text x="700" y="221" font-size="11" fill="#6b7683">最内层先失败，</text>
+  <text x="700" y="243" font-size="11" fill="#3d454e">外层还有时间</text>
+  <text x="700" y="265" font-size="11" fill="#3d454e">做降级/重试。</text>
+</svg>
+<figcaption><b>图 6</b>　四层超时的嵌套关系。反例里那 27 秒不是「等结果」，是「等一个已经没人要的结果」。</figcaption>
+</figure>
+
+<p>真 HikariCP 5.1.0 跑池耗尽（<code>maximumPoolSize=2</code>、<code>connectionTimeout=1500</code>、借满后借第三个）：</p>
+
+<pre data-lang="text"><code>① 第3个连接等待 1517ms 后失败
+   异常类型: java.sql.SQLTransientConnectionException
+   异常文案: demo-pool - Connection is not available, request timed out after 1508ms
+             (total=2, active=2, idle=0, waiting=0)</code></pre>
+
+<p>三个细节，都是能当场加分的：</p>
+
+<ol>
+<li><strong>抛的是 <code>SQLTransientConnectionException</code></strong>，SQLState 属于 08 类（连接异常），Spring 会把它翻译成 <code>CannotGetJdbcConnectionException</code>，<strong>不是</strong> <code>BadSqlGrammarException</code>。看到「连不上」类异常先怀疑池，别先怀疑 SQL。</li>
+<li><strong>文案自带四元组</strong>：<code>total=2, active=2, idle=0, waiting=0</code>。这一行就是现场诊断：<code>active == total</code> 且 <code>idle == 0</code> → 池满；<code>waiting &gt; 0</code> → 有排队；<code>active</code> 长期顶格不回落 → 泄漏。</li>
+<li><strong>实测 1508ms &gt; 配置 1500ms，多 8ms</strong>。超时不是精确闹钟：等待循环按 30ms 递增轮询，加上一次周期对齐，实际会超配 0.5%~2%。做链路预算<strong>不要按标称值算</strong>，留 5% 余量。</li>
+</ol>
+
+<pre data-lang="properties"><code># 反例：外层请求预算 3s，池等待 30s —— 池还没超时，请求早被网关砍了
+spring.datasource.hikari.connection-timeout=30000
+server.tomcat.connection-timeout=3000
+
+# 正例：预算倒推，每层留余量
+# 请求 3000ms → 事务 2000ms → SQL 1500ms → 池等待 800ms
+spring.datasource.hikari.connection-timeout=800
+spring.datasource.hikari.validation-timeout=500
+spring.datasource.hikari.max-lifetime=1200000   # 必须 &lt; DB 的 wait_timeout
+spring.datasource.hikari.leak-detection-threshold=10000</code></pre>
+
+<p>为什么 <code>max-lifetime</code> 必须小于数据库的 <code>wait_timeout</code>？因为<strong>主动关掉一个自己知道已经死掉的连接，比借出去才发现它已死要好</strong>。MySQL 默认 <code>wait_timeout=28800s</code>（8 小时），但中间还有防火墙、云负载均衡的空闲连接回收（常见 300~900s）。所以 <code>maxLifetime</code> 一般设 20~30 分钟，留足余量——HikariCP 会让连接在 <code>maxLifetime ± 2.5%</code> 的随机区间内退休，避免所有连接同一秒集体退休造成建连尖峰。</p>
+
+<h2><span class="n">07</span>连接泄漏：不是斜坡，是断崖</h2>
+
+<p>所有讲连接泄漏的文章都会说「连接不还，池子就满了」。但现场到底是什么形状，很少有人画。自建池实测（<code>pool=10</code>、<code>connectionTimeout=500ms</code>、每 20 次请求漏 1 个连接）：</p>
+
+<figure>
+<svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <text x="20" y="24" font-size="13" font-weight="700" fill="#1a1d21">泄漏的形状：可用连接数阶跃到 0，中间没有过渡带</text>
+
+  <!-- 阶梯：可用连接数 -->
+  <line x1="80" y1="200" x2="620" y2="200" stroke="#6b7683" stroke-width="1.1"/>
+  <line x1="80" y1="200" x2="80" y2="52" stroke="#6b7683" stroke-width="1.1"/>
+  <text x="26" y="56" font-size="11" fill="#3d454e">可用</text>
+  <text x="34" y="72" font-size="11" fill="#3d454e">连接</text>
+  <text x="70" y="204" font-size="10.5" fill="#6b7683" text-anchor="end">0</text>
+  <text x="70" y="106" font-size="10.5" fill="#6b7683" text-anchor="end">5</text>
+  <text x="70" y="60" font-size="10.5" fill="#6b7683" text-anchor="end">10</text>
+  <text x="80" y="222" font-size="10.5" fill="#6b7683" text-anchor="middle">0</text>
+  <text x="188" y="222" font-size="10.5" fill="#6b7683" text-anchor="middle">40</text>
+  <text x="296" y="222" font-size="10.5" fill="#6b7683" text-anchor="middle">80</text>
+  <text x="404" y="222" font-size="10.5" fill="#6b7683" text-anchor="middle">120</text>
+  <text x="512" y="222" font-size="10.5" fill="#6b7683" text-anchor="middle">160</text>
+  <text x="590" y="222" font-size="10.5" fill="#6b7683" text-anchor="middle">200</text>
+  <text x="350" y="240" font-size="11" fill="#3d454e">请求序号</text>
+
+  <polyline points="80,58 134,58 134,78 188,78 188,102 242,102 242,126 296,126 296,148 350,148 350,168 404,168 404,200 620,200"
+            fill="none" stroke="#1a5fb4" stroke-width="2.4"/>
+  <text x="404" y="190" font-size="10.5" fill="#c62828" text-anchor="middle">第 200 次</text>
+
+  <!-- 结果色带 -->
+  <text x="30" y="268" font-size="11" fill="#3d454e">结果</text>
+  <rect x="80" y="254" width="324" height="20" fill="#e9f5ec" stroke="#b9dcc2"/>
+  <text x="242" y="268" font-size="10.5" fill="#1e7d3c" text-anchor="middle">全部 2ms 成功 · 延迟一条平线</text>
+  <rect x="404" y="254" width="216" height="20" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="512" y="268" font-size="10.5" fill="#c62828" text-anchor="middle">100% 超时 500ms</text>
+
+  <!-- 右侧说明 -->
+  <rect x="650" y="52" width="230" height="160" rx="8" fill="#fdeceb" stroke="#f0c4c2"/>
+  <text x="664" y="76" font-size="12" font-weight="700" fill="#c62828">监控上看到的</text>
+  <text x="664" y="100" font-size="11" fill="#3d454e">P99 平滑 → 瞬间 100% 失败</text>
+  <text x="664" y="122" font-size="11" fill="#3d454e">没有「慢慢变慢」的预警</text>
+  <text x="664" y="148" font-size="11" fill="#3d454e">泄漏慢的话（1 个/小时），</text>
+  <text x="664" y="168" font-size="11" fill="#3d454e">10 小时后才撞墙，</text>
+  <text x="664" y="188" font-size="11" fill="#c62828">发版记录早翻篇了。</text>
+
+  <text x="20" y="308" font-size="11" fill="#6b7683">断崖点 = 泄漏总量达到池上限的那一次请求。上表：10 个连接、每 20 次漏 1 个 → 第 201 次请求开始 100% 超时。</text>
+</svg>
+<figcaption><b>图 7</b>　泄漏断崖。它不是资源耗尽后的性能劣化，它是可用连接数从 1 到 0 的阶跃。</figcaption>
+</figure>
+
+<p>请注意这条曲线：<strong>前 200 次请求的延迟一条平线，全是 2ms，没有任何「慢慢变慢」的前兆；第 201 次直接 100%。</strong></p>
+
+<p>泄漏的三个典型形态：</p>
+<ol>
+<li><strong>异常路径没还</strong>——<code>try { conn = ds.getConnection(); ... }</code> 后面没有 <code>finally</code>，或者 <code>finally</code> 里又抛了异常；</li>
+<li><strong>异步线程里借、主线程里还</strong>——<code>CompletableFuture</code> 里拿了连接，回调在另一个线程，<code>close</code> 丢在了 <code>thenApply</code> 的异常分支；</li>
+<li><strong>包装类吞掉了 close</strong>——自己写了个 <code>ConnectionWrapper</code> 做统计，<code>close()</code> 里只记了日志没调 <code>delegate.close()</code>。</li>
+</ol>
+
+<h3>细节一：阈值小于 2000ms 会被静默禁用</h3>
+
+<p>设 <code>leakDetectionThreshold=1200</code>，启动日志直接告诉你：</p>
+
+<pre data-lang="log"><code>WARN com.zaxxer.hikari.HikariConfig -- demo-pool - leakDetectionThreshold is less than
+2000ms or more than maxLifetime, disabling it.</code></pre>
+
+<p>配置项还在，<code>toString()</code> 里也还打着 <code>leakDetectionThreshold..........0</code>——<strong>它从 1200 被改成了 0（关闭）</strong>。这是「配了等于没配」的经典案例，唯一的发现方式是启动日志。</p>
+
+<h3>细节二：告警带"借出时刻"的完整堆栈</h3>
+
+<p>阈值设 3000ms、持有 4200ms：</p>
+
+<pre data-lang="log"><code>09:46:45.157 [leak-pool housekeeper] WARN com.zaxxer.hikari.pool.ProxyLeakTask
+  -- Connection leak detection triggered for Hikari31$FakeConn@7946e1f4 on thread main,
+     stack trace follows
+java.lang.Exception: Apparent connection leak detected
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:99)
+	at HikariLeak.main(HikariLeak.java:19)
+
+09:46:46.368 [main] INFO com.zaxxer.hikari.pool.ProxyLeakTask
+  -- Previously reported leaked connection Hikari31$FakeConn@7946e1f4 on thread main
+     was returned to the pool (unleaked)</code></pre>
+
+<p>两句话读法：</p>
+<ul>
+<li>报警时间 = 借出时刻 + 阈值（42.14s 借出 → 45.15s 报警），<strong>不是</strong> HouseKeeper 的 30s 周期。它在 <code>borrow</code> 时给每个连接挂了一个定时任务，到点就 dump 借出点的栈。</li>
+<li>如果连接后来还回来了，会补一条 <code>(unleaked)</code>。所以<strong>看到 triggered 不等于泄漏，看到 triggered 但没有 unleaked 才是</strong>。这条能直接把你和背概念的人区分开。</li>
+</ul>
+
+<div class="box amber">
+<div class="h">生产上怎么设这个值</div>
+<p>设成「正常最长事务时间 × 2」，比如 10 秒。低于这个值的慢查询不该报警，高于这个值的持有一定有问题。别设 2 秒——定时任务、报表导出、批量对账会天天误报，最后所有人都把这条 WARN 加进忽略列表，检测就废了。</p>
+</div>
+
+<h2><span class="n">08</span>池内嵌套借连接 = 必然死锁</h2>
+
+<p>这是连接池最经典的死锁，也是最容易被「我只是在 service 里再调一个 service」这种无害写法踩到的。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a8" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#c62828"/></marker>
+  </defs>
+  <text x="20" y="24" font-size="13" font-weight="700" fill="#1a1d21">10 线程 × 每请求 2 连接 × 池 10 个 = 100% 死锁（实测 10/10 失败）</text>
+
+  <!-- 池：10 个槽全被占用 -->
+  <rect x="40" y="48" width="520" height="52" rx="6" fill="#fdf4e3" stroke="#e8cf9a"/>
+  <text x="52" y="68" font-size="11.5" font-weight="700" fill="#9a6400">池：10 个连接，全部被"第 1 个"占住</text>
+  <g fill="#c62828" stroke="#c62828">
+    <rect x="56" y="76" width="42" height="16" rx="2"/><rect x="106" y="76" width="42" height="16" rx="2"/>
+    <rect x="156" y="76" width="42" height="16" rx="2"/><rect x="206" y="76" width="42" height="16" rx="2"/>
+    <rect x="256" y="76" width="42" height="16" rx="2"/><rect x="306" y="76" width="42" height="16" rx="2"/>
+    <rect x="356" y="76" width="42" height="16" rx="2"/><rect x="406" y="76" width="42" height="16" rx="2"/>
+    <rect x="456" y="76" width="42" height="16" rx="2"/><rect x="506" y="76" width="42" height="16" rx="2"/>
+  </g>
+  <text x="576" y="70" font-size="11" fill="#c62828">active=10</text>
+  <text x="576" y="88" font-size="11" fill="#c62828">idle=0</text>
+
+  <!-- 10 个线程等第 2 个 -->
+  <g font-size="10.5" fill="#3d454e">
+    <rect x="40" y="126" width="46" height="30" rx="4" fill="#fdeceb" stroke="#f0c4c2"/><text x="63" y="146" text-anchor="middle">T1</text>
+    <rect x="92" y="126" width="46" height="30" rx="4" fill="#fdeceb" stroke="#f0c4c2"/><text x="115" y="146" text-anchor="middle">T2</text>
+    <rect x="144" y="126" width="46" height="30" rx="4" fill="#fdeceb" stroke="#f0c4c2"/><text x="167" y="146" text-anchor="middle">T3</text>
+    <rect x="196" y="126" width="46" height="30" rx="4" fill="#fdeceb" stroke="#f0c4c2"/><text x="219" y="146" text-anchor="middle">T4</text>
+    <rect x="248" y="126" width="46" height="30" rx="4" fill="#fdeceb" stroke="#f0c4c2"/><text x="271" y="146" text-anchor="middle">T5</text>
+    <rect x="300" y="126" width="46" height="30" rx="4" fill="#fdeceb" stroke="#f0c4c2"/><text x="323" y="146" text-anchor="middle">T6</text>
+    <rect x="352" y="126" width="46" height="30" rx="4" fill="#fdeceb" stroke="#f0c4c2"/><text x="375" y="146" text-anchor="middle">T7</text>
+    <rect x="404" y="126" width="46" height="30" rx="4" fill="#fdeceb" stroke="#f0c4c2"/><text x="427" y="146" text-anchor="middle">T8</text>
+    <rect x="456" y="126" width="46" height="30" rx="4" fill="#fdeceb" stroke="#f0c4c2"/><text x="479" y="146" text-anchor="middle">T9</text>
+    <rect x="508" y="126" width="46" height="30" rx="4" fill="#fdeceb" stroke="#f0c4c2"/><text x="531" y="146" text-anchor="middle">T10</text>
+  </g>
+  <text x="40" y="176" font-size="11" fill="#3d454e">每个线程都握着第 1 个，同时等第 2 个 —— 第 2 个只能等别人释放第 1 个</text>
+
+  <!-- 循环箭头 -->
+  <path d="M296,196 C296,224 220,224 220,200" fill="none" stroke="#c62828" stroke-width="1.6" marker-end="url(#a8)"/>
+  <text x="310" y="216" font-size="11" fill="#c62828" font-weight="700">持有并等待 → 循环等待 → 永不解开</text>
+
+  <!-- 右侧实测 -->
+  <rect x="650" y="48" width="230" height="150" rx="8" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="664" y="70" font-size="11.5" font-weight="700" fill="#1a1d21">实测结果</text>
+  <text x="664" y="94" font-size="11" fill="#3d454e">ok = 0</text>
+  <text x="664" y="114" font-size="11" fill="#c62828">fail = 10</text>
+  <text x="664" y="134" font-size="11" fill="#3d454e">耗时 3040ms</text>
+  <text x="664" y="158" font-size="10.5" fill="#6b7683">connection is not</text>
+  <text x="664" y="174" font-size="10.5" fill="#6b7683">available, timed out</text>
+  <text x="664" y="190" font-size="10.5" fill="#6b7683">after 3000ms</text>
+
+  <text x="20" y="252" font-size="11" fill="#3d454e">注意：把池调到 20 只是把死锁推迟到"并发 20 个请求"时才发生 —— 不是修好，是延期。</text>
+  <text x="20" y="274" font-size="11" fill="#c62828">四个死锁必要条件全齐：互斥（连接不可共享）、持有并等待、不可抢占、循环等待。</text>
+</svg>
+<figcaption><b>图 8</b>　池内嵌套借连接。10 个请求、10 个连接、每个要 2 个 → 一个都成功不了。</figcaption>
+</figure>
+
+<pre data-lang="text"><code>== EXP4 嵌套借连接（pool=10, threads=10, 每请求需 2 个连接） ==
+  首个失败文案: connection is not available, request timed out after 3000ms
+  ok=0 fail=10 elapsed=3040ms</code></pre>
+
+<p><strong>10 个请求，10 个全部失败，一个都没成功。</strong>静态地看：需要 20 个连接，池里只有 10 个，必然有人拿不到。动态地看更狠：每个线程都握着第 1 个不放，等第 2 个，而第 2 个只能由别人释放第 1 个才有——<strong>标准的持有并等待循环，四个死锁必要条件全齐</strong>，不会自己解开，只能等超时。</p>
+
+<p>三种最常见的触发方式：</p>
+
+<pre data-lang="java"><code>// ① 事务方法内部再调一个 @Transactional 方法，且传播行为是 REQUIRES_NEW
+@Transactional
+public void outer() {
+    repoA.update(x);          // 占住连接 1
+    innerService.other();     // REQUIRES_NEW → 新事务要连接 2
+}
+
+// ② 一个请求要查两个数据源（分库），各借一个连接，且嵌套在同一个事务里
+@Transactional("orderTx")
+public void place() {
+    orderRepo.save(o);        // 数据源 A 的连接
+    inventoryRepo.deduct();   // 数据源 B 的连接（分布式事务场景必然发生）
+}
+
+// ③ 批处理里循环借：外层流式查询（游标占用连接）内部再按 id 查明细
+@Transactional
+public void export() {
+    try (Stream&lt;Order&gt; s = repo.streamAll()) {   // 连接 1 被游标一直占着
+        s.forEach(o -&gt; detailRepo.findByOrderId(o.id));  // 每次再借 1 个
+    }
+}</code></pre>
+
+<p>第 ③ 种最隐蔽：<code>Stream</code> 查询在 MySQL 上要靠 <code>useCursorFetch</code> + 服务端游标，<strong>整个遍历期间连接不归还</strong>，而循环体里每查一次明细又借一个。池子小的时候（10 个），并发 10 个导出任务就死锁；池子大的时候（50 个），能扛到并发 50 才死。</p>
+
+<div class="box green">
+<div class="h">修法（按优先级）</div>
+<p><strong>1. 一个请求一个连接</strong>——<code>REQUIRES_NEW</code> 改成默认的 <code>REQUIRED</code>，内层复用外层事务的连接（同一线程、同一 DataSource，<code>DataSourceUtils</code> 会返回同一个 Connection）。</p>
+<p><strong>2. 传 Connection 而不是开新事务</strong>——确实需要跨方法共享时，把连接当参数传下去。</p>
+<p><strong>3. 别在事务里做流式遍历</strong>——分页查（limit/offset 或游标分片），把「长占坑」改成「多次短占坑」。</p>
+<p><strong>4. 真要两把锁，就统一加锁顺序</strong>——两个数据源按固定顺序借（先 A 后 B），至少不会和「先 B 后 A」的线程互锁。</p>
+</div>

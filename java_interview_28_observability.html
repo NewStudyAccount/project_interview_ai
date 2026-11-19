@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 面试深挖 28 · 可观测性：指标基数、分位数陷阱、Trace 断链</title>
+<style>
+:root{
+  --ink:#1a1d21; --ink2:#3d454e; --muted:#6b7683; --line:#e4e8ed; --line2:#d4dae1;
+  --bg:#ffffff; --panel:#f7f9fb; --panel2:#eef2f6;
+  --blue:#1a5fb4; --blue-soft:#e8f0fb;
+  --red:#c62828; --red-soft:#fdeceb;
+  --green:#1e7d3c; --green-soft:#e9f5ec;
+  --amber:#9a6400; --amber-soft:#fdf4e3;
+  --purple:#6a3fa0; --purple-soft:#f2ecfb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.78; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px; margin:0 auto; padding:0 28px 80px}
+.hero{padding:56px 0 30px; border-bottom:2px solid var(--ink)}
+.hero .kicker{font-size:12.5px; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; font-weight:600}
+.hero h1{margin:14px 0 10px; font-size:35px; line-height:1.26; letter-spacing:-.5px; font-weight:800}
+.hero .sub{color:var(--ink2); font-size:16.5px; max-width:820px}
+.hero .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+.tag{font-size:12.5px; padding:4px 11px; border-radius:999px; background:var(--panel2); color:var(--ink2); font-weight:600}
+.tag.b{background:var(--blue-soft); color:var(--blue)}
+.tag.r{background:var(--red-soft); color:var(--red)}
+.tag.g{background:var(--green-soft); color:var(--green)}
+.tag.a{background:var(--amber-soft); color:var(--amber)}
+
+h2{
+  margin:56px 0 18px; padding:14px 0 14px 18px; font-size:23px; font-weight:800; letter-spacing:-.2px;
+  border-left:4px solid var(--blue); background:linear-gradient(90deg,var(--blue-soft),transparent 62%);
+  border-radius:0 6px 6px 0;
+}
+h2 .n{display:inline-block; min-width:38px; color:var(--blue); font-variant-numeric:tabular-nums}
+h3{margin:32px 0 12px; font-size:17.5px; font-weight:750; color:var(--ink)}
+h3::before{content:""; display:inline-block; width:6px; height:6px; background:var(--blue); border-radius:1px; margin-right:9px; vertical-align:2px}
+p{margin:12px 0}
+strong{font-weight:700; color:#101418}
+em{font-style:normal; background:linear-gradient(transparent 62%, #ffe9a8 62%); padding:0 1px}
+code{font-family:"JetBrains Mono",Consolas,"Courier New",monospace; font-size:13px; background:var(--panel2);
+  padding:1.5px 5px; border-radius:4px; color:#a03060}
+.lead{font-size:16px; color:var(--ink2)}
+
+ul,ol{margin:12px 0; padding-left:22px}
+li{margin:7px 0}
+li::marker{color:var(--muted)}
+
+table{width:100%; border-collapse:collapse; margin:20px 0; font-size:13.5px; background:#fff}
+th{background:var(--panel2); text-align:left; padding:10px 12px; font-weight:700; border-bottom:2px solid var(--line2); font-size:13px}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:1px solid var(--line2)}
+td code{font-size:12.5px}
+.num{font-variant-numeric:tabular-nums}
+
+pre{
+  position:relative; margin:20px 0; padding:18px 18px 16px; background:#1c2128; color:#d7dde5;
+  border-radius:9px; overflow-x:auto; font-size:13px; line-height:1.68;
+  font-family:"JetBrains Mono",Consolas,"Courier New",monospace;
+}
+pre::before{content:attr(data-lang); position:absolute; top:0; right:0; font-size:10.5px; letter-spacing:.1em;
+  color:#7d8794; background:#252b33; padding:3px 10px; border-radius:0 9px 0 6px; text-transform:uppercase}
+pre code{background:none; padding:0; color:inherit; font-size:inherit}
+.k{color:#ff7b72}
+.s{color:#a5d6a7}
+.c{color:#8b949e; font-style:italic}
+.n{color:#79c0ff}
+
+figure{margin:26px 0; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:18px 18px 10px}
+figure svg{display:block; width:100%; height:auto}
+figcaption{margin-top:8px; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.6}
+figcaption b{color:var(--ink2)}
+
+.box{border-radius:9px; padding:14px 18px; margin:20px 0; border:1px solid var(--line2); background:var(--panel)}
+.box .h{font-weight:750; font-size:13.5px; letter-spacing:.02em; margin-bottom:6px; display:flex; align-items:center; gap:8px}
+.box p:last-child{margin-bottom:0}
+.box.blue{background:var(--blue-soft); border-color:#bcd4f2} .box.blue .h{color:var(--blue)}
+.box.red{background:var(--red-soft); border-color:#f3c9c6} .box.red .h{color:var(--red)}
+.box.green{background:var(--green-soft); border-color:#c2e2cc} .box.green .h{color:var(--green)}
+.box.amber{background:var(--amber-soft); border-color:#efd9ab} .box.amber .h{color:var(--amber)}
+.box.purple{background:var(--purple-soft); border-color:#d7c9ef} .box.purple .h{color:var(--purple)}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0}
+.card{background:#fff; border:1px solid var(--line); border-radius:9px; padding:14px 16px}
+.card .t{font-weight:750; font-size:14px; margin-bottom:5px; color:var(--ink)}
+.card .d{font-size:13px; color:var(--ink2); line-height:1.65}
+.card.r{border-top:3px solid var(--red)} .card.g{border-top:3px solid var(--green)}
+.card.b{border-top:3px solid var(--blue)} .card.a{border-top:3px solid var(--amber)}
+
+.qa{border-left:3px solid var(--line2); padding:2px 0 2px 16px; margin:18px 0}
+.qa .q{font-weight:750; color:var(--ink); font-size:14.5px}
+.qa .q::before{content:"Q "; color:var(--blue); font-weight:800}
+.qa .a{color:var(--ink2); font-size:14px; margin-top:5px}
+.qa .a::before{content:"A "; color:var(--green); font-weight:800}
+
+.mt{background:#fff; border:1px solid var(--line); border-radius:11px; padding:20px 22px; margin:24px 0}
+.mt .qh{font-weight:800; font-size:15.5px; margin-bottom:10px; color:var(--ink)}
+.mt .qh span{background:var(--ink); color:#fff; font-size:11.5px; padding:2px 8px; border-radius:4px; margin-right:9px; letter-spacing:.05em}
+.lv{margin-top:14px; padding:11px 14px; border-radius:7px; font-size:13.5px; line-height:1.7}
+.lv .lb{font-weight:750; font-size:12px; letter-spacing:.05em; margin-right:8px}
+.lv.l1{background:#fbeceb; border-left:3px solid #d9534f} .lv.l1 .lb{color:#c62828}
+.lv.l2{background:#fdf6e6; border-left:3px solid #d9a441} .lv.l2 .lb{color:#9a6400}
+.lv.l3{background:#eaf2fd; border-left:3px solid #4a86c8} .lv.l3 .lb{color:#1a5fb4}
+.lv.l4{background:#eaf6ee; border-left:3px solid #3f9b5c} .lv.l4 .lb{color:#1e7d3c}
+
+.foot{margin-top:70px; padding-top:26px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+.next{margin-top:26px; background:var(--panel2); border-radius:9px; padding:16px 20px; font-size:13.5px; color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <div class="kicker">Java 面试深挖 · 第 28 期</div>
+  <h1>可观测性：指标基数、分位数陷阱、Trace 断链</h1>
+  <div class="sub">
+    这一期回答一个每个人都吼过、但很少有人答利索的问题：<strong>"我本地测 P99 是 120ms，监控上 800ms，到底谁在撒谎？"</strong>答案往往不是谁撒谎，而是"P99"这三个字在两边指的不是同一个东西。全部数字来自本机真跑，包括那个能把 P99 报成真实值 <em>1.95 倍</em>的桶。
+  </div>
+  <div class="meta">
+    <span class="tag b">6 组实测·数字全可复现</span>
+    <span class="tag r">分位数平均低估 76.2%</span>
+    <span class="tag g">一条标签 → 8 万 series</span>
+    <span class="tag a">traceparent 55 字节</span>
+    <span class="tag">JDK 21.0.7 · Micrometer 1.16.7</span>
+  </div>
+</div>
+
+<p class="lead">前 27 期把语言、JVM、并发、框架、存储、字节码都过了一遍，唯独没讲"系统上线之后你怎么知道它在干什么"。这一期补上。可观测性最容易讲成"三支柱 + 上工具"，那是最没区分度的答法；有区分度的讲法是算账：一条标签值多少钱、一个桶宽值多少误差、一次线程池切换丢多少上下文。</p>
+
+<h2><span class="n">L0</span>先说结论：三种信号各答一个问题，谁都不能替谁</h2>
+
+<p>面试里被问"你们怎么做的可观测性"，答"接了 Prometheus + ELK + SkyWalking"基本等于没答。真正的分工是这样：</p>
+
+<table>
+<tr><th>信号</th><th>能回答</th><th>不能回答</th><th>一条数据的成本</th><th>天生的缺陷</th></tr>
+<tr><td><strong>Metrics</strong></td><td><strong>整体</strong>现在什么状态、趋势、要不要告警</td><td>这一次请求为什么慢</td><td>数百字节</td><td>聚合后个体消失</td></tr>
+<tr><td><strong>Logs</strong></td><td><strong>这一次</strong>请求发生了什么、变量是什么值</td><td>全局占比、趋势</td><td>数百字节到数 KB</td><td>无法聚合、量大</td></tr>
+<tr><td><strong>Traces</strong></td><td>这一次请求经过谁、各花多久</td><td>历史上是否一直这样</td><td>每 span 数百字节</td><td>必须采样</td></tr>
+</table>
+
+<p>三句话概括它们的宿命：</p>
+
+<ul>
+<li>指标是<strong>聚合后的数</strong>，所以它天生不知道自己由谁组成——这是分位数不能平均的根源。</li>
+<li>日志是<strong>个体</strong>，所以它天生无法回答"占比"——你能 grep 出 100 条报错，但不知道这是 100 条还是 10 万条里的 100 条。</li>
+<li>链路是<strong>关系</strong>，所以它天生必须采样——全量链路的数据量等于请求数乘节点数，没有公司扛得住。</li>
+</ul>
+
+<p>这三条"天生"决定了后面所有工程选择。看懂这一层，你就不会再问"为什么不能只用日志"或者"为什么链路不能 100% 采样"这种问题。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">三种信号的分工：每个只答一个问题，越界就错</text>
+
+  <rect x="24" y="34" width="260" height="30" rx="6" fill="#1a5fb4"/>
+  <text x="154" y="54" font-size="12.5" font-weight="700" fill="#ffffff" text-anchor="middle">Metrics · 指标</text>
+  <rect x="24" y="64" width="260" height="150" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="38" y="86" font-size="11" font-weight="700" fill="#1a5fb4">能答</text>
+  <text x="38" y="104" font-size="11" fill="#3d454e">整体状态、趋势、告警</text>
+  <text x="38" y="128" font-size="11" font-weight="700" fill="#c62828">不能答</text>
+  <text x="38" y="146" font-size="11" fill="#3d454e">这一次请求为什么慢</text>
+  <text x="38" y="170" font-size="11" font-weight="700" fill="#6b7683">成本</text>
+  <text x="38" y="188" font-size="11" fill="#3d454e">数百字节 / 条 series</text>
+  <text x="38" y="206" font-size="11" fill="#9a6400">缺陷：聚合后个体消失</text>
+
+  <rect x="320" y="34" width="260" height="30" rx="6" fill="#1e7d3c"/>
+  <text x="450" y="54" font-size="12.5" font-weight="700" fill="#ffffff" text-anchor="middle">Traces · 链路</text>
+  <rect x="320" y="64" width="260" height="150" rx="6" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="334" y="86" font-size="11" font-weight="700" fill="#1e7d3c">能答</text>
+  <text x="334" y="104" font-size="11" fill="#3d454e">经过了谁、各花多久</text>
+  <text x="334" y="128" font-size="11" font-weight="700" fill="#c62828">不能答</text>
+  <text x="334" y="146" font-size="11" fill="#3d454e">历史上是否一直这样</text>
+  <text x="334" y="170" font-size="11" font-weight="700" fill="#6b7683">成本</text>
+  <text x="334" y="188" font-size="11" fill="#3d454e">每 span 数百字节</text>
+  <text x="334" y="206" font-size="11" fill="#9a6400">缺陷：必须采样</text>
+
+  <rect x="616" y="34" width="260" height="30" rx="6" fill="#6a3fa0"/>
+  <text x="746" y="54" font-size="12.5" font-weight="700" fill="#ffffff" text-anchor="middle">Logs · 日志</text>
+  <rect x="616" y="64" width="260" height="150" rx="6" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="630" y="86" font-size="11" font-weight="700" fill="#6a3fa0">能答</text>
+  <text x="630" y="104" font-size="11" fill="#3d454e">这一次请求发生了什么</text>
+  <text x="630" y="128" font-size="11" font-weight="700" fill="#c62828">不能答</text>
+  <text x="630" y="146" font-size="11" fill="#3d454e">全局占比、趋势</text>
+  <text x="630" y="170" font-size="11" font-weight="700" fill="#6b7683">成本</text>
+  <text x="630" y="188" font-size="11" fill="#3d454e">数百字节 ~ 数 KB</text>
+  <text x="630" y="206" font-size="11" fill="#9a6400">缺陷：无法聚合、量大</text>
+
+  <rect x="24" y="230" width="852" height="40" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="38" y="248" font-size="11.5" font-weight="700" fill="#9a6400">第四类：Profiling（JFR / async-profiler）</text>
+  <text x="38" y="263" font-size="11" fill="#3d454e">它答的是"CPU 时间花在哪个方法上"，与前三种信号正交。面试时主动补这一句，说明架构视野不止三根柱子。</text>
+</svg>
+<figcaption><b>图 1</b>　三支柱不是"三个都要上"，而是三段分辨率：指标看趋势、链路看路径、日志看细节。中间那条红字是每种信号的死穴。</figcaption>
+</figure>
+
+<p>补一个常被忽略的第四类：<strong>Profiling（持续性能剖析）</strong>。它答的是"CPU 时间花在哪个方法上"，与前三者正交。JFR 的 <code>jdk.ExecutionSample</code> 就是这一类。</p>
+
+<h2><span class="n">L1</span>分位数不可平均：三个答案，只有一个是真话</h2>
+
+<p>先上数据。造两组请求：A 实例 10000 次（98% 在 50ms，2% 在 200ms），B 实例 200 次（全部 900ms）。这非常真实——A 是主力集群，B 是刚扩容的一台，或者是一个只接内部流量的旁路实例。</p>
+
+<pre data-lang="java"><code>double[] A = new double[10000];
+for (int i = 0; i &lt; 10000; i++)
+    A[i] = i &lt; 9800 ? 50 + r.nextDouble() * 2 : 200 + r.nextDouble() * 2;
+double[] B = new double[200];
+for (int i = 0; i &lt; 200; i++) B[i] = 900 + r.nextDouble() * 2;
+// 按 nearest-rank 取分位：idx = ceil(q * n) - 1</code></pre>
+
+<p>跑出来的结果：</p>
+
+<pre data-lang="text"><code>A: n=10000  P50=51.0  P99=201.0
+B: n=200    P50=901.1 P99=902.0
+平均两个 P99        = 551.5 ms
+加权平均(按请求数)  = 214.8 ms   &lt;-- 更离谱
+真实合并 P99        = 901.1 ms
+
+平均法低估 = 38.8%
+加权法低估 = 76.2%</code></pre>
+
+<p><strong>三个答案，差了三倍。</strong>最讽刺的是"加权平均"——很多人觉得"按请求数加权总该对了吧"，结果它比裸平均错得更狠，低估 76%。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">同一份数据，三种算法给出三个答案</text>
+
+  <text x="152" y="54" font-size="11" fill="#3d454e" text-anchor="end">A　n=10000</text>
+  <rect x="160" y="40" width="647" height="20" rx="3" fill="#cfe0f5"/>
+  <rect x="807" y="40" width="13" height="20" rx="3" fill="#f0b429"/>
+  <text x="828" y="54" font-size="11" fill="#3d454e">P99=201</text>
+  <text x="300" y="54" font-size="10" fill="#6b7683">98% 在 50ms</text>
+
+  <text x="152" y="86" font-size="11" fill="#3d454e" text-anchor="end">B　n=200</text>
+  <rect x="160" y="72" width="15" height="20" rx="3" fill="#f0b429"/>
+  <text x="828" y="86" font-size="11" fill="#3d454e">P99=902</text>
+  <text x="190" y="86" font-size="10" fill="#9a6400">只有 200 次，但全在 900ms：尾部 200 个位置被它整段占住</text>
+
+  <line x1="24" y1="110" x2="876" y2="110" stroke="#e4e8ed" stroke-width="1"/>
+
+  <text x="152" y="140" font-size="11" fill="#3d454e" text-anchor="end">平均两个 P99</text>
+  <rect x="170" y="126" width="276" height="20" rx="3" fill="#f0b429"/>
+  <text x="454" y="140" font-size="11" font-weight="700" fill="#9a6400">551.5　低估 38.8%</text>
+
+  <text x="152" y="180" font-size="11" fill="#3d454e" text-anchor="end">按请求数加权</text>
+  <rect x="170" y="166" width="107" height="20" rx="3" fill="#c62828"/>
+  <text x="285" y="180" font-size="11" font-weight="700" fill="#c62828">214.8　低估 76.2%</text>
+
+  <text x="152" y="220" font-size="11" fill="#3d454e" text-anchor="end">真实合并</text>
+  <rect x="170" y="206" width="450" height="20" rx="3" fill="#1e7d3c"/>
+  <text x="628" y="220" font-size="11" font-weight="700" fill="#1e7d3c">901.1</text>
+
+  <line x1="620" y1="120" x2="620" y2="234" stroke="#1e7d3c" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="624" y="248" font-size="10" fill="#1e7d3c">真值虚线</text>
+
+  <text x="24" y="278" font-size="11" fill="#6b7683">P99 不是"平均的边界"，而是"排序后第 99% 个位置上的那个值"。加权修正不了信息丢失：算之前分布就被压成了一个数。</text>
+</svg>
+<figcaption><b>图 2</b>　加权平均（214.8）比裸平均（551.5）错得更狠。因为真实的合并 P99 取决于<strong>排序后第 10098 个元素落在哪一组</strong>，而权重再准也恢复不了已经丢掉的分布信息。</figcaption>
+</figure>
+
+<p>为什么？因为 P99 不是"平均值"，它是<strong>排序后的第 99% 个位置上的那个值</strong>。加权平均算的是"两个边界值的加权中心"，而真实的合并 P99 取决于排序后第 10098 个元素落在哪一组。这里 B 的 200 个请求全部 900ms，覆盖了尾部 200 个位置，所以合并后的 P99 就是 901。权重再正确也算不出来——<strong>信息在算之前就已经丢了</strong>。</p>
+
+<p>顺手看 P50 有多荒唐：</p>
+
+<pre data-lang="text"><code>P50 平均=476.1   真实合并=51.0   偏差 -832.5%</code></pre>
+
+<p>平均两个 P50 得到 476ms，而真实中位数是 51ms。差了一个数量级。如果哪个 dashboard 真的这么算，你会以为系统整体慢了 9 倍。</p>
+
+<div class="box red">
+<div class="h">一句话带走</div>
+<p><strong>分位数是次序统计量，不是线性算子。</strong>凡是"先算分位再合并"的做法，数学上就是错的，跟权重、样本量、算法实现都没关系。这句话在面试里说出来，比背十个 PromQL 函数都管用。</p>
+</div>
+
+<h2><span class="n">L2</span>桶为什么能相加：累计计数是线性的</h2>
+
+<p>那 Prometheus 怎么解决这个问题？它不比"分位数"，它比<strong>桶（bucket）</strong>。</p>
+
+<p>一个 <code>le="200"</code> 的桶，含义是"耗时小于等于 200ms 的请求数"。注意这是<strong>累计计数</strong>，是个普通的整数。整数的加法是封闭的——五个数对应位置相加，合并后的桶<strong>精确等于</strong>把两组原始数据合在一起再统计的结果。</p>
+
+<figure>
+<svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">桶是累计计数，所以能逐行相加；分位数是边界值，所以不能</text>
+
+  <text x="139" y="38" font-size="11" font-weight="700" fill="#1a5fb4" text-anchor="middle">A 实例</text>
+  <text x="411" y="38" font-size="11" font-weight="700" fill="#6a3fa0" text-anchor="middle">B 实例</text>
+  <text x="718" y="38" font-size="11" font-weight="700" fill="#1e7d3c" text-anchor="middle">合并（逐行相加）</text>
+
+  <rect x="24" y="44" width="230" height="26" fill="#eef2f6"/>
+  <text x="34" y="61" font-size="10.5" font-weight="700" fill="#3d454e">le（ms）</text>
+  <text x="244" y="61" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="end">累计计数</text>
+  <rect x="24" y="70" width="230" height="26" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="34" y="87" font-size="10.5" fill="#3d454e">≤100</text><text x="244" y="87" font-size="10.5" fill="#3d454e" text-anchor="end">9800</text>
+  <rect x="24" y="96" width="230" height="26" fill="#fafbfc" stroke="#e4e8ed"/>
+  <text x="34" y="113" font-size="10.5" fill="#3d454e">≤200</text><text x="244" y="113" font-size="10.5" fill="#3d454e" text-anchor="end">10000</text>
+  <rect x="24" y="122" width="230" height="26" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="34" y="139" font-size="10.5" fill="#3d454e">≤500</text><text x="244" y="139" font-size="10.5" fill="#3d454e" text-anchor="end">10000</text>
+  <rect x="24" y="148" width="230" height="26" fill="#fafbfc" stroke="#e4e8ed"/>
+  <text x="34" y="165" font-size="10.5" fill="#3d454e">≤1000</text><text x="244" y="165" font-size="10.5" fill="#3d454e" text-anchor="end">10000</text>
+  <rect x="24" y="174" width="230" height="26" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="34" y="191" font-size="10.5" fill="#3d454e">+Inf</text><text x="244" y="191" font-size="10.5" fill="#3d454e" text-anchor="end">10000</text>
+
+  <text x="272" y="136" font-size="18" font-weight="700" fill="#6b7683" text-anchor="middle">＋</text>
+
+  <rect x="296" y="44" width="230" height="26" fill="#eef2f6"/>
+  <text x="306" y="61" font-size="10.5" font-weight="700" fill="#3d454e">le（ms）</text>
+  <text x="516" y="61" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="end">累计计数</text>
+  <rect x="296" y="70" width="230" height="26" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="306" y="87" font-size="10.5" fill="#3d454e">≤100</text><text x="516" y="87" font-size="10.5" fill="#3d454e" text-anchor="end">0</text>
+  <rect x="296" y="96" width="230" height="26" fill="#fafbfc" stroke="#e4e8ed"/>
+  <text x="306" y="113" font-size="10.5" fill="#3d454e">≤200</text><text x="516" y="113" font-size="10.5" fill="#3d454e" text-anchor="end">0</text>
+  <rect x="296" y="122" width="230" height="26" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="306" y="139" font-size="10.5" fill="#3d454e">≤500</text><text x="516" y="139" font-size="10.5" fill="#3d454e" text-anchor="end">0</text>
+  <rect x="296" y="148" width="230" height="26" fill="#fafbfc" stroke="#e4e8ed"/>
+  <text x="306" y="165" font-size="10.5" fill="#3d454e">≤1000</text><text x="516" y="165" font-size="10.5" fill="#3d454e" text-anchor="end">200</text>
+  <rect x="296" y="174" width="230" height="26" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="306" y="191" font-size="10.5" fill="#3d454e">+Inf</text><text x="516" y="191" font-size="10.5" fill="#3d454e" text-anchor="end">200</text>
+
+  <text x="544" y="136" font-size="16" font-weight="700" fill="#6b7683" text-anchor="middle">＝</text>
+
+  <rect x="568" y="44" width="300" height="26" fill="#eef2f6"/>
+  <text x="578" y="61" font-size="10.5" font-weight="700" fill="#3d454e">le（ms）</text>
+  <text x="858" y="61" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="end">合并后计数</text>
+  <rect x="568" y="70" width="300" height="26" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="578" y="87" font-size="10.5" fill="#3d454e">≤100</text><text x="858" y="87" font-size="10.5" fill="#3d454e" text-anchor="end">9800</text>
+  <rect x="568" y="96" width="300" height="26" fill="#fafbfc" stroke="#e4e8ed"/>
+  <text x="578" y="113" font-size="10.5" fill="#3d454e">≤200</text><text x="858" y="113" font-size="10.5" fill="#3d454e" text-anchor="end">10000</text>
+  <rect x="568" y="122" width="300" height="26" fill="#ffffff" stroke="#e4e8ed"/>
+  <text x="578" y="139" font-size="10.5" fill="#3d454e">≤500</text><text x="858" y="139" font-size="10.5" fill="#3d454e" text-anchor="end">10000</text>
+  <rect x="568" y="148" width="300" height="26" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="578" y="165" font-size="10.5" font-weight="700" fill="#1e7d3c">≤1000</text><text x="858" y="165" font-size="10.5" font-weight="700" fill="#1e7d3c" text-anchor="end">10200</text>
+  <rect x="568" y="174" width="300" height="26" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="578" y="191" font-size="10.5" font-weight="700" fill="#1e7d3c">+Inf</text><text x="858" y="191" font-size="10.5" font-weight="700" fill="#1e7d3c" text-anchor="end">10200</text>
+
+  <text x="24" y="222" font-size="11" fill="#3d454e">+Inf 桶相加后 10200 = 实际请求总数 10200 —— 没有丢一个样本，这就是"可合并"的硬证据。</text>
+  <text x="24" y="240" font-size="10.5" fill="#9a6400">反向验证：若这里对不上（比如 9,800），说明某一边的 +Inf 桶被丢弃或超时截断，任何分位计算都不可信。</text>
+</svg>
+<figcaption><b>图 3</b>　桶是"累计计数的五个整数"，位置相加即等价于合并原始数据。这张图就是 PromQL 里 <code>sum by (le)</code> 能先于 <code>histogram_quantile</code> 执行的全部原因。</figcaption>
+</figure>
+
+<p>真实 Micrometer + Prometheus 导出的验证（两个 registry 各自记录、各自 scrape，再相加）：</p>
+
+<pre data-lang="text"><code>A 桶数 69  B 桶数 69
+A 单实例 P99 = 197.3 ms ; B 单实例 P99 = 983.4 ms
+桶相加后合并 P99 = 938.6 ms   （真实 901.0，误差 +4.2%）
++Inf 桶总数 = 10200 ; 实际请求数 = 10200</code></pre>
+
+<p>两个关键点：</p>
+
+<ol>
+<li><code>+Inf</code> 桶加起来正好等于 10200，说明桶的加法没有丢样本——这是"可合并"的硬证据。</li>
+<li>合并结果 938.6 而不是 901.0，误差 4.2% 来自桶宽和插值，但<strong>方向和量级都对</strong>。相比之下，平均分位数法的 551.5 已经错到不能看了。</li>
+</ol>
+
+<p>PromQL 里正确的写法只有一个形状：</p>
+
+<pre data-lang="promql"><code>histogram_quantile(0.99,
+  sum by (le) (rate(http_server_requests_seconds_bucket[5m]))
+)</code></pre>
+
+<p>顺序不能反：<strong>先 <code>sum by (le)</code> 把桶加起来，再 <code>histogram_quantile</code></strong>。写成 <code>avg(histogram_quantile(0.99, ...))</code> 就回到了 L1 的错误里，只不过这次是 Prometheus 帮你犯的。</p>
+
+<p>面试到这里通常会被追问一句："那 <code>sum by (le) (rate(...))</code> 里的 <code>rate</code> 为什么能先做？"——因为 <code>rate</code> 是对<strong>同一个桶的时间序列</strong>做线性运算（差分除以秒数），它作用在单条 series 上，不跨 series 合并，所以没问题。一旦跨 series 就要先对齐再做非线性运算，这是 PromQL 的基本纪律。</p>
+
+<h2><span class="n">L3</span>桶宽就是误差上限：510ms 那个实验</h2>
+
+<p>桶能合并，但桶有精度。这里有个反直觉的事实：<strong>误差不取决于算法，只取决于桶边界画在哪。</strong></p>
+
+<p>造一份极端数据：10000 个请求全部 510ms。真实 P99 = 510ms。然后换三套桶：</p>
+
+<figure>
+<svg viewBox="0 0 900 240" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">同一份数据（全在 510ms），换个桶边界，P99 从 519 变成 995</text>
+
+  <text x="24" y="38" font-size="10.5" font-weight="700" fill="#1e7d3c">真值 510ms</text>
+  <line x1="191.6" y1="44" x2="191.6" y2="206" stroke="#1e7d3c" stroke-width="1.4" stroke-dasharray="5 3"/>
+
+  <text x="24" y="66" font-size="10.5" fill="#3d454e">桶 [500,1000]</text>
+  <rect x="180" y="52" width="580" height="20" rx="3" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <circle cx="754.2" cy="62" r="5" fill="#c62828" stroke="#ffffff" stroke-width="1.4"/>
+  <text x="775" y="66" font-size="11" font-weight="700" fill="#c62828">995.0 ms　+95.1%</text>
+
+  <text x="24" y="126" font-size="10.5" fill="#3d454e">桶 [500,600,1000]</text>
+  <rect x="180" y="112" width="116" height="20" rx="3" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <rect x="296" y="112" width="464" height="20" rx="3" fill="#f7f9fb" stroke="#bcd4f2"/>
+  <circle cx="294.8" cy="122" r="5" fill="#c62828" stroke="#ffffff" stroke-width="1.4"/>
+  <text x="775" y="126" font-size="11" font-weight="700" fill="#9a6400">599.0 ms　+17.5%</text>
+
+  <text x="24" y="186" font-size="10.5" fill="#3d454e">桶 [500,520,600,1000]</text>
+  <rect x="180" y="172" width="23.2" height="20" rx="3" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <rect x="203.2" y="172" width="92.8" height="20" rx="3" fill="#f7f9fb" stroke="#bcd4f2"/>
+  <rect x="296" y="172" width="464" height="20" rx="3" fill="#f7f9fb" stroke="#bcd4f2"/>
+  <circle cx="203" cy="182" r="5" fill="#1e7d3c" stroke="#ffffff" stroke-width="1.4"/>
+  <text x="775" y="186" font-size="11" font-weight="700" fill="#1e7d3c">519.8 ms　+1.9%</text>
+
+  <line x1="180" y1="210" x2="760" y2="210" stroke="#6b7683" stroke-width="1"/>
+  <line x1="180" y1="205" x2="180" y2="215" stroke="#6b7683" stroke-width="1"/>
+  <text x="180" y="230" font-size="10" fill="#6b7683" text-anchor="middle">500</text>
+  <line x1="296" y1="205" x2="296" y2="215" stroke="#6b7683" stroke-width="1"/>
+  <text x="296" y="230" font-size="10" fill="#6b7683" text-anchor="middle">600</text>
+  <line x1="412" y1="205" x2="412" y2="215" stroke="#6b7683" stroke-width="1"/>
+  <text x="412" y="230" font-size="10" fill="#6b7683" text-anchor="middle">700</text>
+  <line x1="528" y1="205" x2="528" y2="215" stroke="#6b7683" stroke-width="1"/>
+  <text x="528" y="230" font-size="10" fill="#6b7683" text-anchor="middle">800</text>
+  <line x1="644" y1="205" x2="644" y2="215" stroke="#6b7683" stroke-width="1"/>
+  <text x="644" y="230" font-size="10" fill="#6b7683" text-anchor="middle">900</text>
+  <line x1="760" y1="205" x2="760" y2="215" stroke="#6b7683" stroke-width="1"/>
+  <text x="760" y="230" font-size="10" fill="#6b7683" text-anchor="middle">1000 ms</text>
+</svg>
+<figcaption><b>图 4</b>　红点是"算法报出来的 P99 落在哪"（桶内均匀假设下的插值结果），绿虚线是真实值。桶越窄，红点越贴近绿线——<strong>误差与算法无关，只与桶宽有关</strong>。</figcaption>
+</figure>
+
+<pre data-lang="text"><code>桶 [500, 1000]                P99 = 995.0 ms   误差 +95.1%
+桶 [500, 600, 1000]           P99 = 599.0 ms   误差 +17.5%
+桶 [500, 520, 600, 1000]      P99 = 519.8 ms   误差  +1.9%</code></pre>
+
+<p>同一份数据，同一个 <code>histogram_quantile</code> 算法，报出来 995 / 599 / 519.8。</p>
+
+<p>原因在插值公式：落在 <code>(500, 1000]</code> 这个桶里时，算法只能<strong>假设桶内均匀分布</strong>，然后按比例线性插值。真实数据全挤在桶的左边缘 510，插值却把它摊到了 99% 的位置，于是算出 995。</p>
+
+<p>这条实验给出三条可直接用的规则：</p>
+
+<div class="grid3">
+  <div class="card b"><div class="t">规则一：误差 ≈ 桶宽 ÷ 落点</div><div class="d">桶 <code>(500,1000]</code> 宽 500，落点 510，比值接近 1，误差能到 95%。桶 <code>(500,520]</code> 宽 20，比值 0.04，误差 1.9%。<strong>拿这条公式反推桶宽即可。</strong></div></div>
+  <div class="card a"><div class="t">规则二：SLO 边界必须是桶边界</div><div class="d">SLO 是"P99 小于 200ms"，但最近桶是 <code>(100,500]</code>，那么报 199 和报 499 在监控上完全一样——<strong>你根本无法判定 SLO</strong>。</div></div>
+  <div class="card g"><div class="t">规则三：默认桶不一定适配</div><div class="d">Micrometer 默认导 1ms~10s 的指数桶（实测 69 个 <code>le</code>）。对一个 P99 只有 3ms 的本地缓存调用，所有请求挤在最小两个桶里，P99 就变成"桶边界值"。</div></div>
+</div>
+
+<p>定制方式就是显式给 SLO 边界：</p>
+
+<pre data-lang="java"><code>Timer.builder("order.submit")
+     .publishPercentileHistogram()
+     .serviceLevelObjectives(
+         Duration.ofMillis(50), Duration.ofMillis(100),
+         Duration.ofMillis(200), Duration.ofMillis(500),
+         Duration.ofMillis(1000))
+     .register(registry);</code></pre>
+
+<p>顺便提一个真实存在的坑：<code>.publishPercentileHistogram()</code> 加上 <code>serviceLevelObjectives</code> 时，Micrometer 是<strong>取并集</strong>而不是替换——所以你会看到 69 个桶而不是 5 个。想让桶变少，得把 <code>publishPercentileHistogram()</code> 关掉——那就干脆没有桶了，只剩客户端分位数，回到 L4 的坑里。这个取舍没有免费选项。</p>
+
+<h2><span class="n">L4</span>客户端分位数：一个看起来能用、实际是陷阱的开关</h2>
+
+<p>Micrometer 还有另一个开关：<code>publishPercentiles(0.5, 0.99)</code>。它不导桶，它在 <strong>JVM 内部算好分位数</strong>，然后把结果当成一条带 <code>quantile</code> 标签的时间序列导出去。</p>
+
+<pre data-lang="java"><code>Timer.builder("api_latency").publishPercentiles(0.5, 0.99).register(reg);</code></pre>
+
+<p>实测导出长这样：</p>
+
+<pre data-lang="text"><code># TYPE api_latency_seconds summary
+api_latency_seconds{quantile="0.5"} 0.050331648
+api_latency_seconds{quantile="0.99"} 0.19922944
+# TYPE api_latency_seconds_max gauge</code></pre>
+
+<p>看起来很美：只有一个数，存储便宜，还能直接告警。但它有两个致命缺陷，都是结构性的：</p>
+
+<div class="grid2">
+  <div class="card r"><div class="t">缺陷一：quantile 是标签，不是指标名</div><div class="d">Prometheus 里 <code>sum()</code> 只能合并<strong>同一个指标名</strong>下的不同 series。你可以写 <code>sum(api_latency_seconds)</code>，但那是在把 P50 和 P99 加起来——毫无意义。想"合并两个实例的 P99"，语法上根本不存在。</div></div>
+  <div class="card r"><div class="t">缺陷二：值在客户端算，重启清零</div><div class="d">桶是累计计数，重启后从 0 涨，趋势连续；而客户端直方图是<strong>滑动窗口</strong>（Micrometer 默认 <code>TimeWindowPercentileHistogram</code>），重启即空。发布时你会看到 P99 从 200ms "改善"到 5ms 再爬回去——那是样本不够。</div></div>
+</div>
+
+<p>所以结论很干脆：<strong><code>publishPercentiles</code> 只能用于单实例调试或本地压测</strong>。生产环境只要是多副本，就必须走直方图。</p>
+
+<p>那为什么这个 API 还存在？因为有些场景确实没有多实例聚合需求，比如单机批处理任务、本地 benchmark。工具没错，错的是把它用在分布式场景。</p>
+
+<p>还有一个中间态值得知道：<strong>t-digest / DDSketch</strong> 这类"可合并的 sketch"。它们把分位数编码成一个可加的数据结构，能跨实例合并且误差可控（t-digest 相对误差约 1%）。代价是要把 sketch 序列化成二进制 blob 再传，Prometheus 的文本协议塞不进去，所以主流做法是走 OTLP 的 <strong>exponential histogram</strong>（OpenTelemetry 规范里定义的第 4 类指标点）。面试里能说出"exponential histogram 是可合并 sketch 在 OTel 里的落地"，属于加分项。</p>
+
+<h2><span class="n">L5</span>标签基数：一条 userId 能把 Prometheus 和自己一起打挂</h2>
+
+<p>这是可观测性线上事故的第一名，比 OOM 和死锁都常见，因为它是<strong>无声</strong>的——没人改代码逻辑，只是给指标多加了两个标签。</p>
+
+<p>先算乘法。一个 HTTP 接口指标，标签组合数等于各标签取值数的<strong>乘积</strong>：</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">基数不是加法，是乘法：每加一个高基数标签，series 数乘一次</text>
+
+  <rect x="30" y="52" width="136" height="58" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="98" y="80" font-size="18" font-weight="700" fill="#1a1d21" text-anchor="middle">10</text>
+  <text x="98" y="98" font-size="10" fill="#6b7683" text-anchor="middle">uri 维度</text>
+
+  <text x="186" y="78" font-size="11" font-weight="700" fill="#6b7683" text-anchor="middle">×4</text>
+
+  <rect x="206" y="52" width="136" height="58" rx="7" fill="#ffffff" stroke="#d4dae1"/>
+  <text x="274" y="80" font-size="18" font-weight="700" fill="#1a1d21" text-anchor="middle">40</text>
+  <text x="274" y="98" font-size="10" fill="#6b7683" text-anchor="middle">uri × status</text>
+
+  <text x="362" y="78" font-size="11" font-weight="700" fill="#9a6400" text-anchor="middle">×100</text>
+
+  <rect x="382" y="52" width="136" height="58" rx="7" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="450" y="80" font-size="18" font-weight="700" fill="#9a6400" text-anchor="middle">4,000</text>
+  <text x="450" y="98" font-size="10" fill="#9a6400" text-anchor="middle">+ userId 100 个</text>
+
+  <text x="538" y="78" font-size="11" font-weight="700" fill="#c62828" text-anchor="middle">×20</text>
+
+  <rect x="558" y="52" width="136" height="58" rx="7" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="626" y="80" font-size="18" font-weight="700" fill="#c62828" text-anchor="middle">80,000</text>
+  <text x="626" y="98" font-size="10" fill="#c62828" text-anchor="middle">+ userId 2000 个</text>
+
+  <text x="714" y="78" font-size="11" font-weight="700" fill="#c62828" text-anchor="middle">×50</text>
+
+  <rect x="734" y="52" width="136" height="58" rx="7" fill="#c62828"/>
+  <text x="802" y="80" font-size="17" font-weight="700" fill="#ffffff" text-anchor="middle">400 万</text>
+  <text x="802" y="98" font-size="10" fill="#ffe3e0" text-anchor="middle">userId 10 万个</text>
+
+  <line x1="24" y1="130" x2="876" y2="130" stroke="#e4e8ed" stroke-width="1"/>
+
+  <text x="24" y="152" font-size="11" font-weight="700" fill="#3d454e">按 750 B/条（客户端实测）</text>
+  <text x="250" y="152" font-size="11" fill="#3d454e">40 → 0.03 MB　4,000 → 3.7 MB　80,000 → 57 MB　400 万 → 3.0 GB</text>
+
+  <text x="24" y="176" font-size="11" font-weight="700" fill="#3d454e">按 3.5 KB/条（服务端经验值）</text>
+  <text x="250" y="176" font-size="11" fill="#3d454e">40 → 0.14 MB　4,000 → 14 MB　80,000 → 280 MB　400 万 → 14 GB</text>
+
+  <text x="24" y="200" font-size="11" font-weight="700" fill="#3d454e">按 63.9 B/条（scrape 文本实测）</text>
+  <text x="250" y="200" font-size="11" fill="#3d454e">80,000 → 5.1 MB/次　400 万 → 256 MB/次（15 秒一次）</text>
+
+  <rect x="24" y="220" width="852" height="60" rx="7" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="38" y="240" font-size="11.5" font-weight="700" fill="#c62828">谁先死？</text>
+  <text x="38" y="258" font-size="11" fill="#3d454e">JVM 先 OOM（3.0 GB 堆只装一个指标）→ 服务 502；随后 Prometheus 也 OOM / 抓取超时（14 GB）。</text>
+  <text x="38" y="273" font-size="11" fill="#3d454e">典型现象：服务本身 QPS 正常，但监控 target 全 DOWN —— 你会误以为服务挂了，其实是监控自己噎住了。</text>
+</svg>
+<figcaption><b>图 5</b>　"加个 userId 方便查问题"是这套体系里最贵的一句话。40 → 400 万，乘了 10 万倍，而每次乘法都不需要改一行业务逻辑。</figcaption>
+</figure>
+
+<p>实测三个档位（<code>PrometheusMeterRegistry</code> + 逐个建 counter，<code>Runtime</code> 前后差值）：</p>
+
+<pre data-lang="text"><code>只有 uri × status        series=    40   堆增量= 1.4 MB   scrape=   2.1 KB
+加了 userId（100 个）    series= 4,000   堆增量= 3.7 MB   scrape= 249.7 KB
+加了 userId（2000 个）   series=80,000   堆增量=57.4 MB   scrape=5113.0 KB</code></pre>
+
+<p>三点解读：</p>
+
+<p><strong>第一，单条 series 的客户端成本约 750 字节。</strong><code>4,000 → 965 B/条</code>、<code>80,000 → 753 B/条</code>，规模上去后稳定在 750 左右。第一行 40 条算出 37KB/条纯属噪声——那是 registry 初始化的固定开销，不是 series 的成本。<em>这也是个方法论提醒：小样本测单条成本，测出来的永远是初始化开销。</em></p>
+
+<p><strong>第二，服务端的成本比客户端高一个数量级。</strong>Prometheus 官方文档给的经验值是每条活跃 series 3~4KB（head block 里的 label 索引 + postings + 时间序列元数据）。按 3.5KB 算，8 万条 = 280MB；400 万条 = <strong>14GB</strong>，还没算磁盘上的 chunk 和倒排索引。一个中等规格的 Prometheus（16GB 内存）会被这一个指标打死。</p>
+
+<p><strong>第三，scrape 文本体积是隐藏的带宽账。</strong>8 万条 series 一次 scrape 出来 5.1MB 文本。Prometheus 默认 15 秒抓一次：</p>
+
+<pre data-lang="text"><code>5.1 MB × 4 次/分钟  = 20.5 MB/分钟
+20.5 MB × 1440      = 约 29.5 GB/天（单个 pod）
+100 个 pod          = 约 2.95 TB/天（纯文本传输）</code></pre>
+
+<p>这还没算 JSON 解析的 CPU。Prometheus 抓不过来的典型表现是 <code>scrape timeout</code>、<code>context deadline exceeded</code>，然后 target 变 DOWN，然后你以为服务挂了，其实服务好好的——只是监控自己噎住了。</p>
+
+<figure>
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">对数刻度：每一格是 10 倍，400 万那一档已经不是"多一点"的量级</text>
+
+  <text x="190" y="78" font-size="11" fill="#3d454e" text-anchor="end">40 条</text>
+  <rect x="200" y="60" width="48" height="26" rx="3" fill="#cfe0f5"/>
+  <text x="256" y="78" font-size="10.5" fill="#6b7683">scrape 2.1 KB　堆 ~0（初始化噪声）</text>
+
+  <text x="190" y="128" font-size="11" fill="#3d454e" text-anchor="end">4,000 条</text>
+  <rect x="200" y="110" width="208" height="26" rx="3" fill="#9cc3ec"/>
+  <text x="416" y="128" font-size="10.5" fill="#3d454e">scrape 250 KB　堆 3.7 MB</text>
+
+  <text x="190" y="178" font-size="11" fill="#3d454e" text-anchor="end">80,000 条</text>
+  <rect x="200" y="160" width="312" height="26" rx="3" fill="#f0b429"/>
+  <text x="520" y="178" font-size="10.5" fill="#9a6400">scrape 5.1 MB　堆 57 MB</text>
+
+  <text x="190" y="228" font-size="11" font-weight="700" fill="#c62828" text-anchor="end">400 万条</text>
+  <rect x="200" y="210" width="448" height="26" rx="3" fill="#c62828"/>
+  <text x="656" y="228" font-size="10.5" font-weight="700" fill="#c62828">scrape 256 MB</text>
+  <text x="656" y="248" font-size="10" fill="#c62828">堆 3.0 GB · 服务端 14 GB</text>
+
+  <line x1="200" y1="272" x2="680" y2="272" stroke="#6b7683" stroke-width="1"/>
+  <line x1="200" y1="267" x2="200" y2="277" stroke="#6b7683" stroke-width="1"/>
+  <text x="200" y="292" font-size="9.5" fill="#6b7683" text-anchor="middle">10</text>
+  <line x1="280" y1="267" x2="280" y2="277" stroke="#6b7683" stroke-width="1"/>
+  <text x="280" y="292" font-size="9.5" fill="#6b7683" text-anchor="middle">100</text>
+  <line x1="360" y1="267" x2="360" y2="277" stroke="#6b7683" stroke-width="1"/>
+  <text x="360" y="292" font-size="9.5" fill="#6b7683" text-anchor="middle">1k</text>
+  <line x1="440" y1="267" x2="440" y2="277" stroke="#6b7683" stroke-width="1"/>
+  <text x="440" y="292" font-size="9.5" fill="#6b7683" text-anchor="middle">10k</text>
+  <line x1="520" y1="267" x2="520" y2="277" stroke="#6b7683" stroke-width="1"/>
+  <text x="520" y="292" font-size="9.5" fill="#6b7683" text-anchor="middle">100k</text>
+  <line x1="600" y1="267" x2="600" y2="277" stroke="#6b7683" stroke-width="1"/>
+  <text x="600" y="292" font-size="9.5" fill="#6b7683" text-anchor="middle">1M</text>
+  <line x1="680" y1="267" x2="680" y2="277" stroke="#6b7683" stroke-width="1"/>
+  <text x="680" y="292" font-size="9.5" fill="#6b7683" text-anchor="middle">10M</text>
+
+  <text x="700" y="292" font-size="10" fill="#6b7683">series 数</text>
+</svg>
+<figcaption><b>图 6</b>　用对数轴才能把"40 条"和"400 万条"放进同一张图。注意 scrape 体积是<strong>线性</strong>长的（63.9 B/条），所以 400 万条时单次抓取就是 256MB——这不是"慢一点"，是直接超时。</figcaption>
+</figure>
+
+<p><strong>四类绝对不能进标签的值</strong>（记住这四条，比记十个最佳实践有用）：</p>
+
+<table>
+<tr><th>类型</th><th>例子</th><th>为什么会炸</th><th>正确做法</th></tr>
+<tr><td>用户/请求标识</td><td><code>userId</code>、<code>orderId</code>、<code>traceId</code></td><td>基数等于用户数</td><td>放 exemplar 或日志</td></tr>
+<tr><td>原始 URL</td><td><code>/order/123456</code></td><td>基数等于订单数</td><td>用模板 <code>/order/{id}</code></td></tr>
+<tr><td>异常消息</td><td><code>msg="timeout after 3000ms"</code></td><td>基数等于错误种类 × 参数组合</td><td>用 <code>error.type</code> 枚举</td></tr>
+<tr><td>时间戳/随机数</td><td><code>ts</code>、<code>uuid</code></td><td>每次请求都是新 series</td><td>永远不要</td></tr>
+</table>
+
+<p>最后那条"traceId 放 exemplar"值得单独说一句，因为它是这些年的正确答案：Prometheus 2.26+ 支持 exemplar，一条 metric sample 上可以挂一个 <code>(traceId, spanId)</code> 的标注，不参与 series 身份计算。这样你在 Grafana 上看到一个 P99 尖刺，点一下就能跳到对应那条链路——<strong>既有指标的成本，又有链路的关联</strong>。这就是"指标与链路的缝合点"。</p>
+
+<div class="box green">
+<div class="h">面试话术</div>
+<p>"我们给指标标签做过基数预算，所有标签取值域的乘积必须小于 1 万，超了就拆指标名或者改 exemplar。userId 这种一定进 exemplar 不进 label。"——一句话就能证明你被这个坑咬过。</p>
+</div>
+
+<h2><span class="n">L6</span>Trace 断链之一：线程池把 MDC 和 ThreadLocal 一起吃了</h2>
+
+<p>链路追踪在生产上失效，九成不是探针没埋，而是<strong>上下文没跟着线程走</strong>。</p>
+
+<p>先做一个最小复现。主线程放三样东西：MDC（日志上下文）、普通 ThreadLocal、InheritableThreadLocal。然后丢进单线程池执行两次，中间改一次主线程的值。</p>
+
+<pre data-lang="java"><code>MDC.put("traceId", "abc123");
+TL.set("tl-abc123");
+ITL.set("itl-abc123");
+System.out.println("池内第1次  " + pool.submit(Exp4Mdc::probe).get());
+MDC.put("traceId", "def456");   // 主线程换上下文
+TL.set("tl-def456");
+ITL.set("itl-def456");
+System.out.println("池内第2次  " + pool.submit(Exp4Mdc::probe).get());</code></pre>
+
+<pre data-lang="text"><code>主线程     MDC=abc123  TL=tl-abc123  ITL=itl-abc123
+池内第1次  MDC=null    TL=null       ITL=itl-abc123  @pool-1-thread-1
+池内第2次  MDC=null    TL=null       ITL=itl-abc123  @pool-1-thread-1   &lt;-- 脏值
+包裹后     MDC=def456  TL=null       ITL=itl-abc123  @pool-1-thread-1</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">上下文存在 Thread 对象里，而线程被复用 —— 表跟着被复用，值却不跟着更新</text>
+
+  <rect x="40" y="40" width="400" height="64" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="56" y="62" font-size="11.5" font-weight="700" fill="#1a5fb4">主线程</text>
+  <text x="56" y="84" font-size="10.5" fill="#3d454e">MDC=abc123　TL=tl-abc123　ITL=itl-abc123</text>
+
+  <line x1="240" y1="104" x2="240" y2="130" stroke="#6b7683" stroke-width="1.4"/>
+  <polygon points="240,136 235,126 245,126" fill="#6b7683"/>
+  <text x="252" y="122" font-size="10" fill="#6b7683">submit(task)</text>
+
+  <rect x="40" y="136" width="400" height="56" rx="7" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="56" y="158" font-size="11.5" font-weight="700" fill="#3d454e">阻塞队列</text>
+  <text x="56" y="178" font-size="10.5" fill="#6b7683">任务对象只带了代码，没带任何 ThreadLocal</text>
+
+  <line x1="240" y1="192" x2="240" y2="218" stroke="#c62828" stroke-width="1.4" stroke-dasharray="4 3"/>
+  <polygon points="240,224 235,214 245,214" fill="#c62828"/>
+  <text x="252" y="210" font-size="10" fill="#c62828">上下文在这里断掉</text>
+
+  <rect x="40" y="224" width="400" height="60" rx="7" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="56" y="246" font-size="11.5" font-weight="700" fill="#c62828">池内线程 #1（复用，永不重新 new）</text>
+  <text x="56" y="268" font-size="10.5" fill="#c62828">MDC=null　TL=null　ITL=itl-abc123（上一轮的脏值）</text>
+
+  <rect x="468" y="40" width="408" height="244" rx="7" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="484" y="62" font-size="11.5" font-weight="700" fill="#1a1d21">为什么三个都丢</text>
+  <text x="484" y="86" font-size="10.5" fill="#3d454e">① MDC 底层就是 ThreadLocal，存在 Thread 里</text>
+  <text x="484" y="108" font-size="10.5" fill="#3d454e">② 新线程的 ThreadLocalMap 是空的 → 取到 null</text>
+  <text x="484" y="130" font-size="10.5" fill="#3d454e">③ InheritableThreadLocal 只在 new Thread() 时拷贝</text>
+  <text x="484" y="152" font-size="10.5" fill="#3d454e">④ 池化 = 复用线程 → 拷贝时机早已过去</text>
+  <text x="484" y="174" font-size="10.5" font-weight="700" fill="#c62828">⑤ 所以第 2 次拿到的是"上一次的旧值"</text>
+  <text x="484" y="196" font-size="10.5" fill="#3d454e">null 还能靠空指针发现；脏值会把日志串成</text>
+  <text x="484" y="214" font-size="10.5" fill="#3d454e">别人的链路，排查时把人直接带沟里。</text>
+  <text x="484" y="244" font-size="10" fill="#6b7683">实测环境：JDK 21.0.7 · logback 1.5.38</text>
+  <text x="484" y="262" font-size="10" fill="#6b7683">单线程池 newFixedThreadPool(1)，两次 submit</text>
+
+  <text x="24" y="306" font-size="11" font-weight="700" fill="#1e7d3c">三种修法：</text>
+  <rect x="110" y="292" width="180" height="26" rx="5" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="200" y="309" font-size="10.5" fill="#1e7d3c" text-anchor="middle">TaskDecorator（Spring）</text>
+  <rect x="302" y="292" width="190" height="26" rx="5" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="397" y="309" font-size="10.5" fill="#1e7d3c" text-anchor="middle">ContextSnapshot（OTel）</text>
+  <rect x="504" y="292" width="230" height="26" rx="5" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="619" y="309" font-size="10.5" fill="#1e7d3c" text-anchor="middle">手动快照 + finally 还原</text>
+  <text x="746" y="309" font-size="10" fill="#6b7683">本质都是"快照—恢复"</text>
+</svg>
+<figcaption><b>图 7</b>　断链发生在"队列 → 工作线程"这一跳。注意第 2 次是<strong>脏值</strong>而不是 null——这是 InheritableThreadLocal 在生产里最坑的地方：它让你以为能用了。</figcaption>
+</figure>
+
+<p>三个结论，一个比一个狠：</p>
+
+<ol>
+<li><strong>MDC 和 ThreadLocal 直接是 <code>null</code>。</strong>因为它们都是"每线程一份"的 <code>ThreadLocalMap</code> 里的条目，新线程的表是空的。</li>
+<li><strong>InheritableThreadLocal 第一次能用</strong>（<code>itl-abc123</code>），因为 <code>Thread</code> 构造时会从父线程拷贝。看起来是解药。</li>
+<li><strong>第二次就中毒了。</strong>主线程已经改成 <code>itl-def456</code>，可池里的线程还是 <code>itl-abc123</code>——因为线程被复用，<code>Thread</code> 对象根本没重新构造，拷贝时机早就过去了。<em>这就是 InheritableThreadLocal 在池化场景下从"能用"变成"更危险"的原因：它给的不是 null，是错的旧值。</em></li>
+</ol>
+
+<p>为什么 1 和 2 差这么多？看 <code>Thread</code> 的构造就知道：</p>
+
+<pre data-lang="java"><code>// Thread 构造里（简化）
+if (inheritThreadLocals &amp;&amp; parent.inheritableThreadLocals != null)
+    this.inheritableThreadLocals = ThreadLocal.createInheritedMap(parent.inheritableThreadLocals);</code></pre>
+
+<p>拷贝只发生在 <code>new Thread()</code> 这一刻。线程池的线程是<strong>复用</strong>的，一辈子只 new 一次。</p>
+
+<p>修复方案有三层，按侵入性从低到高：</p>
+
+<p><strong>方案一：<code>TaskDecorator</code>（Spring 提供，最省事）</strong></p>
+
+<pre data-lang="java"><code>@Bean
+public TaskDecorator mdcDecorator() {
+    return runnable -&gt; {
+        Map&lt;String, String&gt; snapshot = MDC.getCopyOfContextMap();   // 快照
+        return () -&gt; {
+            Map&lt;String, String&gt; old = MDC.getCopyOfContextMap();
+            if (snapshot != null) MDC.setContextMap(snapshot); else MDC.clear();
+            try { runnable.run(); }
+            finally {                      // 必须还原，否则污染下一个任务
+                if (old != null) MDC.setContextMap(old); else MDC.clear();
+            }
+        };
+    };
+}
+
+// 挂上去
+ThreadPoolTaskExecutor exec = new ThreadPoolTaskExecutor();
+exec.setTaskDecorator(mdcDecorator());</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 240" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">修复的本质：不是"继承"，是"提交时快照 + 执行前恢复 + 结束时还原"</text>
+
+  <rect x="30" y="56" width="240" height="76" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="46" y="78" font-size="11.5" font-weight="700" fill="#1a5fb4">① 提交时快照</text>
+  <text x="46" y="100" font-size="10.5" fill="#3d454e">MDC.getCopyOfContextMap()</text>
+  <text x="46" y="120" font-size="10" fill="#6b7683">在调用方线程里做，此刻上下文还在</text>
+
+  <line x1="270" y1="94" x2="316" y2="94" stroke="#6b7683" stroke-width="1.4"/>
+  <polygon points="322,94 312,89 312,99" fill="#6b7683"/>
+
+  <rect x="330" y="56" width="240" height="76" rx="7" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="346" y="78" font-size="11.5" font-weight="700" fill="#9a6400">② 执行前设置</text>
+  <text x="346" y="100" font-size="10.5" fill="#3d454e">setContextMap(snapshot)</text>
+  <text x="346" y="120" font-size="10" fill="#9a6400">同时把线程上的旧值存进 old</text>
+
+  <line x1="570" y1="94" x2="616" y2="94" stroke="#6b7683" stroke-width="1.4"/>
+  <polygon points="622,94 612,89 612,99" fill="#6b7683"/>
+
+  <rect x="630" y="56" width="240" height="76" rx="7" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="646" y="78" font-size="11.5" font-weight="700" fill="#1e7d3c">③ finally 还原</text>
+  <text x="646" y="100" font-size="10.5" fill="#3d454e">setContextMap(old) 或 clear()</text>
+  <text x="646" y="120" font-size="10" fill="#1e7d3c">还回去，而不是清空</text>
+
+  <rect x="24" y="150" width="852" height="52" rx="7" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="38" y="170" font-size="11" font-weight="700" fill="#c62828">为什么 finally 必须是"还原 old"而不是"clear()"？</text>
+  <text x="38" y="190" font-size="10.5" fill="#3d454e">因为线程是共享资源。你 clear 掉的可能是上一个任务/外层框架留下的东西，也可能是自己都没意识到的外层上下文。判断标准：这段代码是不是"借用"了共享资源？是就要还。</text>
+
+  <text x="24" y="222" font-size="10.5" fill="#6b7683">同一个模式在别处的化身：事务的挂起/恢复、Thread.setContextClassLoader 的成对使用、AQS 的 acquire/release —— 都是"借用—归还"，不是"覆盖—清空"。</text>
+</svg>
+<figcaption><b>图 8</b>　三段式不是风格问题，是正确性问题。少了 ③，你就会在下一次提交时读到别人的 traceId——比 null 更坏。</figcaption>
+</figure>
+
+<p>注意 <code>finally</code> 里是<strong>还原</strong>而不是 <code>clear</code>。因为线程复用，你 clear 掉的可能不是自己的东西；正确姿势是"进来时存旧值、出去时还回去"，跟事务的挂起/恢复一个道理。</p>
+
+<p><strong>方案二：OTel 的 <code>ContextSnapshot</code> / <code>Context.wrap()</code>（跨线程传播 trace 的正确做法）</strong></p>
+
+<pre data-lang="java"><code>Context ctx = Context.current().with(Span.current());
+Runnable wrapped = ctx.wrap(() -&gt; doWork());   // 执行时自动 attach/detach
+executor.submit(wrapped);</code></pre>
+
+<p>它的实现方式和方案一结构一样（wrap 就是 decorator），但它顺带把 <code>Baggage</code>、<code>Span</code> 一起带过去了，而且 <code>attach/detach</code> 是成对的，不会漏。</p>
+
+<p><strong>方案三：虚拟线程场景要换思路。</strong>虚拟线程数量可以到百万级，每个线程复制一份 ThreadLocal 是实打实的内存（第 13 期算过：100 万虚拟线程 × 1KB ThreadLocal ≈ 1GB）。JDK 25 正式化的 <code>ScopedValue</code>（JEP 506）就是为此设计的：它是<strong>不可变、按作用域绑定</strong>的，没有"每线程复制"这回事。在虚拟线程 + 结构化并发的代码里，<code>ScopedValue</code> 比 ThreadLocal 更合适——但注意它不可变，所以不适合"过程中还要改值"的场景。</p>
+
+<div class="box blue">
+<div class="h">一句话总结</div>
+<p><strong>上下文传播的本质是"快照—恢复"，不是"继承"。</strong>继承只看创建时刻，快照看提交时刻，而请求上下文恰恰是提交时刻才确定的。</p>
+</div>
+
+<h2><span class="n">L7</span>Trace 断链之二：MQ 是异步边界，也是上下文黑洞</h2>
+
+<p>线程池是同一进程内的边界，MQ 是跨进程的边界。两者的失效机理不一样：线程池丢的是 <code>ThreadLocalMap</code>，MQ 丢的是 <strong>header</strong>。</p>
+
+<p>标准的 W3C Trace Context 就一个头：<code>traceparent</code>。格式固定 55 个字符：</p>
+
+<figure>
+<svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">traceparent 只有 55 个字符，长度是固定的 —— 所以它能被任何语言、任何中间件稳定透传</text>
+
+  <text x="74" y="80" font-size="10.5" font-weight="700" fill="#6b7683" text-anchor="middle">version</text>
+  <text x="74" y="94" font-size="9.5" fill="#6b7683" text-anchor="middle">2</text>
+  <text x="329" y="80" font-size="10.5" font-weight="700" fill="#1a5fb4" text-anchor="middle">traceId　32 hex = 16 字节</text>
+  <text x="329" y="94" font-size="9.5" fill="#6b7683" text-anchor="middle">全链路唯一，整条 trace 共用</text>
+  <text x="683" y="80" font-size="10.5" font-weight="700" fill="#1e7d3c" text-anchor="middle">spanId　16 hex = 8 字节</text>
+  <text x="683" y="94" font-size="9.5" fill="#6b7683" text-anchor="middle">当前这一段自己的编号</text>
+  <text x="825" y="80" font-size="10.5" font-weight="700" fill="#9a6400" text-anchor="middle">flags</text>
+  <text x="825" y="94" font-size="9.5" fill="#c62828" text-anchor="middle">采样</text>
+
+  <rect x="60" y="102" width="28" height="44" rx="3" fill="#eef2f6" stroke="#d4dae1"/>
+  <rect x="102" y="102" width="454" height="44" rx="3" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <rect x="570" y="102" width="227" height="44" rx="3" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <rect x="811" y="102" width="28" height="44" rx="3" fill="#fdf4e3" stroke="#efd9ab"/>
+
+  <text x="74" y="130" font-size="10.5" fill="#3d454e" text-anchor="middle">00</text>
+  <text x="329" y="130" font-size="10.5" fill="#1a5fb4" text-anchor="middle">fbeb5af0bde7eadf9f48b2d1318a1e61</text>
+  <text x="683" y="130" font-size="10.5" fill="#1e7d3c" text-anchor="middle">149e3bb7f24c1b14</text>
+  <text x="825" y="130" font-size="10.5" fill="#9a6400" text-anchor="middle">01</text>
+
+  <text x="95" y="128" font-size="11" fill="#6b7683" text-anchor="middle">-</text>
+  <text x="563" y="128" font-size="11" fill="#6b7683" text-anchor="middle">-</text>
+  <text x="804" y="128" font-size="11" fill="#6b7683" text-anchor="middle">-</text>
+
+  <text x="60" y="168" font-size="10" fill="#6b7683">↑ 2 + 1 + 32 + 1 + 16 + 1 + 2 = 55</text>
+
+  <text x="24" y="196" font-size="11" fill="#3d454e">① flags 最低位 = 采样标记（01 = sampled），沿链路透传：全链路要么全记，要么全不记。</text>
+  <text x="24" y="216" font-size="11" fill="#3d454e">② 20 跳累计 header 体积 = 55 × 20 = 1100 字节；3 万 QPS 时全链路 33 MB/s 的纯 header 流量。</text>
+  <text x="24" y="236" font-size="11" fill="#c62828">③ 全零 traceId / spanId 格式合法但语义非法，必须丢弃 —— 正则查不出来，要额外判一次。</text>
+</svg>
+<figcaption><b>图 9</b>　55 字节的固定格式是它能"跨语言跨中间件"的原因。真正会丢的不是格式，而是中间件替你重建消息时把 header 一起扔了。</figcaption>
+</figure>
+
+<pre data-lang="text"><code>长度 = 55 字符, ASCII 字节数 = 55
+字段 = version(2) + traceId(32) + spanId(16) + flags(2)
+2 + 1 + 32 + 1 + 16 + 1 + 2 = 55
+解析: version=00 traceId=fbeb5af0...8a1e61 spanId=149e3bb7f24c1b14 flags=01 sampled=true
+全零 traceId 格式合法? true  但规范要求丢弃 -&gt; true</code></pre>
+
+<p>三个细节值得记住：</p>
+
+<ol>
+<li><strong>flags 的最低位是采样标记</strong>（<code>01</code> = sampled）。这个位决定了这条链路后续所有节点要不要记录——head sampling 的"决定"就写在这 2 个 hex 里。</li>
+<li><strong>全零的 traceId / spanId 是格式合法但语义非法的</strong>，必须丢弃。正则校验通不过这一关，得额外判一次。这是规范明确要求的。</li>
+<li><strong>55 字节看着小，乘起来不小</strong>：20 跳链路累计 1100 字节 header。3 万 QPS 时全链路累计 33MB/s 的纯 header 流量。所以 baggage（业务自定义透传）一定要设上限——OTel 规范建议 8KB，实际项目里 1KB 就该报警了，因为 baggage 会随 fan-out 放大。</li>
+</ol>
+
+<figure>
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">消费端要不要"续"trace？两种语义，两个答案</text>
+
+  <rect x="24" y="34" width="414" height="264" rx="8" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="42" y="58" font-size="11.5" font-weight="700" fill="#1e7d3c">续 trace —— 同步语义</text>
+  <text x="42" y="76" font-size="10" fill="#6b7683">下单 → 扣库存：同一次业务动作</text>
+
+  <rect x="60" y="88" width="340" height="40" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="76" y="113" font-size="10.5" fill="#3d454e">生产者　traceId=T　spanId=A1</text>
+  <line x1="230" y1="128" x2="230" y2="146" stroke="#6b7683" stroke-width="1.3"/>
+  <polygon points="230,152 225,142 235,142" fill="#6b7683"/>
+  <rect x="60" y="152" width="340" height="40" rx="6" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="76" y="177" font-size="10.5" fill="#3d454e">Broker　header: 00-T-A1-01</text>
+  <line x1="230" y1="192" x2="230" y2="210" stroke="#6b7683" stroke-width="1.3"/>
+  <polygon points="230,216 225,206 235,206" fill="#6b7683"/>
+  <rect x="60" y="216" width="340" height="40" rx="6" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="76" y="241" font-size="10.5" fill="#1e7d3c">消费者　traceId=T　spanId=B1　parent=A1</text>
+  <text x="42" y="278" font-size="10" fill="#1e7d3c">✓ 一条 trace 贯穿，时间轴连续可读</text>
+
+  <rect x="462" y="34" width="414" height="264" rx="8" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="480" y="58" font-size="11.5" font-weight="700" fill="#6a3fa0">Span Link —— 异步解耦</text>
+  <text x="480" y="76" font-size="10" fill="#6b7683">发通知、算报表、异步补偿：几小时后才跑</text>
+
+  <rect x="498" y="88" width="340" height="40" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="514" y="113" font-size="10.5" fill="#3d454e">生产者　traceId=T　spanId=A1</text>
+  <line x1="668" y1="128" x2="668" y2="146" stroke="#6b7683" stroke-width="1.3"/>
+  <polygon points="668,152 663,142 673,142" fill="#6b7683"/>
+  <rect x="498" y="152" width="340" height="40" rx="6" fill="#eef2f6" stroke="#d4dae1"/>
+  <text x="514" y="177" font-size="10.5" fill="#3d454e">Broker　header 保留 A1 的引用</text>
+  <line x1="668" y1="192" x2="668" y2="210" stroke="#6b7683" stroke-width="1.3"/>
+  <polygon points="668,216 663,206 673,206" fill="#6b7683"/>
+  <rect x="498" y="216" width="340" height="40" rx="6" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="514" y="241" font-size="10.5" fill="#6a3fa0">消费者　traceId=U（新）　link → A1</text>
+  <text x="480" y="278" font-size="10" fill="#6a3fa0">✓ 两条 trace，用 link 关联，不污染时间轴</text>
+</svg>
+<figcaption><b>图 10</b>　"MQ 后面必须续 trace"是错的一半。异步解耦场景续 trace 会让一条链路横跨几小时，Jaeger 时间轴被拉成一条直线，什么也看不出来。</figcaption>
+</figure>
+
+<p>生产上真正会踩的四个坑：</p>
+
+<p><strong>坑一：只注入了 <code>traceparent</code>，没注入 <code>tracestate</code>。</strong> <code>tracestate</code> 是厂商扩展位（比如各家的采样优先级），长度可变、最多 32 个 entry。丢了它，跨厂商链路会断在中间。</p>
+
+<p><strong>坑二：批量消费时一个 span 对 N 条消息。</strong>Kafka 一次 <code>poll()</code> 拿 500 条，如果你只给整批开一个 span，出问题时你不知道是哪条消息慢。正确做法是每条消息一个 child span，<code>links</code> 指回批次 span（OTel 的 Span Link 就是为这个设计的）。</p>
+
+<p><strong>坑三：重试和死信队列丢 header。</strong>消息进 DLQ 时，很多中间件会重建消息体，自定义 header 就没了。RabbitMQ 的 <code>x-death</code> 会保留一部分，Kafka 的 DLQ 通常要自己复制 header。<em>排查"为什么 DLQ 里的消息链路全断"时，先查这里。</em></p>
+
+<p><strong>坑四：消费者要不要"续"trace？</strong>两种选择，语义不同：</p>
+
+<table>
+<tr><th>选择</th><th>做法</th><th>适用</th></tr>
+<tr><td>续 trace</td><td>用消息里的 traceId，parent 设成生产者 spanId</td><td>同步语义（下单 → 扣库存）</td></tr>
+<tr><td>起新 trace</td><td>新 traceId，用 Span Link 关联生产消息</td><td>异步解耦（发通知、算报表）</td></tr>
+</table>
+
+<p>面试里被问"MQ 后面链路怎么串"，答"必须续 trace"是错的——异步解耦的场景续 trace 会让一条 trace 横跨几小时，把 Jaeger 的时间轴拉成一条线，什么也看不出来。<strong>正确答案是分场景，并且说出 Span Link 这个工具。</strong></p>
+
+<h2><span class="n">L8</span>采样：三种采样的冲突与一个必算的数字</h2>
+
+<table>
+<tr><th>方式</th><th>在哪决定</th><th>优点</th><th>致命缺点</th></tr>
+<tr><td>Head sampling</td><td>请求入口（写进 flags）</td><td>零成本、无状态</td><td>决策时还不知道结果，错误/慢请求照样被丢</td></tr>
+<tr><td>Tail sampling</td><td>Collector（攒够窗口再决定）</td><td>能按结果采样：错误全留、慢请求全留</td><td>要缓存整条链路，内存账很贵</td></tr>
+<tr><td>日志采样</td><td>Appender</td><td>省磁盘</td><td>与链路采样策略不一致，对不上号</td></tr>
+</table>
+
+<p>算一个必算的数字，用来打醒"1% 采样够了"的幻想：</p>
+
+<pre data-lang="text"><code>head sampling = 1%，错误率 = 0.1%
+要观察到 1 条错误 trace，需要请求数 = 1 / (0.001 × 0.01) = 100,000 次</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">同样是 10 万次请求、0.1% 错误率，你能看到的错误 trace 数量差 100 倍</text>
+
+  <text x="188" y="74" font-size="11" fill="#3d454e" text-anchor="end">head 1%</text>
+  <rect x="200" y="58" width="6" height="24" rx="2" fill="#f0b429"/>
+  <text x="216" y="75" font-size="11" font-weight="700" fill="#9a6400">1 条　几乎不可能命中</text>
+
+  <text x="188" y="124" font-size="11" fill="#3d454e" text-anchor="end">head 5%</text>
+  <rect x="200" y="108" width="30" height="24" rx="2" fill="#f0b429"/>
+  <text x="240" y="125" font-size="11" font-weight="700" fill="#9a6400">5 条　勉强能看趋势，看不清个案</text>
+
+  <text x="188" y="174" font-size="11" font-weight="700" fill="#1e7d3c" text-anchor="end">错误 100%</text>
+  <rect x="200" y="158" width="600" height="24" rx="2" fill="#1e7d3c"/>
+  <text x="808" y="175" font-size="11" font-weight="700" fill="#1e7d3c">100 条</text>
+  <text x="212" y="175" font-size="10.5" fill="#ffffff">tail sampling：错误 + 慢请求 + 调试白名单全留，其余 1%</text>
+
+  <line x1="200" y1="206" x2="800" y2="206" stroke="#6b7683" stroke-width="1"/>
+  <line x1="200" y1="201" x2="200" y2="211" stroke="#6b7683" stroke-width="1"/>
+  <text x="200" y="226" font-size="9.5" fill="#6b7683" text-anchor="middle">0</text>
+  <line x1="350" y1="201" x2="350" y2="211" stroke="#6b7683" stroke-width="1"/>
+  <text x="350" y="226" font-size="9.5" fill="#6b7683" text-anchor="middle">25</text>
+  <line x1="500" y1="201" x2="500" y2="211" stroke="#6b7683" stroke-width="1"/>
+  <text x="500" y="226" font-size="9.5" fill="#6b7683" text-anchor="middle">50</text>
+  <line x1="650" y1="201" x2="650" y2="211" stroke="#6b7683" stroke-width="1"/>
+  <text x="650" y="226" font-size="9.5" fill="#6b7683" text-anchor="middle">75</text>
+  <line x1="800" y1="201" x2="800" y2="211" stroke="#6b7683" stroke-width="1"/>
+  <text x="800" y="226" font-size="9.5" fill="#6b7683" text-anchor="middle">100 条</text>
+
+  <rect x="24" y="240" width="852" height="46" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="38" y="258" font-size="10.5" fill="#3d454e">tail sampling 的代价：30 秒窗口、5000 QPS、20 span/链路、1.5KB/span → 在途数据 4.5 GB，必须按 traceId 哈希分片，</text>
+  <text x="38" y="275" font-size="10.5" fill="#3d454e">否则每个 collector 实例都缓存全量，成本直接乘实例数。</text>
+</svg>
+<figcaption><b>图 11</b>　head sampling 的结构性缺陷：它<strong>按比例</strong>采样，而故障<strong>按稀有度</strong>分布。这两件事天然不匹配，所以生产必须用"错误/慢请求 100% + 正常按比例"的组合策略。</figcaption>
+</figure>
+
+<p>10 万次请求才捞到一条错误样本。1 万 QPS 的话是 10 秒——看起来还行。但如果你要排查的是"某个特定用户的某个特定接口偶发失败"，发生率可能是百万分之一，那就要 1 亿次请求。<strong>这就是 head sampling 在故障排查上的结构性缺陷：它按比例采样，而故障按稀有度分布。</strong></p>
+
+<p>所以生产标准配置是<strong>组合采样</strong>：</p>
+
+<pre data-lang="text"><code>错误请求（status&gt;=500 或 exception） → 100%
+慢请求（&gt; P99 阈值）                 → 100%
+调试用户（特定 header / 白名单）     → 100%
+其余                                → 1%~5%</code></pre>
+
+<p>这就是 tail sampling 的典型策略，但它有成本。算 buffer 账：</p>
+
+<pre data-lang="text"><code>假设 30 秒窗口、5000 QPS、每链路 20 个 span、每 span 序列化后 1.5KB
+在途数据量 = 30 × 5000 × 20 × 1.5KB = 4.5 GB</code></pre>
+
+<p>4.5GB 的 collector 内存只为了"等 30 秒再决定"。所以 tail sampling 必须<strong>分片部署</strong>（按 traceId 哈希路由到同一个 collector 实例），否则每个实例都要缓存全量，成本乘实例数。这一层能说出来，面试官就知道你真上过。</p>
+
+<p>还有一条容易被忽略的：<strong>采样率不一致会导致指标和链路对不上</strong>。链路 1% 采样，指标 100% 统计，你在 Grafana 上看到 QPS 1000，在 Jaeger 里只找到 10 条 trace。这不是 bug，是采样。<em>回答"为什么我的 trace 数量比监控少这么多"时，这就是标准答案。</em></p>
+
+<h2><span class="n">L9</span>日志开销：CPU 几乎不花钱，真正花钱的是另外三样</h2>
+
+<p>先拆穿一个流传很广的说法——"打日志很慢，会影响性能"。实测一下（logback 1.5.38 + slf4j 2.0.17，root 级别 INFO，debug 关闭，appender 用 <code>NOPAppender</code> 排除 IO 干扰）：</p>
+
+<pre data-lang="java"><code>// 四种写法，各跑 20 万次
+for (int i = 0; i &lt; N; i++) log.debug("user=" + expensive() + " done");        // 裸拼
+for (int i = 0; i &lt; N; i++) log.debug("user={} done", expensive());            // 参数化
+for (int i = 0; i &lt; N; i++) if (log.isDebugEnabled()) log.debug("user={}", expensive());  // 守卫
+for (int i = 0; i &lt; N; i++) log.debug("user={} done", i);                      // 对照组</code></pre>
+
+<pre data-lang="text"><code>debug 是否开启 = false
+裸拼字符串            217.8 ns/次
+参数化 {}              64.2 ns/次
+isDebugEnabled         21.4 ns/次
+参数化(常量参)          9.4 ns/次     &lt;-- 基线
+expensive() 本身       22.7 ns/次</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">debug 关闭时的真实代价：裸拼是基线的 23 倍，但绝对值只有 218 纳秒</text>
+
+  <text x="168" y="76" font-size="11" fill="#3d454e" text-anchor="end">参数化(常量参)</text>
+  <rect x="180" y="60" width="24.2" height="24" rx="2" fill="#1e7d3c"/>
+  <text x="212" y="77" font-size="10.5" fill="#1e7d3c">9.4 ns　基线（纯循环开销）</text>
+
+  <text x="168" y="126" font-size="11" fill="#3d454e" text-anchor="end">isDebugEnabled</text>
+  <rect x="180" y="110" width="55" height="24" rx="2" fill="#6a3fa0"/>
+  <text x="243" y="127" font-size="10.5" fill="#6a3fa0">21.4 ns　守卫本身要花 12 ns</text>
+
+  <text x="168" y="176" font-size="11" fill="#3d454e" text-anchor="end">参数化 {}</text>
+  <rect x="180" y="160" width="165" height="24" rx="2" fill="#f0b429"/>
+  <text x="353" y="177" font-size="10.5" fill="#9a6400">64.2 ns　含参数求值 22.7 ns</text>
+
+  <text x="168" y="226" font-size="11" font-weight="700" fill="#c62828" text-anchor="end">裸拼字符串</text>
+  <rect x="180" y="210" width="560" height="24" rx="2" fill="#c62828"/>
+  <text x="748" y="227" font-size="10.5" font-weight="700" fill="#c62828">217.8 ns</text>
+
+  <text x="24" y="252" font-size="10.5" fill="#6b7683">3 万 QPS 连打一年？不，先算一天：217.8 ns × 30000 = 6.5 ms/s = 0.65% 单核 —— CPU 从来不是瓶颈。</text>
+</svg>
+<figcaption><b>图 12</b>　紫色那根是本期最反直觉的一格：<strong>参数便宜时，加 <code>if (isDebugEnabled())</code> 反而更慢</strong>（21.4 &gt; 9.4）。守卫只在"参数求值很贵"时才划算。</figcaption>
+</figure>
+
+<p>四个结论，第三个是反直觉的：</p>
+
+<p><strong>第一，裸拼的代价是基线的 23 倍（217.8 / 9.4）。</strong>因为它无条件构造 <code>StringBuilder</code>、逐段 append、最后 <code>toString()</code>，然后再被 logger 丢掉。这条大家都知道。</p>
+
+<p><strong>第二，参数化的 64.2ns 里，22.7ns 是 <code>expensive()</code> 自己的成本</strong>，剩下约 41ns 是 <code>Object[]</code> 数组分配 + <code>int</code> 装箱 + 调用开销。注意：<em>参数化并不会省掉"参数求值"</em>，它只省掉"字符串拼接"。所以 <code>log.debug("x={}", slowQuery())</code> 在 debug 关闭时仍然会执行 <code>slowQuery()</code>——这是最常见的误解。</p>
+
+<p><strong>第三，参数便宜时，<code>isDebugEnabled()</code> 守卫反而更慢。</strong>守卫 21.4ns，直接参数化传常量只有 9.4ns。也就是说，为了省一次字符串拼接而加一层 <code>if</code>，在参数本身很便宜（字面量、已算好的变量）的场景下是<strong>净亏 12ns</strong>。守卫只在"参数求值很贵"时才划算——这里省下的是 64.2 − 21.4 = <strong>42.8ns</strong>。</p>
+
+<p>所以正确的取舍是：</p>
+
+<pre data-lang="text"><code>参数很贵（查库、序列化、拼 JSON）  -&gt; 加 isDebugEnabled 守卫
+参数很便宜（变量、常量）           -&gt; 直接 {} 参数化，别加守卫</code></pre>
+
+<p><strong>第四，CPU 根本不是瓶颈。</strong>3 万 QPS 下打得最狠的裸拼也就 <code>30000 × 217.8ns = 6.5ms/s</code>，<strong>0.65% 的单核</strong>。所以"日志拖慢 CPU"是个伪命题。真正的成本在另外三处：</p>
+
+<table>
+<tr><th>成本</th><th>账</th><th>后果</th></tr>
+<tr><td>内存分配</td><td>裸拼一次约 120B 垃圾，3 万 QPS = 3.6MB/s，<strong>约 13GB/小时</strong></td><td>年轻代 GC 次数上升，P99 抖动</td></tr>
+<tr><td>同步 IO</td><td>同步 appender 每写一行都要拿锁 + 写盘</td><td>磁盘抖动时业务线程跟着卡</td></tr>
+<tr><td>磁盘</td><td>单行 500B × 3 万 QPS = 15MB/s = <strong>1.3TB/天</strong></td><td>日志盘三天写满</td></tr>
+</table>
+
+<p>第三行才是真实事故：<strong>15MB/s 的日志写入，任何一台普通云盘的持续写能力都会被吃掉大半</strong>。</p>
+
+<p>异步 appender 是解药，但它自带一个静默失效的坑：</p>
+
+<pre data-lang="xml"><code>&lt;appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender"&gt;
+  &lt;queueSize&gt;1024&lt;/queueSize&gt;
+  &lt;discardingThreshold&gt;0&lt;/discardingThreshold&gt;   &lt;!-- 0 = 不丢弃 --&gt;
+  &lt;neverBlock&gt;true&lt;/neverBlock&gt;                  &lt;!-- 队列满时直接丢 --&gt;
+&lt;/appender&gt;</code></pre>
+
+<ul>
+<li><code>queueSize</code> 默认只有 256（很小）。</li>
+<li><code>discardingThreshold</code> 默认是队列容量的 20%——也就是说<strong>队列用到 80% 时，INFO 和 DEBUG 级别的日志会被无声丢弃</strong>。这是"日志少了"最常见的原因，而且不会报任何错。</li>
+<li><code>neverBlock=true</code> 换成"队列满就丢"，好处是绝不阻塞业务，坏处是<strong>丢在你最需要日志的时刻</strong>（流量洪峰）。</li>
+</ul>
+
+<p>取舍很清楚：要么可能阻塞业务，要么可能丢日志。<strong>生产建议 <code>queueSize</code> 拉到 8192~16384、<code>discardingThreshold=0</code>，然后用监控盯住 appender 的队列长度</strong>——这本身就该是一个指标。</p>
+
+<h2><span class="n">L10</span>"我的 P99 和监控对不上"：五步归因法</h2>
+
+<p>这是可观测性最经典的面试题，也是最容易答散的一题。给一个固定顺序，逐层排除：</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">五步归因：按这个顺序排，差异一定能落到某一层</text>
+
+  <rect x="20" y="46" width="160" height="86" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="100" y="66" font-size="11.5" font-weight="700" fill="#1a5fb4" text-anchor="middle">① 计时口径</text>
+  <text x="100" y="86" font-size="9.5" fill="#3d454e" text-anchor="middle">含不含排队、序列化、</text>
+  <text x="100" y="100" font-size="9.5" fill="#3d454e" text-anchor="middle">网络、事务提交</text>
+  <text x="100" y="122" font-size="10.5" font-weight="700" fill="#c62828" text-anchor="middle">3 ~ 10 倍</text>
+
+  <text x="190" y="80" font-size="12" fill="#6b7683" text-anchor="middle">→</text>
+
+  <rect x="200" y="46" width="160" height="86" rx="7" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="280" y="66" font-size="11.5" font-weight="700" fill="#1a5fb4" text-anchor="middle">② 统计窗口</text>
+  <text x="280" y="86" font-size="9.5" fill="#3d454e" text-anchor="middle">1 分钟瞬时 vs 5 分钟</text>
+  <text x="280" y="100" font-size="9.5" fill="#3d454e" text-anchor="middle">滑动 vs 一小时平均</text>
+  <text x="280" y="122" font-size="10.5" font-weight="700" fill="#c62828" text-anchor="middle">2 ~ 5 倍</text>
+
+  <text x="370" y="80" font-size="12" fill="#6b7683" text-anchor="middle">→</text>
+
+  <rect x="380" y="46" width="160" height="86" rx="7" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="460" y="66" font-size="11.5" font-weight="700" fill="#9a6400" text-anchor="middle">③ 聚合范围</text>
+  <text x="460" y="86" font-size="9.5" fill="#3d454e" text-anchor="middle">单实例 vs 全局</text>
+  <text x="460" y="100" font-size="9.5" fill="#3d454e" text-anchor="middle">全局必须桶合并</text>
+  <text x="460" y="122" font-size="10.5" font-weight="700" fill="#c62828" text-anchor="middle">1 ~ 5 倍</text>
+
+  <text x="550" y="80" font-size="12" fill="#6b7683" text-anchor="middle">→</text>
+
+  <rect x="560" y="46" width="160" height="86" rx="7" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="640" y="66" font-size="11.5" font-weight="700" fill="#9a6400" text-anchor="middle">④ 谁是服务端</text>
+  <text x="640" y="86" font-size="9.5" fill="#3d454e" text-anchor="middle">客户端 / 服务端 / 网关</text>
+  <text x="640" y="100" font-size="9.5" fill="#3d454e" text-anchor="middle">三者各计一段</text>
+  <text x="640" y="122" font-size="10.5" font-weight="700" fill="#9a6400" text-anchor="middle">+ 一个 RTT</text>
+
+  <text x="730" y="80" font-size="12" fill="#6b7683" text-anchor="middle">→</text>
+
+  <rect x="740" y="46" width="140" height="86" rx="7" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="810" y="66" font-size="11.5" font-weight="700" fill="#c62828" text-anchor="middle">⑤ 采样与桶宽</text>
+  <text x="810" y="86" font-size="9.5" fill="#3d454e" text-anchor="middle">链路采样率、</text>
+  <text x="810" y="100" font-size="9.5" fill="#3d454e" text-anchor="middle">直方图桶边界</text>
+  <text x="810" y="122" font-size="10.5" font-weight="700" fill="#c62828" text-anchor="middle">1.2 ~ 2 倍</text>
+
+  <rect x="20" y="156" width="860" height="60" rx="7" fill="#f7f9fb" stroke="#e4e8ed"/>
+  <text x="36" y="176" font-size="11" font-weight="700" fill="#1a1d21">答题模板（背下来就能用）</text>
+  <text x="36" y="196" font-size="10.5" fill="#3d454e">"先对齐口径——比的都是服务端耗时还是含网络；再对齐窗口——瞬时还是滑动；再看聚合——单实例还是全局，全局必须桶合并；</text>
+  <text x="36" y="210" font-size="10.5" fill="#3d454e">最后看采样和桶宽。这四层排完，差异一定能归因到某一层，剩下的才是真的性能问题。"</text>
+
+  <rect x="20" y="232" width="860" height="52" rx="7" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="36" y="252" font-size="10.5" fill="#3d454e">① 为什么杀伤力最大：本地测通常只计方法体，监控计整个 HTTP 生命周期。中间随便一个 @Transactional 提交、一次 flush，</text>
+  <text x="36" y="270" font-size="10.5" fill="#3d454e">就能把 120ms 变成 800ms —— 你以为测的是方法，实际测的是等连接。</text>
+</svg>
+<figcaption><b>图 13</b>　五步的前三步是"统计口径"问题，只有后两步才是"性能"问题。大多数人一上手就查 GC，跳过了前三步——这就是为什么查了两小时没结论。</figcaption>
+</figure>
+
+<p><strong>第 1 步是杀伤力最大的一步。</strong>同一个接口，"我本地测"通常只计 <code>controller</code> 方法体；而监控的 <code>http.server.requests</code> 计的是从收到请求到写出响应，包含：反序列化 → 拦截器 → 事务开启/提交 → 序列化 → 写回。这中间随便一个 <code>@Transactional</code> 的提交、一次 <code>flush</code>，就能把 120ms 变成 800ms。第 09 期讲过 <code>@Transactional</code> 套远程调用导致连接池打满，本质就是"计时口径不同"——你以为测的是方法，实际测的是等连接。</p>
+
+<p><strong>第 2 步的坑在"瞬时 vs 窗口"。</strong>你手测的是 100 次请求的 P99，监控给的是 5 分钟窗口内所有请求的 P99。如果这 5 分钟里有一波突发（比如定时任务撞上来了），那 800ms 是真的，你的 120ms 也是真的——<em>它们统计的不是同一批请求</em>。</p>
+
+<p><strong>第 3 步就是本篇 L1~L3 的内容</strong>：全局 P99 必须靠桶合并，不能靠分位数平均。如果你发现"单实例看都正常，全局就很差"，先怀疑这里。</p>
+
+<p><strong>第 4 步的差值有名字：网络 RTT + 排队。</strong>客户端 P99 = 服务端 P99 + RTT + 客户端排队。同机房 RTT 0.5ms，跨可用区 2ms，跨地域 30ms 起。差了 30ms 不一定是服务端的问题。</p>
+
+<p><strong>第 5 步是"解释器"级别的问题</strong>：链路 1% 采样，你找到的 10 条 trace 不代表性；桶宽 500ms，P99 报 995 也可能只是插值。</p>
+
+<h2><span class="n">L11</span>四档回答对照：面试官问"你们怎么做的可观测性"</h2>
+
+<table>
+<tr><th style="width:82px">档位</th><th>回答</th><th style="width:210px">问题在哪</th></tr>
+<tr><td><strong>不及格</strong></td><td>"接了 Prometheus + Grafana + ELK + SkyWalking，都有。"</td><td>报菜名，零信息量</td></tr>
+<tr><td><strong>及格</strong></td><td>"指标看 QPS、RT、错误率，日志用 ELK 查，链路用 SkyWalking 看调用链。"</td><td>说清了工具分工，但没说设计</td></tr>
+<tr><td><strong>良好</strong></td><td>"指标分三层：基础资源、应用 RED、业务自定义；P99 用直方图桶不用客户端分位数；链路做了线程池和 MQ 的上下文透传；日志规范了 traceId 透传和异步 appender。"</td><td>有了具体设计决策</td></tr>
+<tr><td><strong>优秀</strong></td><td>"我先定 SLO，再反推要什么信号。P99 的桶边界就是 SLO 边界（200ms 必须落在桶上）；指标标签做过基数预算，所有标签域乘积控制在 1 万以内，userId 走 exemplar 不进 label；链路用 tail sampling，错误和慢请求 100% 留，正常 1%；日志只保证 traceId 和关键业务字段，其余打结构化 JSON 让采集端裁剪。这套东西的成本我也算过——8 万 series 一次 scrape 5MB，100 个 pod 一天近 3TB 文本，所以标签必须省。"</td><td>从 SLO 倒推、有成本约束、有具体数字——<strong>这一档的核心不是知道得多，而是每条设计都能说出代价</strong></td></tr>
+</table>
+
+<h2><span class="n">L12</span>数字速查（本期 20 条）</h2>
+
+<table>
+<tr><th style="width:220px">数字</th><th>含义</th></tr>
+<tr><td class="num"><strong>551.5 vs 901.1</strong></td><td>平均两个 P99 与真实合并 P99 的差距，低估 38.8%</td></tr>
+<tr><td class="num"><strong>76.2%</strong></td><td>按请求数加权平均 P99 的低估幅度（比裸平均更错）</td></tr>
+<tr><td class="num"><strong>−832%</strong></td><td>平均两个 P50 的偏差（476.1 vs 51.0）</td></tr>
+<tr><td class="num"><strong>+4.2%</strong></td><td>直方图桶合并后的 P99 误差（938.6 vs 901.0）</td></tr>
+<tr><td class="num"><strong>10200 = 10200</strong></td><td><code>+Inf</code> 桶相加后总数与请求数一致，桶可合并的硬证据</td></tr>
+<tr><td class="num"><strong>69</strong></td><td>Micrometer <code>publishPercentileHistogram()</code> 默认导出的 <code>le</code> 桶数</td></tr>
+<tr><td class="num"><strong>995 / 599 / 519.8</strong></td><td>数据全 510ms 时，三套桶算出的 P99（真值 510）</td></tr>
+<tr><td class="num"><strong>桶宽 ÷ 落点值</strong></td><td>相对误差上限的经验公式</td></tr>
+<tr><td class="num"><strong>750 B</strong></td><td>单条 counter series 的客户端内存成本（实测 80,000 条 → 57.4MB）</td></tr>
+<tr><td class="num"><strong>3.5 KB</strong></td><td>单条 series 的 Prometheus 服务端内存成本（官方经验值）</td></tr>
+<tr><td class="num"><strong>40 → 80,000</strong></td><td>加一个 <code>userId</code> 标签导致的 series 膨胀（2,000 倍）</td></tr>
+<tr><td class="num"><strong>5.1 MB</strong></td><td>8 万 series 一次 scrape 的文本体积</td></tr>
+<tr><td class="num"><strong>2.95 TB/天</strong></td><td>100 个 pod 都被抓 8 万 series 时的日传输量</td></tr>
+<tr><td class="num"><strong>4,000,000</strong></td><td>10 万 userId × 10 uri × 4 status 的 series 数（服务端约 14GB）</td></tr>
+<tr><td class="num"><strong>55 字节</strong></td><td><code>traceparent</code> 的固定长度（2+1+32+1+16+1+2）</td></tr>
+<tr><td class="num"><strong>1100 字节</strong></td><td>20 跳链路累计的 header 体积</td></tr>
+<tr><td class="num"><strong>100,000</strong></td><td>1% 采样 + 0.1% 错误率下，捞到 1 条错误 trace 所需请求数</td></tr>
+<tr><td class="num"><strong>4.5 GB</strong></td><td>30 秒 tail sampling 窗口的在途数据（5000 QPS × 20 span × 1.5KB）</td></tr>
+<tr><td class="num"><strong>218 / 64 / 21 / 9 ns</strong></td><td>裸拼 / 参数化 / 守卫 / 基线的单次日志成本</td></tr>
+<tr><td class="num"><strong>13 GB/小时</strong></td><td>3 万 QPS 下裸拼日志产生的小时级垃圾量</td></tr>
+</table>
+
+<h2><span class="n">L13</span>十四问答（由浅入深）</h2>
+
+<div class="qa"><div class="q">为什么 P99 不能跨实例求平均？</div><div class="a">因为 P99 是次序统计量，不是线性算子。平均两个 P99 得到的是"两个边界值的中心"，而真实合并 P99 取决于排序后第 99% 个位置落在哪一组数据上。实测：两组合并真实 P99 是 901ms，平均法是 551.5ms（低估 38.8%），按请求数加权是 214.8ms（低估 76.2%）。加权更错，因为权重修正不了"信息已丢失"这个事实——算之前原始分布就被压缩成一个数了。</div></div>
+
+<div class="qa"><div class="q"><code>publishPercentiles</code> 和 <code>publishPercentileHistogram</code> 到底差在哪？</div><div class="a">前者在 JVM 内算好分位数，导出一条带 <code>quantile</code> 标签的 series；后者导出 <code>le</code> 桶的累计计数。关键差别是<strong>可合并性</strong>：<code>quantile</code> 是标签，<code>sum()</code> 没法跨实例合并（合并 P50 和 P99 毫无意义）；<code>le</code> 桶是普通整数，位置相加即可。另外前者随实例重启清零、受滑动窗口影响，后者是累计计数、趋势连续。生产多副本必须用后者。</div></div>
+
+<div class="qa"><div class="q"><code>histogram_quantile</code> 的误差从哪来？</div><div class="a">两个来源。一是<strong>桶内均匀分布假设</strong>——落在 <code>(500,1000]</code> 桶里时算法只能线性插值。实测数据全在 510ms 时，这个桶报出 995ms，误差 +95%。二是<strong>桶边界没覆盖业务区间</strong>，比如 SLO 是 200ms 但最近桶是 <code>(100,500]</code>，199 和 499 在监控上无法区分。经验公式：相对误差上限 ≈ 桶宽 ÷ 落点值。所以桶边界要按 SLO 定制，并且 SLO 值必须正好是桶边界。</div></div>
+
+<div class="qa"><div class="q">为什么加一个 <code>userId</code> 标签就能打挂 Prometheus？</div><div class="a">因为标签组合数是<strong>乘积</strong>。<code>uri(10) × status(4) × userId(10 万) = 400 万</code> 条 series。客户端每条约 750 字节（实测），400 万条约 3GB 堆；服务端每条 3~4KB，约 14GB——Prometheus 直接 OOM。同时 scrape 文本体积爆炸：8 万条 series 一次 scrape 就 5.1MB，100 个 pod 一天近 3TB 纯文本。表现是 <code>scrape timeout</code>、target DOWN，看起来像服务挂了，其实服务好好的。</div></div>
+
+<div class="qa"><div class="q">那要把 traceId 和 userId 关联起来怎么办？exemplar 是什么？</div><div class="a">exemplar 是挂在单个 metric sample 上的 <code>(traceId, spanId, timestamp)</code> 标注，<strong>不参与 series 身份计算</strong>。Prometheus 2.26+ 支持，抓取时通过 OpenMetrics 格式的注释携带。这样你在 Grafana 上看到一个 P99 尖刺，点一下就能跳到那条具体链路——既有指标的低成本，又有链路的可追溯性。这是"指标和链路的缝合点"，也是当前的最佳实践。</div></div>
+
+<div class="qa"><div class="q">ThreadLocal 为什么过不去线程池？<code>InheritableThreadLocal</code> 为什么"更危险"？</div><div class="a">ThreadLocal 的值存在 <code>Thread.threadLocals</code>（一个 <code>ThreadLocalMap</code>）里，是<strong>每线程一份</strong>，新线程的表是空的，所以是 <code>null</code>。<code>InheritableThreadLocal</code> 在 <code>new Thread()</code> 时从父线程拷贝，所以第一次能用；但线程池的线程是<strong>复用</strong>的，一辈子只 new 一次，拷贝时机早就过了。实测第二次提交时主线程已经改成 <code>itl-def456</code>，池里还是 <code>itl-abc123</code>——它给的不是 null，而是<strong>别人的旧值</strong>。null 会空指针，脏值会让日志串链，更难查。</div></div>
+
+<div class="qa"><div class="q"><code>TaskDecorator</code> 里为什么要在 <code>finally</code> 里"还原"而不是 <code>clear()</code>？</div><div class="a">因为线程是复用的。你 <code>clear()</code> 掉的可能不是自己写进去的东西（上一个任务残留的、框架写的），也可能把外层上下文的残留清成空。正确做法是"进来先存旧值 → 设置快照 → <code>finally</code> 还回旧值"，这跟事务的挂起/恢复、<code>setContextClassLoader</code> 的用法是同一个模式。判断标准很简单：这段代码是不是"借用"了一个共享资源？是就要还原。</div></div>
+
+<div class="qa"><div class="q">MQ 消费端要不要"续"上生产者的 trace？</div><div class="a">分语义。同步语义（下单 → 扣库存，同一次业务动作）应该续，parent 设成生产者的 spanId，这样一条 trace 能看到端到端。异步解耦（发通知、算报表、异步补偿）应该<strong>起新 trace + Span Link 关联</strong>，否则一条 trace 会横跨几小时，Jaeger 的时间轴被拉成一条线，什么也看不出来。面试时能主动区分这两种并说出 Span Link，是明显的加分项。</div></div>
+
+<div class="qa"><div class="q"><code>traceparent</code> 里那 2 位 flags 有什么用？</div><div class="a">最低位是采样标记（<code>01</code> = sampled）。它的意义是：<strong>采样决策在入口做一次，沿链路透传</strong>，后续所有节点只看这个位决定记不记，不再各自掷骰子。这样能保证一条 trace 要么全有要么全无（不会出现 A 服务记了、B 服务没记的"半条链路"）。这也是 head sampling 的实现方式——成本最低，但决策时不知道结果，所以错误请求也可能被丢。</div></div>
+
+<div class="qa"><div class="q">head sampling 和 tail sampling 怎么选？tail 的成本怎么算？</div><div class="a">head 零成本、无状态，但按比例采样，而故障按稀有度分布——1% 采样 + 0.1% 错误率，要 10 万请求才捞到 1 条错误 trace。tail 在 collector 攒窗口按结果决定（错误全留、慢请求全留），代价是要缓存整条链路：30 秒窗口 × 5000 QPS × 20 span × 1.5KB ≈ <strong>4.5GB 在途数据</strong>。所以 tail sampling 必须按 traceId 哈希分片部署，否则每个实例都缓存全量。生产标准答案是组合策略，不是二选一。</div></div>
+
+<div class="qa"><div class="q">为什么 Jaeger 里的 trace 数量比监控上的 QPS 少那么多？</div><div class="a">采样率。链路可能只采 1%，指标是 100% 统计。QPS 1000 只留 10 条 trace 是正常的。这也是"用链路数量估算流量"必然错的原因。反过来也一样：<strong>不能用 trace 算 QPS，也不能用 metric 找单条请求</strong>，两种信号的分辨率不同。</div></div>
+
+<div class="qa"><div class="q">异步 appender 会丢日志吗？</div><div class="a">会，而且默认配置下就会。logback 的 <code>AsyncAppender</code> 默认 <code>queueSize=256</code>、<code>discardingThreshold=20%</code>，意思是<strong>队列用到 80% 时，INFO 和 DEBUG 会被无声丢弃</strong>。<code>neverBlock=true</code> 则是"队列满就丢"。两种设计的取舍都是"宁可丢日志也不阻塞业务"，但代价是<strong>丢在你最需要日志的时刻</strong>。生产要么把 <code>queueSize</code> 拉到 8192 以上并 <code>discardingThreshold=0</code>（可能阻塞），要么接受丢弃但<strong>把队列长度做成指标告警</strong>——丢弃必须是可观测的，不能是静默的。</div></div>
+
+<div class="qa"><div class="q">虚拟线程场景下，ThreadLocal 和 ScopedValue 怎么选？</div><div class="a">虚拟线程可以到百万级，每个线程复制一份 ThreadLocal 是实打实的内存（100 万 × 1KB ≈ 1GB）。<code>ScopedValue</code>（JEP 506，JDK 25 正式）是<strong>不可变、按作用域绑定</strong>的，没有"每线程复制"，用完自动失效，天然适合虚拟线程 + 结构化并发。但它不可变——过程中要改值的场景（比如累加、动态追加）还是得用 ThreadLocal 或显式传递。判断标准：<strong>只读的请求上下文用 ScopedValue，需要可变状态的用 ThreadLocal 并严格控制生命周期。</strong></div></div>
+
+<div class="qa"><div class="q">日志打多了真的会拖慢 CPU 吗？</div><div class="a">CPU 层面几乎不会。实测裸拼字符串（最贵写法）也就 217.8ns/次，3 万 QPS 是 6.5ms/s，<strong>0.65% 单核</strong>。真正的成本在三处：① 内存分配——裸拼一次约 120B 垃圾，3 万 QPS 约 13GB/小时，年轻代 GC 频率上升，P99 抖动；② 同步 IO——磁盘抖动时业务线程跟着阻塞；③ 磁盘——单行 500B × 3 万 QPS = 15MB/s ≈ 1.3TB/天，普通云盘三天写满。所以优化日志不该盯 CPU，该盯<strong>分配率、appender 队列、磁盘带宽</strong>。</div></div>
+
+<h2><span class="n">L14</span>三道模拟面试题（含四档对照）</h2>
+
+<div class="mt">
+<div class="qh"><span>题 1</span>P99 对不上：线上订单接口 P99 从 120ms 涨到 800ms，Grafana 上所有实例一起涨，但你本地 JMeter 压同一份代码稳定 120ms。给你 30 分钟，怎么定位？</div>
+<div class="lv l1"><span class="lb">不及格</span>"先看 CPU、内存、GC，然后看慢 SQL，再看是不是流量涨了。"——全是动作，没有假设，30 分钟能翻完所有面板然后什么也没结论。</div>
+<div class="lv l2"><span class="lb">及格</span>"按 CPU → GC → 慢 SQL → 下游依赖 → 连接池的顺序查一遍。"——有顺序，但还是"猜"，而且没解释"为什么本地不复现"这个最关键的线索。</div>
+<div class="lv l3"><span class="lb">良好</span>在上面基础上补两层：先验口径差——用 <code>http.server.requests</code> 的 <code>uri</code> 标签确认统计的是同一批请求（有没有混进别的接口），对比"客户端计时"和"服务端计时"，差值就是网络 + 排队；再验全局 P99 的算法——确认 dashboard 是 <code>histogram_quantile(0.99, sum by (le)(rate(...)))</code> 而不是 <code>avg(...)</code>。</div>
+<div class="lv l4"><span class="lb">优秀</span>再加三步：① 若算法写成 <code>avg</code>，而恰好有一台机器在跑定时任务（B 实例效应），全局 P99 会被一台机器绑架——这正好能解释"所有实例一起涨"的假象；② 把窗口从 5 分钟切到 1 分钟，看是不是突发尖刺被平均进了窗口，同时看 <code>hikaricp_connections_pending</code>（连接池等待是典型的"方法体很快但端到端很慢"）；③ 在入口/服务/DAO 三处各埋一个 timer，把 800ms 拆到具体段——<strong>这一步才是定位，前面的都是缩小范围</strong>。</div>
+</div>
+
+<div class="mt">
+<div class="qh"><span>题 2</span>从零设计：日订单 500 万，20 个微服务，SLO 是 P99 小于 300ms、可用性 99.95%。设计一套可观测性方案，说清指标、链路、日志，以及成本。</div>
+<div class="lv l1"><span class="lb">不及格</span>"上 Prometheus + Grafana + SkyWalking + ELK。"——没有一条和 500 万订单、20 个服务、300ms 有关系。</div>
+<div class="lv l2"><span class="lb">及格</span>"每个服务埋 RED 指标（Rate / Errors / Duration），链路用 SkyWalking，日志进 ELK 并带 traceId。"——方向对，但没算账，也没处理采样和多实例聚合。</div>
+<div class="lv l3"><span class="lb">良好</span>能说出——指标用 Micrometer 自动埋 <code>http.server.requests</code>，P99 用直方图并且桶边界对齐 300ms（含 100/200/300/500/1000）；链路全量采样在 20 个服务下扛不住，用 tail sampling，错误和大于 300ms 的请求 100% 留；日志只打结构化 JSON，强制带 traceId / orderId，异步 appender。</div>
+<div class="lv l4"><span class="lb">优秀</span>把账算出来：<strong>① 指标量</strong>——20 服务 × 30 接口 × 4 status × 15 桶 ≈ 3.6 万 series，客户端约 27MB，服务端约 126MB，可接受；明确设"任何标签域乘积小于 1 万"的预算线，userId / orderId 一律走 exemplar。<strong>② 链路量</strong>——500 万/天 ≈ 平均 58 QPS，峰值按 10 倍算 580 QPS；20 span × 1.5KB 全量 = 17MB/s、一天 1.5TB，扛不住；tail 只留"错误 + 慢请求 + 1% 正常"，降到约 1/50。<strong>③ 日志量</strong>——只打状态变更点（下单/支付/发货）而非每步，单订单 5 行 × 400B → 10GB/天，可接受。<strong>④ SLO 落地</strong>——99.95% 一个月允许 21.6 分钟不可用，用错误预算燃烧率告警（1h 窗口烧 14.4 倍 → 立即；6h 窗口烧 6 倍 → 工单）。<strong>⑤ 反向验</strong>——用这套数据能不能回答"昨天 14:00 那波 P99 尖刺是什么原因"？能，因为错误/慢请求 100% 有链路，链路里有 span 耗时分解。</div>
+</div>
+
+<div class="mt">
+<div class="qh"><span>题 3</span>监控自己挂了：大促前 Prometheus 内存从 8GB 涨到 30GB，多个 target 报 context deadline exceeded 然后 DOWN，但服务本身 QPS、错误率都正常。怎么定位和修复？</div>
+<div class="lv l1"><span class="lb">不及格</span>"扩容 Prometheus，加内存。"——治症状，下次还会炸，而且大促前扩容审批走不完。</div>
+<div class="lv l2"><span class="lb">及格</span>"查 <code>prometheus_tsdb_head_series</code> 看 series 数是不是暴涨，找出是哪个指标贡献的。"——方向对，但没到根因（为什么暴涨）。</div>
+<div class="lv l3"><span class="lb">良好</span>"先确认是基数问题不是样本量问题——<code>head_series</code> 暴涨而 QPS 没变，就是标签爆炸。用 <code>/api/v1/status/tsdb</code> 的 <code>seriesCountByMetricName</code> 排序找 top 指标；如果是某个自定义指标，检查最近有没有加标签（userId、orderId、原始 URL、异常 message）。多实例确认：每个 pod 的 series 数应该接近，如果某个 pod 特别多，说明数据分布不均。"</div>
+<div class="lv l4"><span class="lb">优秀</span>给完整的"定位—止血—根治—预防"四段：<strong>止血</strong>（5 分钟）——在抓取侧加 <code>metric_relabel_configs</code> 直接 drop 掉高基数指标或该标签，热加载不用重启，先让 Prometheus 活过来；<strong>定位</strong>（10 分钟）——用 <code>seriesCountByLabelValuePair</code> 定位到具体标签值，重点看是不是某个值独占几十万条（比如 <code>uri</code> 被写成 <code>/order/20241113001</code>）；<strong>根治</strong>——代码侧标签模板化，ID 类信息移到 exemplar，并把"基数预算"写进 code review checklist（新增标签必须说明取值域上限）；<strong>预防</strong>——加 <code>prometheus_tsdb_head_series</code> 容量告警（阈值定在实测容量 70%），并给 scrape 加 <code>sample_limit</code> / <code>label_limit</code>，超限直接拒抓。最后补成本视角：30GB 约对应 800 万 series，已超出单机舒适区，长期要分片或换 VictoriaMetrics / Mimir 这类高基数优化存储。</div>
+</div>
+
+<h2><span class="n">L15</span>二十八期地图</h2>
+
+<table>
+<tr><th style="width:90px">板块</th><th style="width:130px">期号</th><th>一句话抓手</th></tr>
+<tr><td>集合</td><td class="num">01 / 14</td><td>HashMap 寻址与树化；1.5 倍扩容与 CHM 锁粒度</td></tr>
+<tr><td>JVM</td><td class="num">02 / 12 / 21 / 22</td><td>分代与三色标记；参数从除法推；泄漏看支配树；JIT 让压测变脸</td></tr>
+<tr><td>并发</td><td class="num">03 / 20</td><td>锁升级 + AQS；ctl 位运算与依赖栈</td></tr>
+<tr><td>语言底层</td><td class="num">13 / 23 / 26</td><td>双亲委派四次打破；擦除与桥方法；agent 改字节码</td></tr>
+<tr><td>框架</td><td class="num">04 / 15 / 24</td><td>refresh 十二步；自动配置六阶段；MyBatis 九站链</td></tr>
+<tr><td>存储</td><td class="num">05 / 16 / 25</td><td>B+ 树三层与 MVCC；分片键四炸点；倒排三层与段不可变</td></tr>
+<tr><td>中间件</td><td class="num">06 / 07 / 17 / 19</td><td>单线程为什么快；零拷贝与 ISR；缓存一致性算账；epoll 与 Pipeline</td></tr>
+<tr><td>分布式</td><td class="num">08 / 10 / 18</td><td>注册发现三级缓存；秒杀四道闸门；幂等键由意图决定</td></tr>
+<tr><td>工程</td><td class="num">09 / 11 / 27 / 28</td><td>三分钟分诊；策略替 if-else；类身份 = loader + 类名；<strong>本篇：信号的成本</strong></td></tr>
+</table>
+
+<p>28 期下来，一条主线越来越清楚：<strong>面试的区分度不在"知道多少名词"，而在"能不能把一个定性判断换算成一个数"。</strong></p>
+
+<p>这期最典型的三处：P99 不可平均 → 551.5 vs 901.1；一条 userId → 40 变 80,000 条 series、5.1MB 一次 scrape；日志"很慢" → 其实只占 0.65% 单核，真正的账在 13GB/小时垃圾和 1.3TB/天磁盘。</p>
+
+<div class="next">
+<strong>下一期预告</strong>：第 29 期讲<strong>分布式事务与一致性协议再深入</strong>——不是第 07 期讲过的 2PC / TCC / SAGA 方案对比，而是往下挖：Raft 的日志复制与选主、etcd 的 lease 与 watch 可靠性、以及"为什么你的分布式锁在 GC 停顿后会失效两次"。这一期会把 07 期的"方案层"接到"协议层"上。
+</div>
+
+<div class="foot">
+<p>本期全部实验代码在本机 JDK 21.0.7 实跑，依赖 Micrometer 1.16.7、Prometheus client 1.4.3、logback 1.5.38。文中标注"实测"的数字均为真跑结果，标注"经验值 / 官方"的已注明来源。分位数合并、桶插值、基数内存、上下文传播、日志耗时五组实验均可独立复现。</p>
+</div>
+
+</div>
+<script>
+(function () {
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  var KW = 'abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|true|false|null|var|record|String|Integer|Map|List|Object|System|Timer|Duration|NONE|SELECT|FROM|WHERE|GROUP|BY|ORDER|LIMIT|sum|rate|by|le|histogram_quantile';
+  var RE = new RegExp('(\\/\\/[^\\n]*)|("(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\')|(\\b(?:' + KW + ')\\b)|(\\b\\d+(?:\\.\\d+)?\\b)', 'g');
+  document.querySelectorAll('pre code').forEach(function (el) {
+    var t = el.textContent, out = '', last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(t)) !== null) {
+      out += esc(t.slice(last, m.index));
+      var cls = m[1] ? 'c' : (m[2] ? 's' : (m[3] ? 'k' : 'n'));
+      out += '<span class="' + cls + '">' + esc(m[0]) + '</span>';
+      last = m.index + m[0].length;
+      if (m[0].length === 0) RE.lastIndex++;
+    }
+    out += esc(t.slice(last));
+    el.innerHTML = out;
+  });
+})();
+</script>
+</body>
+</html>

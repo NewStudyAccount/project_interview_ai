@@ -321,3 +321,105 @@
   7. Windows/Git Bash 下 javac 的 `-cp "out;asm-9.6.jar"` 必须用引号包住分号；agent jar 的 `Class-Path` 是相对 **agent jar 所在目录**，放错目录直接 `NoClassDefFoundError`。
   8. 内容组织上最有效的两处数形结合：① 探针成本堆叠条（16.0 / 12.6 / 30.2，红色那段比蓝色还长）；② ASM 版本台阶图 + JDK 21 major 65 落在 9.4 与 9.6 的空档里。**"版本空档"这种空间化表达比表格更容易被记住。**
 - 下期建议主题：第 27 期 Java 模块化与工程化边界（module-info / classpath hell 四形态 / jdeps 循环依赖 / Multi-Release JAR 与 shade 冲突 / ArchUnit 替代 JPMS），已在文末做预告（这是本系列挂了五期的话题）。
+
+## 2026-11-12 15:57（第 27 次执行）
+
+- 主题：第 27 期 依赖冲突、Classpath 与模块化边界（本系列挂六期的话题终于还债）——L0 类身份=loader+全限定名 / L1 classpath 覆盖与常量内联实测 / L2 七种 LinkageError 症状 + 双 ClassLoader 强转 / L3 Maven 调解三规则 + scope 矩阵 / L4 四道防线 / L5 Boot 套娃 jar / L6 JPMS 三张清单 + 强封装台阶 / L7 split package + 自动模块名 / L8 MR-JAR / L9 opens 迁移清单 / L10 ArchUnit 与 jdeps / L11 七条记反 / L12 数字 / L13 14 问答 / L14 3 模拟题四档 / L15 27 期地图）
+- 产出：`java_interview_27_dependency_module.html`（109KB，13 图 + 14 代码块 + 7 表 + 16 H2/2 H3，校验 0 issue）、`.md`（30.8k 字符 / 54.8KB，1 H1 / 16 H2 / 4 H3）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（73KB）一次成功，file_id `PHlEBUqgQIfx`，url https://docs.qq.com/doc/DUEhsRUJVcWdRSWZ4，回读 1/16/4 与本地完全一致
+- 关键经验：
+  1. base64 通道第 23 次验证稳定（30.8k 字符 / 73KB 无 WAF 拦截）。
+  2. **校验脚本这次踩了自己写的 bug**：重叠检测的 `boxes` 列表原本在遍历所有 svg 的循环外初始化，导致跨图两两比较，一次报 503 个假阳性。改为每个 svg 内 `boxes=[]` 后立刻降到 1 个（真实的是我有意画的 fan-in 七点多边形）。**教训：凡"收集所有元素再两两比较"的检查，必须先确认收集范围被正确限定在单个容器内；假阳性的数量级（500 vs 1）本身就是信号。**
+  3. 本期仍是"实验先行"，6 组实测全部真跑（JDK 21.0.7）：① classpath 顺序覆盖 → `NoSuchMethodError` + **`TAG=v2` 却加载 v1 的类**（常量内联的硬证据）；② 两 URLClassLoader → `Cannot cast com.demo.Client to com.demo.Client`；③ 未导出包 → `package com.lib.internal is not visible`（编译期）；④ 反射 String.value → 命名模块 / unnamed module **两条不同文案**；⑤ split package → `reads package com.dup from both dup.one and dup.two`；⑥ MR-JAR 在 21 上取 versions/17，且 `mylib-SNAPSHOT.jar` → 模块名 `mylib.SNAPSHOT`。
+  4. `--illegal-access=permit` 在 21 上实测输出 `Ignoring option --illegal-access=permit; support was removed in 17.0`，可直接当引文。
+  5. 本期弃用的做法：`mvn dependency:tree` 实测（本机 `.m2` 无 `maven-dependency-plugin`，离线跑不了）→ 改为文档事实 + 在页脚**显式标注"本机未逐个跑通"**。不确定的部分标注清楚源，比假装实测更可信。
+  6. 人工复核抓到 2 处脚本盲区：图 13 有个箭头指向"JVM 段"，但框讲的是 13/26/27 三期（语义错位）→ 直接删箭头；图 3 的"若 pom 里加 dependencyManagement: core 1.5" 溢出面板右边界 → 缩短文案。**箭头语义与文本长度压边仍只能靠人读。**
+  7. md 里 `# bash 注释` 会让「数 H1」的正则误统计（本次本地数出 18 个 H1，云端正确为 1）——**校验行首标题必须排除代码围栏内的内容**，否则会误判上传丢标题。
+- 下期建议主题：第 28 期 Java 与可观测性（Micrometer 指标基数爆炸 / 直方图与分位数不可平均 / OpenTelemetry Trace 上下文在 MQ 与线程池两处断链 / 日志·指标·链路采样冲突 / "为什么我的 P99 和监控对不上"），已在文末做预告，可与 08 期 TraceId、09 期排查串成完整链路。
+
+## 2026-11-13 09:21（第 28 次执行）
+
+- 主题：第 28 期 可观测性（L0 三支柱各答一问+Profiling 第四类 / L1 分位数不可平均 551.5·214.8 vs 901.1 / L2 桶可相加 +Inf=10200 / L3 桶宽=误差上限 995·599·519.8 / L4 客户端分位数两缺陷+t-digest·exponential histogram / L5 基数乘法 40→400 万·750B/条 / L6 线程池断链+ITL 脏值+TaskDecorator 三段式 / L7 traceparent 55 字节+MQ 续 trace vs Span Link / L8 采样 10 万请求 1 条错误 / L9 日志 218·64·21·9 ns 与 13GB/h 垃圾 / L10 五步归因 / L11 四档 / L12 20 数字 / L13 14 问答 / L14 3 模拟题四档 / L15 28 期地图）
+- 产出：`java_interview_28_observability.html`（108.8KB，13 图 + 24 代码块 + 8 表 + 16 H2，校验 0 issue）、`.md`（27428 字符 / 50.6KB，1 H1 / 16 H2 / 3 H3，围栏外零尖括号）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（67.5KB）一次成功，file_id `PVOokzXHsesY`，url https://docs.qq.com/doc/DUFZPb2t6WEhzZXNZ，回读 1/16/3 与本地完全一致
+- 关键经验：
+  1. base64 通道第 24 次验证稳定（27.4k 字符 / 67.5KB 无 WAF 拦截）。
+  2. **本期“实验先行”落到可观测性，是本系列信息密度最高的一期**：7 组实验全部真跑，且抓到两个能直接推翻流行结论的数：① 参数便宜时 `if (isDebugEnabled())` 比直接 `{}` 参数化**更慢**（21.4 vs 9.4 ns），守卫只在参数求值贵时才划算（省 42.8ns）；② 按请求数加权平均 P99 比裸平均**更错**（低估 76.2% vs 38.8%）。这类“反直觉实测”依旧是最高性价比素材。
+  3. 校验脚本八项（标签配平 / SVG 禁 HTML / url(#) 有定义 / marker 冗余 / CJK1.0em·ASCII0.55em 估宽 / text y 越界 / rect 越界 / 文本包围盒重叠 / polygon 退化）13 图**首跑 0 issue**，首次做到零人工返工。图 4（桶宽）第一版左侧标签宽 119px 会压住色块，靠「先留 180px gutter 再排主体」一次排对。
+  4. 踩坑：用 python 批量改 Java 源码时，`io.open(..., newline='')` 读取后再写，把字符串里的 `\n` 变成了真实换行，`split("` + 换行 + `")` 连续三次编译失败；`re.sub(r'split\("\s*\n\s*"\)', ...)` 也因引号后带缩进没匹配上，最后靠定位方法体首尾切除重写才干净。**结论：Java 源码里出现 `split("\n")` 这类转义时，别用 python 字符串替换，直接重写整个方法。**
+  5. `sed -i` 改过的文件必须先 Read 再 Write（工具链强制校验 mtime，否则报 “File has been modified since read”）。
+  6. 内容组织上两条有效手法：① 把「P99 对不上」做成五步归因（口径/窗口/聚合/谁是服务端/采样桶宽），前三步都不是性能问题——这个排序本身就是区分度；② 基数那节把“加个 userId 方便排查”换算成 40→400 万 series、5.1MB/次 scrape、2.95TB/天，把一句口头禅变成账单。
+- 下期建议主题：第 29 期 分布式事务与一致性协议再深入（Raft 日志复制与选主 / etcd lease 与 watch 可靠性 / “为什么分布式锁在 GC 停顿后会失效两次”），已在文末做预告，可与 07 期（方案层）、18 期（幂等）串成完整链路。
+## 2026-11-14 18:14（第 30 次执行）
+
+- 主题：第 30 期 超时、重试与容量（L0 27 倍穿透 / L1 超时四语义+超时≠取消 / L2 重试下推与预算 / L3 抖动 6.7× / L4 扇出 vs 串联分位 / L5 预算传递 / L6 排队相变 ρ≈0.71 / L7 吞吐=并发÷超时 / L8 四道闸门+熔断 / L9 七坑 / L10 速查 / L11 14 问答 / L12 3 模拟题四档 / L13 30 期地图）
+- 产出：`java_interview_30_timeout_retry_capacity.html`（102KB，12 图 + 11 代码块 + 14 H2/3 H3，校验 0 issue）、`.md`（23.0k 字符 / 60KB base64）
+- 云端：`doc-mcp create_with_markdown` + base64 一次成功，file_id `PSYoRCTvPVKI`，url https://docs.qq.com/doc/DUFNZb1JDVHZQVktJ；回读 1 H1 / 14 H2 / 3 H3 与本地一致。**另补传第 29 期**（上一轮只落文件未上传）：file_id `PeqhRTFuzYOy`，url https://docs.qq.com/doc/DUGVxaFJURnV6WU95
+- 关键经验：
+  1. base64 通道第 25 次验证稳定（23k 字符 / 60KB 无 WAF 拦截）。**上传前先跑一次 `tdoc_init`，返回 READY 再动笔**，避免写完发现票据不通。
+  2. 本期"实验先行"落在**排队论与分位数**：4 个 Python 仿真 + 1 个 Java 实测，抓到的基础事实有两条可直接当区分度：① 客户端超时不削减服务端负载（`orTimeout` 后 `isCancelled=false`、任务照跑完；`invokeAll(timeout)` 反而真取消——同一进程内才有取消语义）；② 重试反馈的不动点在 ρ0=0.71 与 0.72 之间相变（稳定 0.767 / 发散 1.688）。
+  3. **写仿真时踩了一个自查坑**：第一版 M/M/1 事件仿真把"超时事件"当成"超时发生"来计数，`to` 计数虚高，导致 ρ0=0.6 看起来已经崩。改为统计 `retry`（真正触发重试的次数）+ 时间加权队列面积后，R=1 的利用率 0.604 与理论 0.60 对齐，才敢引用。**凡仿真指标，先用"无效应组"（R=1）对齐解析解再引用。**
+  4. 校验脚本八项沿用（含 text-x/text-y/rect/line/overlap/polygon），首跑只报 2 条（图 5、图 6 右侧注释越界），修完 0 issue。**但机器查不出"文字压在图形元素上"**：图 4 第二行注释放 x=232 时正好穿过 x=246 的柱子（文本 vs rect 不在校验范围），人工读坐标后移到 x=452。**新增待办：校验脚本第 9 项应加"text bbox vs rect/polygon 相交"。**
+  5. 事实口径：本期引用的默认值（OkHttp 10s、Feign connect 10s/read 60s、Tomcat 60s、Nginx 60s、JDK HttpClient 无 connectTimeout、tcp_syn_retries=6→127s）逐条核对过；Google SRE 10% 重试预算、熔断半开 5~10 个探测标注为"经验值"。
+  6. 数值上最有杀伤力的三处：27 倍穿透与失败率取幂（10⁻²→10⁻⁶→10⁻¹⁸，成本 27× 只换来没人需要的指标）；扇出 100 时整体 P50=228ms 已越过单下游 P99=194ms（F(x)=0.5^(1/N)）；吞吐上限 = 并发÷超时（200 线程 1s 超时 = 200 QPS 天花板）。
+  7. 与 08/20/29 期去重：开头明示"08 讲组件、20 讲 ctl、29 讲租约"，本期只做"放大 / 排队 / 预算"三条账，不重复限流算法与线程池参数定义。
+- 下期建议主题：第 31 期 连接池与资源隔离（`maxPoolSize` 调到 100 为何更慢 / 连接泄漏三形态 / "连接池 20 个够不够"的推导 / HikariCP `connectionTimeout`·`validationTimeout` 在链路预算中的位置），已在文末做预告。
+
+## 2026-11-16 09:37（第 31 次执行）
+
+- 主题：第 31 期 连接池与资源隔离（承接第 30 期预告）。15 个 H2：L0 闸门定性 / L1 建连 4RTT / L2 借还状态机四计数 / L3 c=λ·S / L4 为什么 100 更慢 / L5 四种超时 / L6 泄漏断崖 / L7 嵌套死锁 / L8 舱壁隔离 / L9 参数速查 / L10 七反直觉 / L11 20 数字 / L12 14 问答 / L13 3 模拟题四档 / L14 31 期地图
+- 产出：`java_interview_31_pool_isolation.html`（94KB，10 图 + 14 表 + 10 代码块，校验 0 issue）、`.md`（23094 字符，1 H1 / 15 H2 / 3 H3 / 20 围栏）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（55.7KB）一次成功，file_id `PHQUTFRlbjcx`，url https://docs.qq.com/doc/DUEhRVVRGUmxiamN4，回读 1/15/3 与本地完全一致
+- 关键经验：
+  1. base64 通道第 26 次验证稳定（23k 字符 / 55.7KB 无 WAF 拦截）。
+  2. **本期"实验先行"遇到新陷阱：Windows 定时器粒度毁掉了池大小实验**。用 `Thread.sleep(2ms)` 模拟"查询耗时"时实测被拉到 15ms 级，导致 c=2/5/10/20 的吞吐读数反复无常（783→1910→2330→1366→11870）。**结论：凡是"服务时间"要精确的实验，一律改离散事件仿真（Python M/M/c），真机只做超时/死锁/隔离这类时间尺度 ≥100ms 的验证。**
+  3. 仿真必须先对齐解析解：M/M/c 与 Erlang-C 最大误差 6.7%，对齐后才敢引用（沿用第 30 期教训）。
+  4. **真 HikariCP 5.1.0 + 假 DataSource 是本期最高性价比实验**，直接抓到两个可引用的现场事实：① `leakDetectionThreshold=1200` 被静默改成 0 并打 WARN「less than 2000ms or more than maxLifetime, disabling it」；② 池耗尽异常文案自带 `(total, active, idle, waiting)` 四元组，且实测 1508ms > 配置 1500ms。
+  5. 泄漏告警时刻 = 借出时刻 + 阈值（42.14→45.15s），不是 HouseKeeper 的 30s 周期 —— 这条能区分"背概念"和"真跑过"。
+  6. 校验脚本八项首跑 1 issue（图 1 文字压方块），修完 0 issue；**但脚本仍查不出"text 压 rect"**（图 1 的"10 个物理连接"正好压在方块上，是人工读坐标发现的）→ 待办：校验脚本第 9 项加 text bbox vs rect 相交。
+  7. 图表语义自查又抓一处：图 4 的"99%：19.1ms（49 倍）"标注会压住虚线曲线，移到点右侧并缩短文案。**折线图上的浮层标注，先算 y=f(x) 再定框位，不能目测。**
+  8. 叙事上新增有效手法：把"泄漏"画成**阶梯下降 + 下方结果色带**（绿"2ms 平线"→红"100% 超时"），比曲线更能表达"没有过渡带"；把四种超时画成**嵌套条形**（反例 30s 长条戳出 3s 外框）比表格更直观。
+- 下期建议主题：第 32 期 JVM 与容器边界（`-Xmx4g` 仍被 OOMKilled / MaxRAMPercentage / cgroup v1 vs v2 / ActiveProcessorCount / JDK 8u191 前后差异），已在文末做预告，与第 12 期 JVM 调优衔接。
+
+## 2026-11-17 10:31（第 32 次执行）
+
+- 主题：第 32 期 JVM 与容器边界（承接第 31 期预告）。16 个 H2：L0 两本账两杀手 / L1 版本时间线五节点 / L2 set_heap_size 源码+三档百分比实测 / L3 MaxRAM 换基准陷阱+20 点扫描三段式 / L4 内存总账五笔非堆 / L5 死亡解剖 1/3/137 / L6 cgroup v1 vs v2 文件对照 / L7 CPU 链条 16→13 公式 / L8 Serial 降级门槛 / L9 4Gi 倒推瀑布 / L10 取证三板斧 / L11 七坑 / L12 数字速查 / L13 14 问答 / L14 3 模拟题四档 / L15 32 期地图
+- 产出：`java_interview_32_jvm_container.html`（75KB，10 图 + 4 代码块 + 10 表，校验 0 issue 首跑过）、`.md`（19505 字符，1 H1 / 16 H2 / 3 H3）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（42.5KB）上传，file_id `PGSgPaPbjPJq`，url https://docs.qq.com/doc/DUEdTZ1BhUGJqUEpx，回读 1/16/3 与本地一致。第一版 `PpTJuqzgpVck` 因 2 处 H2 误解析已用 `tencent-docs manage.delete_file` 删净
+- 关键经验：
+  1. base64 通道第 27 次验证稳定；插件已升到 5.11.3，`tdoc_call doc-mcp create_with_markdown` 口径未变（`tdoc_init` 先跑返回 READY 再动笔的纪律继续有效）。
+  2. **第 11 期「表格后段落被解析成 H2」的坑以新变体复发**：本次两处是「章节末尾整段正文 + 行内加粗 + （= limit）式括号」（反过来看错误答案… / 镜像 smoke test…），不在表格正后方也会中招。修复照旧：改成 `- **标签**：正文` 列表项，重传后 1/16/3 完全一致。**此类收尾总结段一律写列表项，别写整段。**
+  3. 本期源码取证最大收获：`set_heap_size` 里**显式设 `MaxRAM` 会让 phys_mem 直接等于 MaxRAM**（override_coop_limit 分支），32G 机器 `-XX:MaxRAM=64G` 实测规划出 16G 堆——「MaxRAM 是上限」是流行误解。另：网传「MinRAMPercentage 250MB 阈值」在 JDK 21 源码中无常量佐证，真实分支是 `phys×50%` 与默认 MaxHeapSize 比较。
+  4. 实验手法新组合：`-XX:MaxRAM=X` 20 点扫描画出「50% → 126MiB 地板 → 25%」三段曲线，比文字解释 MinRAMPercentage 有效一个量级；OOM 退出码三组（1/3/137）+ direct OOM 自带 allocated/limit 的报错原文直接当引文。
+  5. 校验脚本七项首跑 0 issue（含 overlap/polygon/越界），HTML 75KB 一次成稿零返工；「先按坐标排版再填文本」流程持续稳定。
+- 下期建议主题：第 33 期 认证授权与会话（JWT 无状态的代价与吊销 / OAuth2 四种角色 / Session 一致性三种做法 / Token 刷新时序 / 网关统一鉴权边界），已在文末做预告。
+
+## 2026-11-19 13:42（第 33 次执行）
+
+- 主题：第 33 期 认证授权与会话（承接第 32 期预告）。15 个 H2：L0 三道闸门与 401/403 边界 / L1 Session 四种存法（粘性 25% 掉线·复制 180MB/s·Redis 20MB/s·JWT 0）/ L2 JWT 三段解剖与 21 倍上行税·ES256 省 38% / L3 算法混淆攻击三道防线·alg=none·jku 注入 / L4 吊销四方案与布隆账（1.2MB 省 6.7 倍还 1% 误判）/ L5 双令牌刷新三时序（单飞 1 万倍·轮换·family 重用检测）/ L6 OAuth2 四角色四模式·PKCE 43 字符·版本事实 / L7 网关边界与 IDOR（5000 万 id 必然事件）/ L8 密码四代与 bcrypt 10 万倍 / L9 存储位置×攻击面 / L10 版本号踢下线 / L11 数字速查 23 条 / L12 14 问答 / L13 3 模拟题四档 / L14 33 期地图
+- 产出：`java_interview_33_auth_session.html`（82.5KB，12 图 + 9 代码块 + 8 表，校验 0 issue）、`.md`（21655 字符，1 H1 / 15 H2 / 3 H3）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64（50.2KB）第二次上传成功，file_id `PRamMLMRJpdB`，url https://docs.qq.com/doc/DUFJhbU1MTVJKcGRC，回读 1/15/3 与本地完全一致。**第一版 `PJGwAEBjFdcr` 因 1 处 H2 误解析已 `manage.delete_file` 删净**（删成功只回 trace_id）
+- 关键经验：
+  1. base64 通道第 28 次验证稳定（21.7k 字符 / 50KB 无 WAF 拦截）。`tdoc_init` 先跑返回 READY 再动笔的纪律继续有效。
+  2. **第 11/32 期的「H2 误解析」坑再次复发，且这次找到了更精确的触发条件**：不是「表格后」也不是「行内加粗」，而是**章节末尾的独立整句 + 句首前 26 字内出现全角括号组**。本次 8 个候选里只有「三条时序（正常 / 并发竞争 / 重用检测）在图 6 里并排画…」这一个段末整句中招，而「XXX（yyy）：」式引导句（后接代码块/表格/列表）7 个全部正常。**修复法确认有效：改成 `- **一句话**：正文` 列表项，重传后 1/15/3 完全一致。**
+  3. 上传后**必须回读 outline 比对 H1/H2/H3 计数**（本次靠它抓出 1 个假 H2），不能只看 file_id 成功——这条从第 11 期起就是硬纪律。
+  4. **校验脚本新增两项，价值都高**：
+     - `overlap_rect.py`（文字 bbox 跨 rect 边框检测，只报「部分在内部分在外」而非「文字在面板内」）——比上一轮待办的「text vs rect 相交」更精准，误报从 154 降到 2，抓出 2 处真压边框（fig4「伪造 token」压面板边、fig7「⑤ 无 verifier」越出右边界）。
+     - **多边形面积检查**（鞋带公式，area < 120 判退化）——抓出 fig6 的 6 个箭头画成了「箭杆高度为 0」的细条（点串 `224,105 252,105 252,99 272,105 252,111 252,105 224,105`，上下边同 y）。这正是第 25 期记的「退化多边形 sliver」，但当时只能靠 grep 点数人工看，现在能自动抓。**手绘箭头的正确 7 点模板：`x1,{y-6} x2,{y-6} x2,{y-11} {x2+18},{y} x2,{y+11} x2,{y+6} x1,{y+6}`（右向），左向/下向同理。**
+  5. 箭头终点必须落在框边坐标上：fig4 箭头尖端原在 306 而服务端面板左边是 316（差 10px），已改到 316；fig6 箭头原本只有 48px 长悬在半空，已改成横跨整个 gap（224→330、570→656）。
+  6. 本期纯文档事实（未跑实验，Windows 无 IdP/OAuth 服务），协议版本核对了 RFC 9700（2025-01 BCP 240，正式基线）与 OAuth 2.1 draft-17（2026-10-31，仍是 Internet-Draft，WG 里程碑 2026-12 提交 IESG）、RFC 10017（2026-08 成 BCP）、DPoP RFC 9449。**凡报协议版本号必须查证，本期 WebSearch 核对后才落笔。**
+  7. 内容组织上最有效的两处数形结合：① 会话四存法的「容量条形 + 带宽条形」上下双轴对照（复制 180MB/s vs 集中式 20MB/s vs SessionId 0.32MB/s，21 倍差距一眼可见）；② 密码破解的 MD5 280 秒 vs bcrypt 324 天等比条形。**「把架构名词换成条形长度」继续是本系列性价比最高的表达。**
+- 下期建议主题：第 34 期 微服务数据一致性与对账（本地消息表 / 事务消息 / TCC 补偿 / 最终一致性校对与差异修复 / 「钱账对不上」怎么排查），已在文末做预告。
+
+## 2026-11-19 15:52（第 34 次执行）
+
+- 主题：第 34 期 微服务数据一致性与对账（承接第 33 期预告）。12 个 H2：L0 一致性四档+三根因三防线 / L1 本地消息表五态+写放大 16GB/天 / L2 三坑（重复/扫描风暴/乱序）/ L3 事务消息 half message 六步+回查账 60s×15=15min·4h 强回滚 / L4 TCC 三坑+一表三态状态机 / L5 对账四层+分桶归并 2MB/桶 / L6 差异三分类+修复边界 / L7 五步排查法 / L8 数字速查 / L9 14 问答 / L10 3 模拟题四档 / L11 34 期地图
+- 产出：`java_interview_34_consistency_reconcile.html`（58KB，7 张手绘 SVG + 3 代码块 + 4 表，校验 0 issue）、`.md`（29.9KB，1 H1 / 12 H2 / 3 H3 / 10 围栏）
+- 云端：`tdoc_call doc-mcp create_with_markdown` + base64 一次成功，file_id `PVNNGzpZBFBv`，url https://docs.qq.com/doc/DUFZOTkd6cFpCRkJ2，回读 1/12/3 与本地完全一致
+- 关键经验：
+  1. base64 通道第 29 次验证稳定（30KB md 无 WAF 拦截）。上传前先跑 `tdoc_init` 返回 READY 再动笔的纪律继续有效。
+  2. 校验脚本八项沿用（标签配平 / SVG 禁 HTML / url(#) / 文本估宽 / text y / rect 越界 / 文本重叠 / polygon 面积），首跑 1 issue（fig2 虚线回程箭头 4 点退化小三角 area=70）→ 换 3 点大箭头后 0 issue。**回程虚线的手绘箭头最容易写成小三角，用 3 点三角形（底 24 高 16）最稳。**
+  3. 本期纯文档事实（无实验）：RocketMQ 事务消息参数用 WebSearch 核对官方「参数约束和建议」文档——回查间隔 60s、最大回查 15 次、半消息超时 4 小时强制回滚、消费重试 16 次。**协议/中间件默认值一律查证再落笔**，继续第 33 期纪律。
+  4. 内容组织上有效手法：把「一致性」拆成四档再把「钱账对不上」拆成丢/重/乱三根因，每个根因对应一道防线（防丢=消息表/事务消息、防重=幂等 18 期、防乱=状态机+对账），形成与 07/18 期的显式接缝；「1000 万笔→100 笔差异」的漏斗与 0.001%/0.1% 两个差异率数量级是全篇最有杀伤力的数字。
+  5. 与 07（方案选型层）去重：开头明示「07 讲过六种事务方案对比，本期只深挖本地消息表/TCC 实现层与对账兜底」，避免重复。
+- 下期建议主题：第 35 期 限流与配额治理深水区（滑动窗口与令牌桶的数学边界 / 分布式限流 Redis+Lua 与 Sentinel 取舍 / 热点限流与集群总闸 / 配额维度设计与计费对账衔接），已在文末预告。

@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 面试深挖 29 · 分布式一致性：锁的两次失效、Raft 选主、fencing token</title>
+<style>
+:root{
+  --ink:#1a1d21; --ink2:#3d454e; --muted:#6b7683; --line:#e4e8ed; --line2:#d4dae1;
+  --bg:#ffffff; --panel:#f7f9fb; --panel2:#eef2f6;
+  --blue:#1a5fb4; --blue-soft:#e8f0fb;
+  --red:#c62828; --red-soft:#fdeceb;
+  --green:#1e7d3c; --green-soft:#e9f5ec;
+  --amber:#9a6400; --amber-soft:#fdf4e3;
+  --purple:#6a3fa0; --purple-soft:#f2ecfb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.78; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px; margin:0 auto; padding:0 28px 80px}
+.hero{padding:56px 0 30px; border-bottom:2px solid var(--ink)}
+.hero .kicker{font-size:12.5px; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; font-weight:600}
+.hero h1{margin:14px 0 10px; font-size:35px; line-height:1.26; letter-spacing:-.5px; font-weight:800}
+.hero .sub{color:var(--ink2); font-size:16.5px; max-width:820px}
+.hero .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+.tag{font-size:12.5px; padding:4px 11px; border-radius:999px; background:var(--panel2); color:var(--ink2); font-weight:600}
+.tag.b{background:var(--blue-soft); color:var(--blue)}
+.tag.r{background:var(--red-soft); color:var(--red)}
+.tag.g{background:var(--green-soft); color:var(--green)}
+.tag.a{background:var(--amber-soft); color:var(--amber)}
+
+h2{
+  margin:56px 0 18px; padding:14px 0 14px 18px; font-size:23px; font-weight:800; letter-spacing:-.2px;
+  border-left:4px solid var(--blue); background:linear-gradient(90deg,var(--blue-soft),transparent 62%);
+  border-radius:0 6px 6px 0;
+}
+h2 .n{display:inline-block; min-width:38px; color:var(--blue); font-variant-numeric:tabular-nums}
+h3{margin:32px 0 12px; font-size:17.5px; font-weight:750; color:var(--ink)}
+h3::before{content:""; display:inline-block; width:6px; height:6px; background:var(--blue); border-radius:1px; margin-right:9px; vertical-align:2px}
+p{margin:12px 0}
+strong{font-weight:700; color:#101418}
+em{font-style:normal; background:linear-gradient(transparent 62%, #ffe9a8 62%); padding:0 1px}
+code{font-family:"JetBrains Mono",Consolas,"Courier New",monospace; font-size:13px; background:var(--panel2);
+  padding:1.5px 5px; border-radius:4px; color:#a03060}
+.lead{font-size:16px; color:var(--ink2)}
+
+ul,ol{margin:12px 0; padding-left:22px}
+li{margin:7px 0}
+li::marker{color:var(--muted)}
+
+table{width:100%; border-collapse:collapse; margin:20px 0; font-size:13.5px; background:#fff}
+th{background:var(--panel2); text-align:left; padding:10px 12px; font-weight:700; border-bottom:2px solid var(--line2); font-size:13px}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:1px solid var(--line2)}
+td code{font-size:12.5px}
+.num{font-variant-numeric:tabular-nums}
+
+pre{
+  position:relative; margin:20px 0; padding:18px 18px 16px; background:#1c2128; color:#d7dde5;
+  border-radius:9px; overflow-x:auto; font-size:13px; line-height:1.68;
+  font-family:"JetBrains Mono",Consolas,"Courier New",monospace;
+}
+pre::before{content:attr(data-lang); position:absolute; top:0; right:0; font-size:10.5px; letter-spacing:.1em;
+  color:#7d8794; background:#252b33; padding:3px 10px; border-radius:0 9px 0 6px; text-transform:uppercase}
+pre code{background:none; padding:0; color:inherit; font-size:inherit}
+.k{color:#ff7b72}
+.s{color:#a5d6a7}
+.c{color:#8b949e; font-style:italic}
+.n{color:#79c0ff}
+
+figure{margin:26px 0; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:18px 18px 10px}
+figure svg{display:block; width:100%; height:auto}
+figcaption{margin-top:8px; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.6}
+figcaption b{color:var(--ink2)}
+
+.box{border-radius:9px; padding:14px 18px; margin:20px 0; border:1px solid var(--line2); background:var(--panel)}
+.box .h{font-weight:750; font-size:13.5px; letter-spacing:.02em; margin-bottom:6px; display:flex; align-items:center; gap:8px}
+.box p:last-child{margin-bottom:0}
+.box.blue{background:var(--blue-soft); border-color:#bcd4f2} .box.blue .h{color:var(--blue)}
+.box.red{background:var(--red-soft); border-color:#f3c9c6} .box.red .h{color:var(--red)}
+.box.green{background:var(--green-soft); border-color:#c2e2cc} .box.green .h{color:var(--green)}
+.box.amber{background:var(--amber-soft); border-color:#efd9ab} .box.amber .h{color:var(--amber)}
+.box.purple{background:var(--purple-soft); border-color:#d7c9ef} .box.purple .h{color:var(--purple)}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0}
+.card{background:#fff; border:1px solid var(--line); border-radius:9px; padding:14px 16px}
+.card .t{font-weight:750; font-size:14px; margin-bottom:5px; color:var(--ink)}
+.card .d{font-size:13px; color:var(--ink2); line-height:1.65}
+.card.r{border-top:3px solid var(--red)} .card.g{border-top:3px solid var(--green)}
+.card.b{border-top:3px solid var(--blue)} .card.a{border-top:3px solid var(--amber)}
+
+.qa{border-left:3px solid var(--line2); padding:2px 0 2px 16px; margin:18px 0}
+.qa .q{font-weight:750; color:var(--ink); font-size:14.5px}
+.qa .q::before{content:"Q "; color:var(--blue); font-weight:800}
+.qa .a{color:var(--ink2); font-size:14px; margin-top:5px}
+.qa .a::before{content:"A "; color:var(--green); font-weight:800}
+
+.mt{background:#fff; border:1px solid var(--line); border-radius:11px; padding:20px 22px; margin:24px 0}
+.mt .qh{font-weight:800; font-size:15.5px; margin-bottom:10px; color:var(--ink)}
+.mt .qh span{background:var(--ink); color:#fff; font-size:11.5px; padding:2px 8px; border-radius:4px; margin-right:9px; letter-spacing:.05em}
+.lv{margin-top:14px; padding:11px 14px; border-radius:7px; font-size:13.5px; line-height:1.7}
+.lv .lb{font-weight:750; font-size:12px; letter-spacing:.05em; margin-right:8px}
+.lv.l1{background:#fbeceb; border-left:3px solid #d9534f} .lv.l1 .lb{color:#c62828}
+.lv.l2{background:#fdf6e6; border-left:3px solid #d9a441} .lv.l2 .lb{color:#9a6400}
+.lv.l3{background:#eaf2fd; border-left:3px solid #4a86c8} .lv.l3 .lb{color:#1a5fb4}
+.lv.l4{background:#eaf6ee; border-left:3px solid #3f9b5c} .lv.l4 .lb{color:#1e7d3c}
+
+.foot{margin-top:70px; padding-top:26px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+.next{margin-top:26px; background:var(--panel2); border-radius:9px; padding:16px 20px; font-size:13.5px; color:var(--ink2)}
+</style><div class="wrap">
+
+<div class="hero">
+  <div class="kicker">Java 面试深挖 · 第 29 期</div>
+  <h1>分布式一致性：锁为什么会失效两次</h1>
+  <div class="sub">Raft 选主与日志复制、etcd 的 lease 与 watch、fencing token 为什么是唯一的兜底。全篇用三个真跑实验，把"随机超时""看门狗""停顿"这些口头禅换算成可算的数字。</div>
+  <div class="meta">
+    <span class="tag b">Raft</span>
+    <span class="tag b">分布式锁</span>
+    <span class="tag r">GC 停顿账</span>
+    <span class="tag a">fencing token</span>
+    <span class="tag g">3 组实测</span>
+    <span class="tag">12 图 · 14 问答 · 3 模拟题</span>
+  </div>
+</div>
+
+<p class="lead">第 05 期讲了 B+ 树与 MVCC，第 17 期讲了缓存一致性，第 18 期讲了"0 行"的双重语义，第 07 期讲了 ISR 与 acks。这一期把视角再往下压一层：<strong>当网络、时钟、进程调度都不再可靠时，"一致"到底靠什么成立。</strong></p>
+
+<p>先说结论，后面每一节都在还这笔债：<em>锁靠假设活着，共识不靠假设活着。</em>凡是靠租约维持的独占，都必须在被保护的资源那一侧再补一道校验；凡是靠共识实现的复制，都必须接受多数派和至少一轮 RTT 的代价。而所谓"分布式事务选型"，在工程上其实是一致性等级的选型。</p>
+
+<h2><span class="n">L0</span>三条时间假设：锁不是被抢走的，是被"假设"背叛的</h2>
+
+<p>先看一段跑不到一秒就出事的代码。两笔扣减库存的操作被写反了，<strong>而且没有任何一方报错</strong>。</p>
+
+<pre data-lang="java"><code>// 订单服务：Redis 分布式锁 + 300ms 租期
+if (!redis.setIfAbsent("lock:sku:1001", uuid, Duration.ofMillis(300))) {
+    throw new BizException("系统繁忙");
+}
+try {
+    Stock s = stockMapper.selectById(1001);   // 库存 10
+    // ---- 就在这中间，发生了 430ms 的 Full GC ----
+    stockMapper.updateStock(1001, s.getQty() - 1);
+} finally {
+    redis.releaseIfOwner("lock:sku:1001", uuid);
+}</code></pre>
+
+<p>两个线程都读到 10，都写回 9。少卖 1 件。事后查监控：Redis 没挂、网络没抖、没有死锁，GC 日志里只有一行 <code>Pause Full 430ms</code>。</p>
+
+<p><strong>这 430ms 就是全部原因。</strong>但更准确的说法不是"锁被抢了"——锁从来没有被抢，是持有者<em>在锁已经不属于自己的情况下，仍然以为自己持有</em>。</p>
+
+<p>把这件事抽象一下，分布式锁（以及所有靠租约维持的独占）暗中依赖三条假设：</p>
+
+<figure>
+<svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">三条暗含假设：任一被破坏，锁就不再是锁</text>
+
+  <rect x="24" y="34" width="276" height="30" rx="6" fill="#1a5fb4"/>
+  <text x="162" y="54" font-size="12.5" font-weight="700" fill="#ffffff" text-anchor="middle">① 同时刻假设</text>
+  <rect x="24" y="64" width="276" height="186" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="38" y="86" font-size="11" font-weight="700" fill="#1a5fb4">破坏者</text>
+  <text x="38" y="106" font-size="11" fill="#3d454e">NTP 回拨 / 时钟漂移 100ppm</text>
+  <text x="38" y="124" font-size="11" fill="#3d454e">虚拟机热迁移后时钟跳变</text>
+  <text x="38" y="142" font-size="11" fill="#3d454e">容器共享宿主时钟</text>
+  <text x="38" y="172" font-size="11" font-weight="700" fill="#c62828">后果</text>
+  <text x="38" y="192" font-size="11" fill="#3d454e">ttl − elapsed 失真</text>
+  <text x="38" y="210" font-size="11" fill="#3d454e">「还没过期」其实已过期</text>
+  <text x="38" y="236" font-size="10" fill="#6b7683">单机上几乎总成立，跨机不成立</text>
+
+  <rect x="324" y="34" width="276" height="30" rx="6" fill="#6a3fa0"/>
+  <text x="462" y="54" font-size="12.5" font-weight="700" fill="#ffffff" text-anchor="middle">② 运行假设</text>
+  <rect x="324" y="64" width="276" height="186" rx="6" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="338" y="86" font-size="11" font-weight="700" fill="#6a3fa0">破坏者</text>
+  <text x="338" y="106" font-size="11" fill="#3d454e">Full GC / STW（本期实测 430ms）</text>
+  <text x="338" y="124" font-size="11" fill="#3d454e">cgroup CPU 限流、线程饥饿</text>
+  <text x="338" y="142" font-size="11" fill="#3d454e">节点 swap、进程被换出</text>
+  <text x="338" y="172" font-size="11" font-weight="700" fill="#c62828">后果</text>
+  <text x="338" y="192" font-size="11" fill="#3d454e">续约线程一起被冻住</text>
+  <text x="338" y="210" font-size="11" fill="#3d454e">看门狗同样救不了</text>
+  <text x="338" y="236" font-size="10" fill="#6b7683">这是最常被忽略、也最常见的一条</text>
+
+  <rect x="624" y="34" width="272" height="30" rx="6" fill="#c62828"/>
+  <text x="760" y="54" font-size="12.5" font-weight="700" fill="#ffffff" text-anchor="middle">③ 知情假设</text>
+  <rect x="624" y="64" width="272" height="186" rx="6" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="638" y="86" font-size="11" font-weight="700" fill="#c62828">破坏者</text>
+  <text x="638" y="106" font-size="11" fill="#3d454e">网络分区、单向丢包</text>
+  <text x="638" y="124" font-size="11" fill="#3d454e">续约返回值不检查</text>
+  <text x="638" y="142" font-size="11" fill="#3d454e">解锁不校验 owner</text>
+  <text x="638" y="172" font-size="11" font-weight="700" fill="#c62828">后果</text>
+  <text x="638" y="192" font-size="11" fill="#3d454e">锁已易主，持有者不知道</text>
+  <text x="638" y="210" font-size="11" fill="#3d454e">继续写 → 静默覆盖</text>
+  <text x="638" y="236" font-size="10" fill="#6b7683">第二次失效就在这里发生</text>
+
+  <rect x="24" y="262" width="852" height="58" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="38" y="282" font-size="11.5" font-weight="700" fill="#9a6400">反过来看共识算法：它在三条假设全部不成立的前提下，仍然保证所有节点看到同一个日志顺序。</text>
+  <text x="38" y="302" font-size="11" fill="#3d454e">代价是多数派与至少一轮 RTT。这就是本期主线：锁靠假设活着，共识不靠假设活着。</text>
+</svg>
+<figcaption><b>图 1</b>　三条假设各有明确的破坏者。面试里能把"哪条被破坏"说清楚，比背出十种锁的实现更有区分度。</figcaption>
+</figure>
+
+<p>三条假设在单机上几乎总成立，所以单机锁（<code>synchronized</code>、<code>ReentrantLock</code>）从来不需要讨论这些。一旦跨进程，<strong>三条全部不成立</strong>——这就是为什么"分布式锁"这个说法本身就有点过于乐观。</p>
+
+<p>反过来看 Raft 与 Paxos，它们做的事情恰恰是：在三条假设全破的前提下，仍然保证所有节点看到同一个日志顺序。代价是延迟（至少一轮 RTT）和可用性（必须多数派）。</p>
+
+<p>而"分布式事务"这个词，在工程上是<strong>一致性等级的选型问题</strong>，不是"如何让跨库操作原子"。先把等级排出来，后面每一节都往这个阶梯上落。</p>
+
+<table>
+<tr><th>等级</th><th>保证</th><th>谁能做到</th><th>代价</th></tr>
+<tr><td><strong>线性一致</strong><br>强一致</td><td>任何读都能看到最近一次成功写，所有节点顺序相同</td><td>Raft/Paxos 复制组、单机数据库、Spanner</td><td>多数派 + 至少 1 轮 RTT；分区时少数派不可写</td></tr>
+<tr><td>顺序一致</td><td>所有节点顺序相同，但读可能滞后</td><td>ZK（sync 之后）、原子广播</td><td>读需 sync，否则可能读到旧值</td></tr>
+<tr><td>因果一致</td><td>有因果关系的操作不乱序</td><td>向量时钟、会话一致性</td><td>需要传递因果上下文</td></tr>
+<tr><td>最终一致</td><td>停止写入后最终收敛</td><td>异步复制、MQ、缓存双写</td><td>收敛时间不可承诺</td></tr>
+</table>
+
+<div class="box amber">
+<div class="h">一句话记住这张表</div>
+<p>面试里 90% 的"分布式事务怎么做"的争论，本质上是<strong>两个人在讨论不同的一致性等级</strong>。先对齐等级，再谈方案。</p>
+</div>
+
+<h2><span class="n">L1</span>CAP 不是三选二，FLP 不是"没法做"</h2>
+
+<p><strong>CAP 的常见误读</strong>：三个里只能选两个。正确读法：C（线性一致）和 A（每个请求都返回非错误）只在 <strong>P（分区发生的那一刻）</strong> 才互斥。分区不发生的时候 CA 可以同时成立；分区发生时，你必须选一边。</p>
+
+<p>所以真实的选型不是"选两个"，而是<em>分区时我把痛苦留给谁</em>：</p>
+
+<ul>
+<li><strong>CP</strong>（etcd、ZK、Raft 组）：少数派直接不可写。用户看到 503，但数据不会错。</li>
+<li><strong>AP</strong>（Eureka、Cassandra、DNS）：少数派继续接受写，恢复后靠冲突解决合并。用户看不到错误，但可能看到旧值或丢写。</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 900 310" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">CAP 的三个时刻：C 与 A 只在中间那一列冲突</text>
+
+  <rect x="24" y="34" width="276" height="28" rx="6" fill="#1e7d3c"/>
+  <text x="162" y="53" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">① 无分区　CA 同时成立</text>
+  <rect x="24" y="62" width="276" height="130" rx="6" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="38" y="84" font-size="11" fill="#3d454e">5 台互通，多数派可写</text>
+  <text x="38" y="104" font-size="11" fill="#3d454e">写 → 复制到多数派 → 返回</text>
+  <text x="38" y="124" font-size="11" fill="#3d454e">读 → 一定能看到这次写</text>
+  <text x="38" y="152" font-size="11" font-weight="700" fill="#1e7d3c">系统看起来"什么都很强"</text>
+  <text x="38" y="172" font-size="10.5" fill="#6b7683">这段占全年 99.9% 的时间，所以</text>
+  <text x="38" y="187" font-size="10.5" fill="#6b7683">大家都误以为 CAP 是三选二</text>
+
+  <rect x="324" y="34" width="276" height="28" rx="6" fill="#c62828"/>
+  <text x="462" y="53" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">② 分区发生　只能选一个</text>
+  <rect x="324" y="62" width="276" height="62" rx="6" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="338" y="82" font-size="11" font-weight="700" fill="#1a5fb4">选 C（CP）</text>
+  <text x="338" y="100" font-size="10.5" fill="#3d454e">少数派拒绝写，返回 503 / 超时</text>
+  <text x="338" y="116" font-size="10.5" fill="#3d454e">数据不错，可用性掉一半</text>
+  <rect x="324" y="130" width="276" height="62" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="338" y="150" font-size="11" font-weight="700" fill="#9a6400">选 A（AP）</text>
+  <text x="338" y="168" font-size="10.5" fill="#3d454e">少数派继续接受写，不报错</text>
+  <text x="338" y="184" font-size="10.5" fill="#3d454e">恢复后要合并冲突，可能丢写</text>
+
+  <rect x="624" y="34" width="272" height="28" rx="6" fill="#6a3fa0"/>
+  <text x="760" y="53" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">③ 分区恢复　账单到期</text>
+  <rect x="624" y="62" width="272" height="130" rx="6" fill="#f2ecfb" stroke="#d7c9ef"/>
+  <text x="638" y="84" font-size="11" fill="#3d454e">CP：日志回补，落后节点追平</text>
+  <text x="638" y="104" font-size="11" fill="#3d454e">AP：冲突合并（LWW / 向量时钟）</text>
+  <text x="638" y="124" font-size="11" fill="#3d454e">AP 的"已确认写"可能被回滚</text>
+  <text x="638" y="152" font-size="11" font-weight="700" fill="#6a3fa0">这才是 CAP 的真实成本</text>
+  <text x="638" y="172" font-size="10.5" fill="#6b7683">AP 不是"更便宜"，只是把</text>
+  <text x="638" y="187" font-size="10.5" fill="#6b7683">痛苦从"当下"挪到"事后"</text>
+
+  <rect x="24" y="212" width="852" height="46" rx="6" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="38" y="232" font-size="11" font-weight="700" fill="#1a5fb4">FLP 的精确表述</text>
+  <text x="38" y="249" font-size="11" fill="#3d454e">完全异步 + 一个进程可能崩溃 ⇒ 不存在「总是能终止」的确定性共识算法。注意两个限定词：终止性、确定性。</text>
+</svg>
+<figcaption><b>图 2</b>　分区是稀有事件，所以"平时都很强"；但选型的全部代价都发生在中间那一列。</figcaption>
+</figure>
+
+<p><strong>FLP 的常见误读</strong>："异步网络下共识不可能，所以别做了"。精确表述是：在<strong>完全异步</strong>（无超时上界）+ <strong>一个进程可能崩溃</strong>的模型下，不存在<strong>总是能终止</strong>的<strong>确定性</strong>共识算法。两个限定词都是钥匙。</p>
+
+<p>工程上的绕法只有两条：</p>
+
+<ol>
+<li><strong>放弃"总是终止"，换"概率 1 终止"</strong>：Raft 的随机选举超时。它不保证一定选出 leader，但保证每一轮重试独立随机，所以"永远选不出"的概率随轮数指数衰减。</li>
+<li><strong>引入部分同步假设</strong>：认为消息延迟终有上界。这就是为什么 Raft 的<strong>活性依赖超时参数，而安全性完全不依赖</strong>——超时设错只影响"多久选出 leader"，不会导致两个 leader 同时提交。</li>
+</ol>
+
+<div class="box blue">
+<div class="h">这句话很值钱</div>
+<p>"Raft 的安全性不依赖时钟，活性依赖时钟。"——面试里能主动说出这句，这道题基本可以结束了。因为它同时解释了三件事：为什么时钟回拨不会导致数据错、为什么超时设太小会抖、为什么网络差的时候选主很久但数据仍然对。</p>
+</div>
+
+<p>集群规模的第一笔账：N 个节点容忍 <code>(N-1)/2</code> 台故障。3 台容忍 1 台，5 台容忍 2 台，7 台容忍 3 台。想容忍 2 台同时断电最少要 5 台——<strong>这也是为什么生产 Raft 集群几乎都是 3 或 5，而不是 4</strong>：4 台容忍 1 台，和 3 台一样，却多花一台钱、多一倍写放大。</p>
+<h2><span class="n">L2</span>Raft 选主：随机超时不是"随便随机"</h2>
+
+<h3>三个状态与一个任期</h3>
+
+<p>每个节点在任意时刻只处于三种状态之一：Follower、Candidate、Leader。任期（term）是单调递增的整数，<strong>每次选举 +1</strong>，它同时充当"逻辑时钟"和"投票凭据"：任期更小的消息一律丢弃。</p>
+
+<p>一次选举的固定动作：Follower 在超时时间内没收到心跳 → 变 Candidate → term+1 → 投自己 → 并行发 RequestVote → 拿到多数票变 Leader，否则等下一个随机超时重来。</p>
+
+<p>投票方只有两条判断，任一条不满足就拒绝：</p>
+
+<ol>
+<li><code>candidate.term &gt;= my.term</code>（任期不小于我）；</li>
+<li><strong>候选人的日志至少和我一样新</strong>：<code>lastLogTerm &gt; myLastLogTerm</code>，或 <code>lastLogTerm == myLastLogTerm &amp;&amp; lastLogIndex &gt;= myLastLogIndex</code>。</li>
+</ol>
+
+<p>第 2 条是整个算法里最容易被忽略、又最不能省的一条。它叫<strong>领导者完整性（Leader Completeness）</strong>：已被提交的日志，一定出现在未来所有 leader 的日志里。证明思路三步走：一条日志被提交意味着多数派持有它；任何新 leader 都必须拿到多数派投票；两个多数派必然有交集，而交集里那个节点只会把票投给"日志不比自己旧"的候选人。<em>多数派交集，是分布式一致性的全部数学基础。</em></p>
+
+<p>去掉第 2 条会怎样？一个日志落后的节点也能当选，它会用自己的空日志覆盖掉已提交的日志——已确认的订单消失。这不是理论问题，是很多手写 Raft 的第一批 bug。</p>
+
+<h3>实验：随机区间的宽度必须大于"拉票往返"</h3>
+
+<p>Raft 论文只说"随机化选举超时"，没说<strong>随机区间该多宽</strong>。写一个 5 节点模拟器（单程延迟 1~3ms、投票处理 0.2ms、所有节点同时超时——最坏情况），扫区间宽度，每种跑 10 万次：</p>
+
+<pre data-lang="python"><code># 5 节点同时超时，第一个醒来的节点拉票
+t = [base + random.uniform(lo, hi) for _ in range(5)]
+winner = argmin(t)
+for other in nodes:
+    arrive = t[winner] + 0.2 + random.uniform(1, 3)   # 票到达时刻
+    if arrive &lt; t[other]:      # 对方还没醒，才会投我
+        votes[winner] += 1
+ok = votes[winner] &gt;= 3</code></pre>
+
+<table>
+<tr><th>超时区间</th><th>宽度</th><th>首轮成功率</th><th>选举耗时</th></tr>
+<tr><td><code>[150,150)</code></td><td class="num">0ms</td><td><strong>0.00%</strong></td><td>—</td></tr>
+<tr><td><code>[150,151)</code></td><td class="num">1ms</td><td><strong>0.00%</strong></td><td>—</td></tr>
+<tr><td><code>[150,152)</code></td><td class="num">2ms</td><td>1.30%</td><td>—</td></tr>
+<tr><td><code>[150,155)</code></td><td class="num">5ms</td><td>61.26%</td><td class="num">2.43ms</td></tr>
+<tr><td><code>[150,160)</code></td><td class="num">10ms</td><td>92.50%</td><td class="num">2.63ms</td></tr>
+<tr><td><code>[150,170)</code></td><td class="num">20ms</td><td>98.92%</td><td class="num">2.72ms</td></tr>
+<tr><td><code>[150,200)</code></td><td class="num">50ms</td><td>99.92%</td><td class="num">2.77ms</td></tr>
+<tr><td><code>[150,300)</code></td><td class="num">150ms</td><td>100.00%</td><td class="num">2.79ms</td></tr>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">首轮选出 leader 的概率：随机区间宽度 vs 成功率（5 节点，各跑 10 万次）</text>
+
+  <line x1="90" y1="270" x2="640" y2="270" stroke="#d4dae1" stroke-width="1"/>
+  <line x1="90" y1="60" x2="90" y2="270" stroke="#d4dae1" stroke-width="1"/>
+  <line x1="90" y1="217.5" x2="640" y2="217.5" stroke="#eef2f6"/>
+  <line x1="90" y1="165" x2="640" y2="165" stroke="#eef2f6"/>
+  <line x1="90" y1="112.5" x2="640" y2="112.5" stroke="#eef2f6"/>
+  <line x1="90" y1="60" x2="640" y2="60" stroke="#eef2f6"/>
+
+  <text x="82" y="274" font-size="10" fill="#6b7683" text-anchor="end">0%</text>
+  <text x="82" y="221.5" font-size="10" fill="#6b7683" text-anchor="end">25%</text>
+  <text x="82" y="169" font-size="10" fill="#6b7683" text-anchor="end">50%</text>
+  <text x="82" y="116.5" font-size="10" fill="#6b7683" text-anchor="end">75%</text>
+  <text x="82" y="64" font-size="10" fill="#6b7683" text-anchor="end">100%</text>
+
+  <text x="90" y="288" font-size="10" fill="#6b7683" text-anchor="middle">0</text>
+  <text x="181.7" y="288" font-size="10" fill="#6b7683" text-anchor="middle">10</text>
+  <text x="273.3" y="288" font-size="10" fill="#6b7683" text-anchor="middle">20</text>
+  <text x="365" y="288" font-size="10" fill="#6b7683" text-anchor="middle">30</text>
+  <text x="456.7" y="288" font-size="10" fill="#6b7683" text-anchor="middle">40</text>
+  <text x="548.3" y="288" font-size="10" fill="#6b7683" text-anchor="middle">50</text>
+  <text x="640" y="288" font-size="10" fill="#6b7683" text-anchor="middle">60</text>
+  <text x="365" y="304" font-size="10.5" fill="#6b7683" text-anchor="middle">随机区间宽度（ms）</text>
+
+  <polyline points="90,270 99,270 108,267 136,141 182,76 273,62 365,61 548,60 640,60"
+            fill="none" stroke="#1a5fb4" stroke-width="2.2" stroke-linejoin="round"/>
+  <circle cx="90" cy="270" r="3.5" fill="#c62828"/>
+  <circle cx="99" cy="270" r="3.5" fill="#c62828"/>
+  <circle cx="108" cy="267" r="3.5" fill="#c62828"/>
+  <circle cx="136" cy="141" r="3.5" fill="#1a5fb4"/>
+  <circle cx="182" cy="76" r="3.5" fill="#1a5fb4"/>
+  <circle cx="273" cy="62" r="3.5" fill="#1a5fb4"/>
+  <circle cx="365" cy="61" r="3.5" fill="#1a5fb4"/>
+  <circle cx="548" cy="60" r="3.5" fill="#1a5fb4"/>
+  <circle cx="640" cy="60" r="3.5" fill="#1a5fb4"/>
+
+  <line x1="117.5" y1="60" x2="117.5" y2="270" stroke="#9a6400" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="121" y="52" font-size="10" font-weight="700" fill="#9a6400">拉票往返 ≈ 3ms</text>
+
+  <text x="96" y="262" font-size="9.5" fill="#c62828">0%</text>
+  <text x="114" y="278" font-size="9.5" fill="#c62828">1.3%</text>
+  <text x="143" y="137" font-size="10" font-weight="700" fill="#1a5fb4">61.3%</text>
+  <text x="190" y="72" font-size="10" font-weight="700" fill="#1a5fb4">92.5%</text>
+  <text x="373" y="56" font-size="10" font-weight="700" fill="#1a5fb4">99.7%</text>
+
+  <rect x="660" y="52" width="216" height="218" rx="7" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="674" y="72" font-size="11" font-weight="700" fill="#1a1d21">三个结论</text>
+  <text x="674" y="94" font-size="10.5" font-weight="700" fill="#c62828">① 固定超时 → 0%</text>
+  <text x="674" y="110" font-size="10" fill="#3d454e">不是"低"，是永远选不出：</text>
+  <text x="674" y="124" font-size="10" fill="#3d454e">五台同时投自己，无人过半</text>
+  <text x="674" y="150" font-size="10.5" font-weight="700" fill="#c62828">② 宽 1~2ms → 0% / 1.3%</text>
+  <text x="674" y="166" font-size="10" fill="#3d454e">比拉票往返还窄的随机，</text>
+  <text x="674" y="180" font-size="10" fill="#3d454e">等于没随机</text>
+  <text x="674" y="206" font-size="10.5" font-weight="700" fill="#1e7d3c">③ 宽 10ms → 92.5%</text>
+  <text x="674" y="222" font-size="10" fill="#3d454e">再宽收益饱和：30ms 已 99.7%</text>
+  <text x="674" y="238" font-size="10" fill="#3d454e">业界取值 10:1（心跳 100ms /</text>
+  <text x="674" y="252" font-size="10" fill="#3d454e">选举 1000ms）不是拍脑袋</text>
+
+  <text x="24" y="326" font-size="10" fill="#6b7683">注：二项近似 (1 − d/W)^(N−1) 会低估（d=3、W=10 时它给 24%，实测 92.5%），因为对手的醒来时刻是均匀分布的，只有落在 d 窗口内的才撞车。</text>
+</svg>
+<figcaption><b>图 3</b>　横轴是随机区间宽度，纵轴是首轮选出 leader 的成功率。橙色虚线是"拉票往返"，它左边的全部是死区。</figcaption>
+</figure>
+
+<p>三个结论，一个比一个反直觉。</p>
+
+<p><strong>第一，固定超时的成功率是 0，不是"低"。</strong>五台机器同时重启、超时时间一样、谁都没先睡着——每个节点都在同一毫秒投了自己，没人能拿多数票。而且这个状态不会自愈，下一轮还是同时超时。所以"随机"不是优化，是<em>打破对称性的唯一手段</em>。</p>
+
+<p><strong>第二，宽度 1ms 的成功率也是 0。</strong>这条最值得说：第一个节点醒来后，票要 1.2~3.2ms 才能到达别人手里，而别人在 1ms 内早就醒了并投了自己。<em>随机区间比拉票往返还窄时，随机等于没随机。</em>工程含义：<code>random(0,150ms)</code> 加在 150ms 基数上是安全的；但如果你为了"快速选主"把区间设成 <code>random(0,3ms)</code>，集群会永远选不出 leader。</p>
+
+<p><strong>第三，宽度超过往返之后，收益迅速饱和。</strong>5ms→61%，10ms→92.5%，30ms→99.7%。所以 etcd 默认 <code>heartbeat-interval=100ms</code>、<code>election-timeout=1000ms</code>（比例 10:1）不是拍脑袋：心跳要够密（别让 follower 误超时），随机区间要远大于往返（别撞车），又要远小于节点故障恢复的 MTBF（别等太久）。</p>
+
+<div class="box red">
+<div class="h">常见错误答案</div>
+<p>"随机超时为了防止分裂投票"——这句话只对了一半。<strong>随机只是必要条件，宽度才是充分条件。</strong>面试官追问"区间该多宽"时，能答出"大于一次拉票往返、且约为心跳的 10 倍"的人，才是真的调过参数。</p>
+</div>
+
+<h3>一个常被问到的细节：为什么心跳不直接带日志</h3>
+
+<p>Raft 里 AppendEntries 既是心跳也是日志复制，空日志时就是纯心跳。好处是<strong>天然合并</strong>：不需要"先发心跳再发日志"，一次 RPC 同时完成"我还活着"和"这批日志给你"。</p>
+
+<p>坏处是<strong>心跳会被大日志阻塞</strong>。所以工程实现（etcd）会做优先级队列：心跳走高优先级通道，日志复制走批量通道，避免一次 10MB 的日志把心跳堵在后面，导致 follower 误判 leader 已死——这也是"集群明明活着却反复选主"的经典成因之一。</p>
+
+<h2><span class="n">L3</span>日志复制：commitIndex 的两个陷阱</h2>
+
+<h3>一次复制的完整链路</h3>
+
+<p>leader 收到写请求 → 追加到本地日志（此时<strong>未提交</strong>）→ 并行发 AppendEntries → 多数派回复成功 → leader 推进 <code>commitIndex</code> → 应用到状态机 → 返回客户端。</p>
+
+<p>AppendEntries 带三个关键字段：<code>prevLogIndex</code>、<code>prevLogTerm</code>、<code>entries</code>。follower 先做一致性检查：<strong>我 <code>prevLogIndex</code> 这一条的任期，是不是 <code>prevLogTerm</code>？</strong>不是就拒绝，leader 把 <code>nextIndex</code> 回退一格重试。这个"回退重试"是 Raft 最朴素的修复手段，也是最容易写出 O(n) 性能问题的地方（工程上优化为"一次回退一个 term"）。</p>
+
+<p><code>commitIndex</code> 的计算规则一句话：<strong>取多数派 <code>matchIndex</code> 的中位数</strong>。5 个节点的 matchIndex 是 <code>[12, 12, 11, 9, 3]</code>，排序后第 3 大是 11，所以 11 及之前可以提交。</p>
+
+<pre data-lang="java"><code>int[] m = matchIndex.clone();            // [12,12,11,9,3]
+Arrays.sort(m);                          // [3,9,11,12,12]
+int quorum = m[m.length - 1 - (n / 2)];  // n=5 -> 下标 2 -> 11
+if (quorum &gt; commitIndex &amp;&amp; log[quorum].term == currentTerm) {
+    commitIndex = quorum;                // term 判断不能省，见陷阱 1
+}</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">commitIndex = 多数派 matchIndex 的中位数（第 3 大）</text>
+
+  <text x="24" y="52" font-size="10.5" fill="#6b7683">五个节点的 matchIndex（各自已确认复制的最大日志位置）</text>
+
+  <line x1="40" y1="240" x2="520" y2="240" stroke="#d4dae1"/>
+  <rect x="70" y="80" width="56" height="160" rx="3" fill="#1a5fb4"/>
+  <text x="98" y="74" font-size="11" font-weight="700" fill="#1a5fb4" text-anchor="middle">12</text>
+  <text x="98" y="256" font-size="10.5" fill="#3d454e" text-anchor="middle">S1</text>
+
+  <rect x="160" y="80" width="56" height="160" rx="3" fill="#1a5fb4"/>
+  <text x="188" y="74" font-size="11" font-weight="700" fill="#1a5fb4" text-anchor="middle">12</text>
+  <text x="188" y="256" font-size="10.5" fill="#3d454e" text-anchor="middle">S2</text>
+
+  <rect x="250" y="93" width="56" height="147" rx="3" fill="#1e7d3c"/>
+  <text x="278" y="87" font-size="11" font-weight="700" fill="#1e7d3c" text-anchor="middle">11</text>
+  <text x="278" y="256" font-size="10.5" fill="#3d454e" text-anchor="middle">S3</text>
+
+  <rect x="340" y="120" width="56" height="120" rx="3" fill="#b8c6d6"/>
+  <text x="368" y="114" font-size="11" font-weight="700" fill="#6b7683" text-anchor="middle">9</text>
+  <text x="368" y="256" font-size="10.5" fill="#3d454e" text-anchor="middle">S4</text>
+
+  <rect x="430" y="200" width="56" height="40" rx="3" fill="#b8c6d6"/>
+  <text x="458" y="194" font-size="11" font-weight="700" fill="#6b7683" text-anchor="middle">3</text>
+  <text x="458" y="256" font-size="10.5" fill="#3d454e" text-anchor="middle">S5</text>
+
+  <line x1="40" y1="93" x2="520" y2="93" stroke="#1e7d3c" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <text x="40" y="88" font-size="10.5" font-weight="700" fill="#1e7d3c">commitIndex = 11</text>
+
+  <rect x="560" y="44" width="316" height="196" rx="7" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="574" y="64" font-size="11" font-weight="700" fill="#1a1d21">两个陷阱</text>
+  <text x="574" y="86" font-size="10.5" font-weight="700" fill="#c62828">① 只提交当前任期的日志</text>
+  <text x="574" y="102" font-size="10" fill="#3d454e">多数派复制了旧任期的日志，</text>
+  <text x="574" y="116" font-size="10" fill="#3d454e">也<tspan font-weight="700" fill="#c62828">不能</tspan>直接推进 commitIndex</text>
+  <text x="574" y="130" font-size="10" fill="#3d454e">（见下图 Figure 8）</text>
+  <text x="574" y="156" font-size="10.5" font-weight="700" fill="#c62828">② leader 不能读未提交的写</text>
+  <text x="574" y="172" font-size="10" fill="#3d454e">被分区隔离的老 leader 必须</text>
+  <text x="574" y="186" font-size="10" fill="#3d454e">停读：ReadIndex（多一轮 RTT）</text>
+  <text x="574" y="200" font-size="10" fill="#3d454e">或 Lease Read（依赖时钟）</text>
+  <text x="574" y="222" font-size="10" fill="#1a5fb4">规则：commitIndex 是一个位置，</text>
+  <text x="574" y="234" font-size="10" fill="#1a5fb4">隐含"它之前全部已提交"</text>
+
+  <text x="24" y="284" font-size="10" fill="#6b7683">注：S5 只到 3，但它仍然有投票权——多数派看的是"有几台达到 N"，不是"平均值"。这台慢节点不会拖慢提交，只会拖慢自己的 apply。</text>
+</svg>
+<figcaption><b>图 4</b>　绿色柱是中位数（第 3 大）。慢节点不影响提交进度，这是多数派机制相对"全员确认"的核心优势。</figcaption>
+</figure>
+
+<h3>陷阱 1：只提交"当前任期"的日志</h3>
+
+<p>这是 Raft 论文 Figure 8 那个著名反例，也是面试里区分度最高的一问。四步时序：</p>
+
+<figure>
+<svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">Figure 8：为什么"多数派有了"不等于"可以提交"</text>
+
+  <text x="128" y="52" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">S1</text>
+  <text x="252" y="52" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">S2</text>
+  <text x="376" y="52" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">S3</text>
+  <text x="500" y="52" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">S4</text>
+  <text x="624" y="52" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">S5</text>
+
+  <text x="24" y="80" font-size="11" font-weight="700" fill="#1a5fb4">(a)</text>
+  <text x="24" y="96" font-size="9.5" fill="#6b7683">t2 的 leader</text>
+  <rect x="70" y="62" width="116" height="34" rx="4" fill="#e8f0fb" stroke="#1a5fb4"/>
+  <text x="128" y="84" font-size="9.5" fill="#1a5fb4" text-anchor="middle">idx2 = 2 (t2)</text>
+  <rect x="194" y="62" width="116" height="34" rx="4" fill="#e8f0fb" stroke="#1a5fb4"/>
+  <text x="252" y="84" font-size="9.5" fill="#1a5fb4" text-anchor="middle">idx2 = 2 (t2)</text>
+  <rect x="318" y="62" width="116" height="34" rx="4" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="376" y="84" font-size="9.5" fill="#6b7683" text-anchor="middle">idx2 = —</text>
+  <rect x="442" y="62" width="116" height="34" rx="4" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="500" y="84" font-size="9.5" fill="#6b7683" text-anchor="middle">idx2 = —</text>
+  <rect x="566" y="62" width="116" height="34" rx="4" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="624" y="84" font-size="9.5" fill="#6b7683" text-anchor="middle">idx2 = —</text>
+  <text x="700" y="78" font-size="9.5" fill="#3d454e">只复制给 S2 就崩了</text>
+  <text x="700" y="94" font-size="9.5" fill="#6b7683">2/5，未提交</text>
+
+  <text x="24" y="158" font-size="11" font-weight="700" fill="#9a6400">(b)</text>
+  <text x="24" y="174" font-size="9.5" fill="#6b7683">t3 的 leader</text>
+  <rect x="70" y="140" width="116" height="34" rx="4" fill="#e8f0fb" stroke="#1a5fb4"/>
+  <text x="128" y="162" font-size="9.5" fill="#1a5fb4" text-anchor="middle">idx2 = 2 (t2)</text>
+  <rect x="194" y="140" width="116" height="34" rx="4" fill="#e8f0fb" stroke="#1a5fb4"/>
+  <text x="252" y="162" font-size="9.5" fill="#1a5fb4" text-anchor="middle">idx2 = 2 (t2)</text>
+  <rect x="318" y="140" width="116" height="34" rx="4" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="376" y="162" font-size="9.5" fill="#6b7683" text-anchor="middle">idx2 = —</text>
+  <rect x="442" y="140" width="116" height="34" rx="4" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="500" y="162" font-size="9.5" fill="#6b7683" text-anchor="middle">idx2 = —</text>
+  <rect x="566" y="140" width="116" height="34" rx="4" fill="#fdf4e3" stroke="#9a6400"/>
+  <text x="624" y="162" font-size="9.5" fill="#9a6400" text-anchor="middle">idx2 = 3 (t3)</text>
+  <text x="700" y="156" font-size="9.5" fill="#3d454e">S5 靠 S3/S4/S5 当选</text>
+  <text x="700" y="172" font-size="9.5" fill="#6b7683">写入自己的 t3 日志</text>
+
+  <text x="24" y="236" font-size="11" font-weight="700" fill="#1e7d3c">(c)</text>
+  <text x="24" y="252" font-size="9.5" fill="#6b7683">t4 的 leader</text>
+  <rect x="70" y="218" width="116" height="34" rx="4" fill="#e9f5ec" stroke="#1e7d3c" stroke-width="2"/>
+  <text x="128" y="240" font-size="9.5" fill="#1e7d3c" text-anchor="middle">idx2 = 2 (t2)</text>
+  <rect x="194" y="218" width="116" height="34" rx="4" fill="#e9f5ec" stroke="#1e7d3c" stroke-width="2"/>
+  <text x="252" y="240" font-size="9.5" fill="#1e7d3c" text-anchor="middle">idx2 = 2 (t2)</text>
+  <rect x="318" y="218" width="116" height="34" rx="4" fill="#e9f5ec" stroke="#1e7d3c" stroke-width="2"/>
+  <text x="376" y="240" font-size="9.5" fill="#1e7d3c" text-anchor="middle">idx2 = 2 (t2)</text>
+  <rect x="442" y="218" width="116" height="34" rx="4" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="500" y="240" font-size="9.5" fill="#6b7683" text-anchor="middle">idx2 = —</text>
+  <rect x="566" y="218" width="116" height="34" rx="4" fill="#fdf4e3" stroke="#9a6400"/>
+  <text x="624" y="240" font-size="9.5" fill="#9a6400" text-anchor="middle">idx2 = 3 (t3)</text>
+  <text x="700" y="232" font-size="9.5" font-weight="700" fill="#c62828">3/5，已经是多数派</text>
+  <text x="700" y="248" font-size="9.5" fill="#c62828">但绝不能提交！</text>
+
+  <text x="24" y="314" font-size="11" font-weight="700" fill="#c62828">(d)</text>
+  <text x="24" y="330" font-size="9.5" fill="#6b7683">t5 的 leader</text>
+  <rect x="70" y="296" width="116" height="34" rx="4" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="128" y="318" font-size="9.5" fill="#6b7683" text-anchor="middle">idx2 = —</text>
+  <rect x="194" y="296" width="116" height="34" rx="4" fill="#fdeceb" stroke="#c62828"/>
+  <text x="252" y="318" font-size="9.5" fill="#c62828" text-anchor="middle">idx2 = 3 (t3)</text>
+  <rect x="318" y="296" width="116" height="34" rx="4" fill="#fdeceb" stroke="#c62828"/>
+  <text x="376" y="318" font-size="9.5" fill="#c62828" text-anchor="middle">idx2 = 3 (t3)</text>
+  <rect x="442" y="296" width="116" height="34" rx="4" fill="#fdeceb" stroke="#c62828"/>
+  <text x="500" y="318" font-size="9.5" fill="#c62828" text-anchor="middle">idx2 = 3 (t3)</text>
+  <rect x="566" y="296" width="116" height="34" rx="4" fill="#fdeceb" stroke="#c62828"/>
+  <text x="624" y="318" font-size="9.5" fill="#c62828" text-anchor="middle">idx2 = 3 (t3)</text>
+  <text x="700" y="310" font-size="9.5" fill="#3d454e">S1 崩，S5 靠 t3 更新</text>
+  <text x="700" y="326" font-size="9.5" fill="#3d454e">当选，覆盖 idx2</text>
+
+  <rect x="24" y="348" width="852" height="40" rx="6" fill="#fdeceb" stroke="#f3c9c6"/>
+  <text x="38" y="366" font-size="11" font-weight="700" fill="#c62828">正确规则：leader 只通过统计「当前任期日志」被多少节点复制来推进 commitIndex；</text>
+  <text x="38" y="382" font-size="11" fill="#3d454e">旧任期的日志不能单独提交，只能随一条当前任期的日志被「间接」提交。代码里就是 log[quorum].term == currentTerm 这一行。</text>
+</svg>
+<figcaption><b>图 5</b>　(c) 里那三个绿框就是陷阱：3/5 已过半，但如果据此提交，(d) 里 S5 会把已"提交"的日志覆盖掉。已确认的数据就这么丢了。</figcaption>
+</figure>
+
+<p>第 (c) 步里"多数派已经有了"却<strong>不能</strong>提交，否则第 (d) 步就会被覆盖。正确规则是：<strong>leader 只通过统计"当前任期的日志"被多少节点复制来推进 commitIndex；旧任期的日志靠"随一条当前任期日志被间接提交"。</strong></p>
+
+<p>为什么这条规则是对的？因为一旦当前任期的某条日志被多数派持有，那么任何未来 leader 的日志里必然包含它（领导者完整性），于是它之前的所有日志也就一并安全了。<em>安全性是"顺带"获得的，不能直接声明。</em></p>
+
+<h3>陷阱 2：leader 读自己的未提交写</h3>
+
+<p>更隐蔽的一个坑：客户端写完，leader 已追加但还没提交，此时另一个客户端来读，leader 从状态机读到旧值——这是正确的；但如果 leader "聪明地"从日志里读最新值返回，就违反了线性一致性：这条写可能马上被回滚。</p>
+
+<p>同理，<strong>被分区隔离的老 leader 必须停止服务读</strong>。它自己感觉良好，但多数派已经选了新 leader 并提交了新写。所以 Raft 的读也要走两道门之一：</p>
+
+<ul>
+<li><strong>ReadIndex</strong>：leader 先向多数派发一轮心跳确认自己仍是 leader，拿到当时的 commitIndex，等本地 apply 到该位置再返回。</li>
+<li><strong>Lease Read</strong>：靠"心跳在 election-timeout 内有效"推断自己还是 leader，省掉一轮 RTT，但<strong>依赖时钟</strong>——时钟漂移大时可能读到旧值。</li>
+</ul>
+
+<p>这就是"读性能优化"与"时钟假设"的取舍：Lease Read 快一倍，代价是把安全性重新绑回时钟。etcd 在这方面默认走 ReadIndex 系列，TiKV 则提供两者可配。</p>
+<h2><span class="n">L4</span>成员变更：为什么不能一台一台加</h2>
+
+<p>集群从 3 台扩到 5 台，直觉做法是"先加一台，再加一台"。这个直觉会炸。</p>
+
+<p>原因还是多数派交集。3 台时多数派是 2，5 台时多数派是 3。如果新旧配置在某个瞬间同时生效，就可能出现"旧配置的多数派"和"新配置的多数派"没有交集：S1、S2 按旧配置（2/3）选出 leader A，S3、S4、S5 按新配置（3/5）选出 leader B。两个 leader 同时提交，日志分叉。</p>
+
+<table>
+<tr><th>方案</th><th>做法</th><th>优点</th><th>缺点</th></tr>
+<tr><td><strong>一次只变一个</strong></td><td>3→4→5，每次只加/减 1 台</td><td>简单；单步变更时新旧多数派必然相交</td><td>变更慢；4 节点期间容错反而下降</td></tr>
+<tr><td>联合共识<br>joint consensus</td><td>先进入 C_old,new（需两边多数派都同意），再进 C_new</td><td>严格安全，可一次变多台</td><td>实现复杂，中间态要维护两套 quorum</td></tr>
+<tr><td>单节点配置切换</td><td>只允许单节点变更，配置变更也走 Raft 日志</td><td>简单，可回滚</td><td>本质与第一种等价，要求实现严格</td></tr>
+</table>
+
+<p>"一次只变一个"为什么安全，可以直接算：3→4 时，旧多数派 2、新多数派 3，两个集合在 4 个节点里必然相交（2+3=5 &gt; 4）。5→6 时旧 3、新 4，3+4=7 &gt; 6，也相交。<strong>只要每次只动一台，"两个多数派之和 &gt; 节点总数"就永远成立。</strong></p>
+
+<p>快照是另一半问题：日志不能无限增长。leader 定期把状态机序列化成快照，丢弃 <code>lastIncludedIndex</code> 之前的日志，落后的 follower 用 InstallSnapshot 直接收快照。这里有个隐蔽的坑：<strong>快照期间的 <code>commitIndex</code> 与 <code>lastIncludedIndex</code> 必须一致</strong>，否则 follower 恢复后会把已应用的日志再应用一遍——如果状态机不是幂等的，就会重复扣款。第 18 期讲过的"幂等键"，在 Raft 实现里同样适用。</p>
+
+<h2><span class="n">L5</span>etcd 的 lease 与 watch：两个"看起来能用"的坑</h2>
+
+<h3>lease 不是定时器，是"带过期时间的 key 归属"</h3>
+
+<p>etcd 的租约语义：<code>LeaseGrant(ttl)</code> 拿到一个 leaseId，把 key <code>Put</code> 时带上它；lease 到期或被 revoke，<strong>所有挂在它上面的 key 一起消失</strong>。续约是 <code>LeaseKeepAlive</code> 流（一条长连接反复续），不是每条 key 单独续。</p>
+
+<p>官方文档里有一句极易被忽略的话：<em>"The lease's actual TTL value is at least the minimum TTL and is chosen by the etcd cluster."</em> 你申请 10s，实际拿到的可能是 10s、11s、12s。原因是 etcd 用固定周期扫描租约桶，过期判定有粒度。</p>
+
+<p>这条对面试很有用，因为它是"为什么不能用 lease 做精确计时"的标准答案：<strong>lease 只保证"至少活 TTL"，不保证"到 TTL 就死"</strong>。副作用通常是安全的（多活一会儿不会导致双写），但如果业务逻辑依赖"到点必释放"，就会出问题。</p>
+
+<p>第二个坑：<strong>过期判定由 leader 做</strong>。leader 切换期间，新 leader 要重建租约桶，可能出现一批租约"集体晚过期"。所以用 etcd 做锁时，客户端必须<strong>自己校验 key 的 owner 与 revision</strong>，不能假设"我没续约它就已经释放了"。</p>
+
+<pre data-lang="java"><code>// 正确的 etcd 加锁：Lease + 事务比较（CAS），而不是先 get 再 put
+LeaseGrantResponse lease = leaseClient.grant(10);              // TTL=10s
+ByteSequence key = ByteSequence.from("/lock/order/1001", UTF_8);
+TxnResponse txn = kvClient.txn()
+    .If(new Cmp(key, Cmp.Op.EQUAL, CmpTarget.createRevision(0)))  // 不存在才写
+    .Then(Op.put(key, ByteSequence.from(ownerId), PutOption.newBuilder()
+              .withLeaseId(lease.getID()).build()))
+    .commit();                                                 // 原子：判断+写入一步完成
+if (!txn.isSucceeded()) throw new BizException("锁被占用");</code></pre>
+
+<p>注意这里为什么必须用 <code>txn</code>：<code>get</code> 之后再 <code>put</code> 是两次 RPC，中间锁可能被别人抢走。etcd 的 <code>txn</code> 带 <code>createRevision == 0</code> 比较，等价于 Redis 的 <code>SET NX</code>，但<strong>走的是 Raft 日志，是线性一致的</strong>。</p>
+
+<h3>watch：revision 是唯一可靠的重连凭据</h3>
+
+<p>etcd 的每次修改产生一个全局单调递增的 revision（<code>main.sub</code> 两段）。watch 可以指定 <code>--rev=N</code> 从历史位置重放。这带来一个非常好的性质：<strong>断线重连可以不丢事件</strong>，只要你记住最后处理到的 revision，重连时用 <code>rev+1</code> 续订。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">断线重连：从 now 重订会丢事件，从 rev+1 续订才完整</text>
+
+  <line x1="120" y1="56" x2="830" y2="56" stroke="#d4dae1"/>
+  <line x1="120" y1="50" x2="120" y2="62" stroke="#3d454e"/>
+  <line x1="420" y1="50" x2="420" y2="62" stroke="#c62828"/>
+  <line x1="700" y1="50" x2="700" y2="62" stroke="#1e7d3c"/>
+  <line x1="830" y1="50" x2="830" y2="62" stroke="#3d454e"/>
+  <text x="120" y="44" font-size="10" fill="#3d454e" text-anchor="middle">rev=100</text>
+  <text x="420" y="44" font-size="10" fill="#c62828" text-anchor="middle">断线</text>
+  <text x="700" y="44" font-size="10" fill="#1e7d3c" text-anchor="middle">重连</text>
+  <text x="830" y="44" font-size="10" fill="#3d454e" text-anchor="middle">rev=140</text>
+
+  <text x="24" y="88" font-size="10.5" font-weight="700" fill="#c62828">错误</text>
+  <text x="24" y="102" font-size="9.5" fill="#6b7683">从 now 重订</text>
+  <rect x="120" y="74" width="570" height="26" rx="4" fill="#fdeceb" stroke="#f3c9c6" stroke-dasharray="4 3"/>
+  <text x="405" y="91" font-size="10" fill="#c62828" text-anchor="middle">rev 101–136 的 36 条变更被静默丢弃（客户端以为"从最新开始"）</text>
+  <rect x="690" y="74" width="140" height="26" rx="4" fill="#c62828"/>
+  <text x="760" y="91" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">watch(137)</text>
+
+  <text x="24" y="140" font-size="10.5" font-weight="700" fill="#1e7d3c">正确</text>
+  <text x="24" y="154" font-size="9.5" fill="#6b7683">从 101 续订</text>
+  <rect x="120" y="126" width="710" height="26" rx="4" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="415" y="143" font-size="10" fill="#1e7d3c" text-anchor="middle">watch(101) 重放 101–137，断线期间一条不少</text>
+  <circle cx="120" cy="139" r="4" fill="#1e7d3c"/>
+
+  <rect x="24" y="176" width="852" height="44" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="38" y="194" font-size="10.5" font-weight="700" fill="#9a6400">硬边界：历史会被 compaction 压缩，压缩点之前无法续订</text>
+  <text x="38" y="211" font-size="10" fill="#3d454e">rv 早于压缩点时服务端直接抛 etcdserver: mvcc: required revision has been compacted —— 没有任何增量补齐的办法，只能全量重建。</text>
+
+  <text x="24" y="244" font-size="10.5" font-weight="700" fill="#1a1d21">list-and-watch 的正确顺序（所有 CDC / 配置中心 / K8s Informer 的通用范式）</text>
+  <text x="24" y="264" font-size="10" fill="#3d454e">① Get 全量，记下 header.revision = R　→　② 以 R+1 为起点开 watch　→　③ 断线用 lastRev+1 续订　→　④ 报 Compacted 回第 ① 步</text>
+  <text x="24" y="284" font-size="10" fill="#c62828">顺序反了会怎样？先 watch 再 list：增量可能重复应用（已在快照里），而 list 完成到 watch 建立之间的变更会丢。</text>
+</svg>
+<figcaption><b>图 6</b>　红色那条是"感觉最自然、实际最错"的写法。绿色的关键是<strong>记住 revision</strong>——它是唯一能跨断线定位的坐标。</figcaption>
+</figure>
+
+<pre data-lang="java"><code>// 错误写法：断线后重新 watch，从"现在"开始 —— 静默丢事件
+watchClient.watch(key, WatchOption.DEFAULT);
+
+// 正确写法：从上次处理完的下一个 revision 续订
+long next = lastProcessedRev + 1;
+watchClient.watch(key, WatchOption.newBuilder().withRevision(next).build());
+// 若返回 Compacted：历史已不可读，唯一出路是「全量重建 + 从当前 rev 续订」</code></pre>
+
+<p>工程上的标准姿势叫 <strong>list-and-watch</strong>，四步：</p>
+
+<ol>
+<li><code>Get</code> 全量，拿到 <code>header.revision = R</code>；</li>
+<li>以 <code>R+1</code> 为起点开 watch；</li>
+<li>断线 → 用 <code>lastRev+1</code> 续订；</li>
+<li>续订报 Compacted → 回到第 1 步。</li>
+</ol>
+
+<div class="box red">
+<div class="h">顺序反了会怎样</div>
+<p>先 watch 再 list：watch 期间收到的增量事件可能已经包含在 list 的快照里，导致<strong>重复应用</strong>；而 list 完成到 watch 建立之间的变更则会<strong>丢失</strong>。一前一后两个错误方向，同时发生。</p>
+<p>"先快照后增量"是所有 CDC / 配置中心 / Informer 的通用范式，Kubernetes 的 reflector 就是这个结构。</p>
+</div>
+<h2><span class="n">L6</span>分布式锁的四代：从死锁到"锁根本不够用"</h2>
+
+<h3>四代演进，每一代补上一个洞</h3>
+
+<table>
+<tr><th>代</th><th>实现</th><th>解决了什么</th><th>留下的洞</th></tr>
+<tr><td>一</td><td><code>SETNX</code> 不设过期</td><td>互斥</td><td>客户端崩溃 → 永久死锁</td></tr>
+<tr><td>二</td><td><code>SET key val NX PX 30000</code></td><td>死锁</td><td>业务超过 30s → 锁提前释放，双写</td></tr>
+<tr><td>三</td><td>看门狗自动续约（Redisson）</td><td>业务慢</td><td>进程停顿 / 分区 → 续约停了，锁照样丢</td></tr>
+<tr><td>四</td><td>租约 + <strong>fencing token</strong>，资源侧校验</td><td>双写覆盖</td><td>需要资源侧配合改造，成本最高</td></tr>
+</table>
+
+<p>前三代都在"锁服务"这一侧做文章，第四代把责任推给了<strong>被保护的资源</strong>。这个转向是整期最核心的认知：<em>锁的正确性无法由锁服务单方面保证。</em></p>
+
+<h3>实验：三种写法，三种结局</h3>
+
+<p>写一个极简的"Redis"（owner + expireAt + 单调令牌），三个场景真跑，TTL=300ms，日志原样贴出。</p>
+
+<pre data-lang="java"><code>// 场景 1：有租期，无 fencing
+long tk = store.tryAcquire("A", 300);   // t=8ms    拿到 token=1
+pause("A", 400);                        // t=22ms   进入停顿（模拟 STW）
+                                        // t=339ms  B 抢到 token=2，写入 value=B
+store.writeUnsafe("A", "A");            // t=432ms  A 恢复，写入 value=A
+                                        // 最终 value = A ← B 的写被静默覆盖</code></pre>
+
+<pre data-lang="text"><code>t=   8ms  A    拿到锁 token=1 ttl=300ms
+t=  22ms  A    进入停顿 400ms（模拟 STW / 进程被换出）
+t= 339ms  B    尝试抢锁 -&gt; token=2（A 的租约已过期）
+t= 339ms  B    写：value=B
+t= 431ms  A    恢复执行，但它并不知道锁已经易主
+t= 432ms  A    继续写：value=A
+最终 value = A   &lt;-- B 的写被 A 覆盖，且没人报错</code></pre>
+
+<figure>
+<svg viewBox="0 0 900 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">同一个 400ms 停顿，三条泳道和它的账单（TTL=300ms）</text>
+
+  <text x="24" y="46" font-size="10" fill="#6b7683">t=0</text>
+  <text x="680" y="46" font-size="10" fill="#c62828" text-anchor="middle">t=339 锁过期</text>
+  <text x="831" y="46" font-size="10" fill="#c62828" text-anchor="middle">t=432</text>
+  <line x1="130" y1="52" x2="860" y2="52" stroke="#e4e8ed"/>
+
+  <text x="24" y="76" font-size="10.5" font-weight="700" fill="#1a5fb4">A 视角</text>
+  <rect x="143" y="62" width="537" height="20" rx="3" fill="#1a5fb4"/>
+  <text x="411" y="76" font-size="9.5" fill="#ffffff" text-anchor="middle">持有锁（TTL 300ms）</text>
+  <rect x="680" y="62" width="151" height="20" rx="3" fill="#fdeceb" stroke="#c62828" stroke-dasharray="4 3"/>
+  <text x="755" y="76" font-size="9.5" fill="#c62828" text-anchor="middle">仍以为持有</text>
+  <rect x="166" y="86" width="663" height="14" rx="3" fill="#e4e8ed"/>
+  <text x="497" y="97" font-size="9" fill="#3d454e" text-anchor="middle">进程停顿 400ms（STW / 被换出）</text>
+
+  <text x="24" y="130" font-size="10.5" font-weight="700" fill="#1e7d3c">B 视角</text>
+  <rect x="680" y="116" width="180" height="20" rx="3" fill="#1e7d3c"/>
+  <text x="770" y="130" font-size="9.5" fill="#ffffff" text-anchor="middle">B 合法持有</text>
+  <text x="24" y="164" font-size="10" fill="#6b7683">B 完全合法：A 的租约确实过期了</text>
+
+  <text x="24" y="196" font-size="10.5" font-weight="700" fill="#c62828">数据</text>
+  <rect x="130" y="182" width="550" height="20" rx="3" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="405" y="196" font-size="9.5" fill="#6b7683" text-anchor="middle">value = 旧值</text>
+  <rect x="680" y="182" width="151" height="20" rx="3" fill="#1e7d3c"/>
+  <text x="755" y="196" font-size="9.5" fill="#ffffff" text-anchor="middle">value = B</text>
+  <rect x="831" y="182" width="29" height="20" rx="3" fill="#c62828"/>
+  <text x="846" y="196" font-size="9.5" fill="#ffffff" text-anchor="middle">A</text>
+  <text x="700" y="220" font-size="9.5" fill="#c62828">B 的写活不过 93ms</text>
+
+  <text x="24" y="252" font-size="10.5" font-weight="700" fill="#1a5fb4">加 fencing</text>
+  <text x="24" y="268" font-size="9.5" fill="#6b7683">同样时序</text>
+  <rect x="831" y="238" width="29" height="20" rx="3" fill="#1e7d3c"/>
+  <text x="846" y="252" font-size="9.5" fill="#ffffff" text-anchor="middle">✓</text>
+  <text x="600" y="252" font-size="9.5" fill="#1e7d3c" text-anchor="end">资源侧：token 1 &lt; 2 → 拒绝写入</text>
+  <text x="600" y="268" font-size="9.5" fill="#6b7683" text-anchor="end">客户端照样执行完，但写被挡住</text>
+
+  <line x1="680" y1="58" x2="680" y2="282" stroke="#c62828" stroke-width="1.2" stroke-dasharray="5 3"/>
+  <line x1="831" y1="58" x2="831" y2="282" stroke="#c62828" stroke-width="1.2" stroke-dasharray="5 3"/>
+
+  <rect x="24" y="296" width="852" height="46" rx="6" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="38" y="315" font-size="11" font-weight="700" fill="#c62828">结论：锁只能降低冲突概率，不能保证互斥。正确性由资源侧的单调令牌兜底。</text>
+  <text x="38" y="332" font-size="10" fill="#3d454e">这也意味着分布式锁从「正确性组件」降级为「性能优化组件」——这个认知转变，比会背四种实现重要得多。</text>
+</svg>
+<figcaption><b>图 7</b>　红色虚线之间那 93ms，就是"两次失效"的完整窗口：第一次是锁过期（必然），第二次是 A 不知道自己已经过期（bug）。</figcaption>
+</figure>
+
+<pre data-lang="text"><code>t= 437ms  C    拿到锁 token=1
+t= 437ms  C    进入停顿 400ms
+t= 770ms  D    抢到锁 token=2，写 value=D -&gt; 接受
+t= 848ms  C    恢复执行，写 value=C -&gt; 被拒绝（token 过期）
+最终 value = D   &lt;-- 旧持有者的迟到写被拒</code></pre>
+
+<p>注意场景 2 里 C <strong>没有被"拦住执行"</strong>，它照样跑完了自己的代码，只是写被资源侧拒绝。这不是缺陷，正是设计意图：<em>锁不再承担"防止并发执行"的职责，只承担"降低冲突概率"的职责；正确性由资源侧的单调令牌兜底。</em></p>
+
+<p>fencing token 落地的三种常见形态，都不需要额外中间件：</p>
+
+<pre data-lang="sql"><code>-- 形态 1：条件更新，0 行即失败（最常用，无需额外表）
+UPDATE stock SET qty = qty - 1, fence = #{token}
+ WHERE sku_id = 1001 AND fence &lt; #{token};
+
+-- 形态 2：乐观锁版本号
+UPDATE stock SET qty = #{newQty}, version = version + 1
+ WHERE sku_id = 1001 AND version = #{readVersion};
+
+-- 形态 3：状态机流转（第 18 期讲过，0 行的第二种语义）
+UPDATE orders SET status = 'PAID' WHERE id = 1 AND status = 'UNPAID';</code></pre>
+
+<h3>场景 3：看门狗救不了 STW</h3>
+
+<p>这一组最能打脸"加了看门狗就安全了"的说法：</p>
+
+<pre data-lang="text"><code>t= 849ms  E    拿到锁 token=1，看门狗每 100ms 续一次
+t= 962ms  E    续约 -&gt; true
+t=1066ms  E    续约 -&gt; true
+t=1176ms  E    续约 -&gt; true
+t=1177ms  E    进入停顿 450ms（模拟 STW / 进程被换出）
+t=1550ms  F    尝试抢锁 -&gt; token=2
+t=1642ms  E    恢复执行，但它并不知道锁已经易主
+t=1749ms  E    续约 -&gt; false
+t=1858ms  E    续约 -&gt; false
+t=1966ms  E    续约 -&gt; false        （后面连续 7 次全是 false）</code></pre>
+
+<p>看门狗是一个<strong>独立线程</strong>，但 STW 会停掉<strong>所有 Java 线程</strong>，包括看门狗。最后一次成功续约在 <code>t=1176ms</code>，把租约推到 <code>t≈1476ms</code>；450ms 的停顿跨过了这个点，锁在 F 抢到之前就已经失效，而 E 在 <code>t=1642ms</code> 恢复后还执行了 100 多毫秒才发出第一次续约。</p>
+
+<p>所以看门狗的真实作用范围要精确表述：<strong>它把"业务耗时 &gt; TTL"这个失败模式消掉了，但完全没有触及"进程停顿 &gt; TTL"这个失败模式。</strong>而后者在生产里恰恰更常见——Full GC、容器 CPU 被限流、虚拟机热迁移、节点 swap。</p>
+
+<p>再看续约失败后的行为：E 收到了 <code>false</code>，如果代码里写成 <code>if (!renew()) { /* 忽略 */ }</code>，它就会一路写下去。所以第四代锁还要求一条工程纪律：</p>
+
+<div class="box red">
+<div class="h">续约失败 = 立即放弃写入</div>
+<p>发现租约已失，当前线程必须抛异常回滚，绝不能"再写完这一把"。Redisson 的 <code>RLock</code> 在续约失败时会停止续约并让锁进入失效状态，但<strong>它没有能力中断你的业务线程</strong>——那一步只能由你的代码在写之前检查 <code>isHeldByCurrentThread()</code>，或者干脆交给资源侧的令牌。</p>
+</div>
+
+<h3>两次失效，精确定义</h3>
+
+<p>把上面的东西收成一句可以背下来的话：</p>
+
+<ul>
+<li><strong>第一次失效</strong>：租约到期，锁被别人合法拿走。这是<strong>设计使然</strong>，不是 bug——没有租约就会有死锁。</li>
+<li><strong>第二次失效</strong>：原持有者<strong>不知道</strong>锁已经易主，继续写。这是<strong>真正的 bug</strong>，也是数据损坏的直接原因。</li>
+</ul>
+
+<p>三代锁的演进，本质上只解决了第一次失效；<strong>只有 fencing token 解决第二次失效</strong>。面试时如果只答"加过期时间 + 看门狗"，就停在了第三代；补上"资源侧单调令牌 + 续约失败即放弃"，才算答完。</p>
+
+<figure>
+<svg viewBox="0 0 900 268" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">四代锁的能力矩阵：每一代只补一个洞</text>
+
+  <rect x="24" y="34" width="852" height="30" rx="4" fill="#eef2f6"/>
+  <text x="40" y="54" font-size="10.5" font-weight="700" fill="#3d454e">代 / 实现</text>
+  <text x="330" y="54" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">防死锁</text>
+  <text x="490" y="54" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">防提前释放</text>
+  <text x="650" y="54" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">防停顿双写</text>
+  <text x="800" y="54" font-size="10.5" font-weight="700" fill="#3d454e" text-anchor="middle">改造成本</text>
+
+  <text x="40" y="88" font-size="11" fill="#3d454e">一　SETNX</text>
+  <text x="330" y="88" font-size="12" font-weight="700" fill="#c62828" text-anchor="middle">✗</text>
+  <text x="490" y="88" font-size="12" font-weight="700" fill="#c62828" text-anchor="middle">✗</text>
+  <text x="650" y="88" font-size="12" font-weight="700" fill="#c62828" text-anchor="middle">✗</text>
+  <text x="800" y="88" font-size="10.5" fill="#1e7d3c" text-anchor="middle">极低</text>
+
+  <line x1="24" y1="100" x2="876" y2="100" stroke="#eef2f6"/>
+  <text x="40" y="122" font-size="11" fill="#3d454e">二　SET NX PX</text>
+  <text x="330" y="122" font-size="12" font-weight="700" fill="#1e7d3c" text-anchor="middle">✓</text>
+  <text x="490" y="122" font-size="12" font-weight="700" fill="#c62828" text-anchor="middle">✗</text>
+  <text x="650" y="122" font-size="12" font-weight="700" fill="#c62828" text-anchor="middle">✗</text>
+  <text x="800" y="122" font-size="10.5" fill="#1e7d3c" text-anchor="middle">极低</text>
+
+  <line x1="24" y1="134" x2="876" y2="134" stroke="#eef2f6"/>
+  <text x="40" y="156" font-size="11" fill="#3d454e">三　看门狗续约</text>
+  <text x="330" y="156" font-size="12" font-weight="700" fill="#1e7d3c" text-anchor="middle">✓</text>
+  <text x="490" y="156" font-size="12" font-weight="700" fill="#1e7d3c" text-anchor="middle">✓</text>
+  <text x="650" y="156" font-size="12" font-weight="700" fill="#c62828" text-anchor="middle">✗</text>
+  <text x="800" y="156" font-size="10.5" fill="#9a6400" text-anchor="middle">低</text>
+
+  <line x1="24" y1="168" x2="876" y2="168" stroke="#eef2f6"/>
+  <rect x="24" y="168" width="852" height="34" fill="#e9f5ec"/>
+  <text x="40" y="190" font-size="11" font-weight="700" fill="#1e7d3c">四　租约 + fencing</text>
+  <text x="330" y="190" font-size="12" font-weight="700" fill="#1e7d3c" text-anchor="middle">✓</text>
+  <text x="490" y="190" font-size="12" font-weight="700" fill="#1e7d3c" text-anchor="middle">✓</text>
+  <text x="650" y="190" font-size="12" font-weight="700" fill="#1e7d3c" text-anchor="middle">✓</text>
+  <text x="800" y="190" font-size="10.5" fill="#c62828" text-anchor="middle">高（改 SQL）</text>
+
+  <line x1="24" y1="202" x2="876" y2="202" stroke="#d4dae1"/>
+
+  <text x="24" y="224" font-size="10.5" fill="#6b7683">注：第三代的"防提前释放"指业务耗时超过 TTL 时能自动续期；它对"进程完全停住"无效，因为续约线程和业务线程一起被 STW 冻住。</text>
+  <text x="24" y="240" font-size="10.5" fill="#6b7683">第四代的成本不在中间件，而在资源侧要接受一个单调令牌——这也是为什么很多团队明知有窗口，仍然停在第三代。</text>
+  <text x="24" y="258" font-size="10.5" font-weight="700" fill="#1a5fb4">判断标准：这笔数据被写错时，你能不能靠对账发现并冲正？能 → 第三代够用；不能 → 必须第四代。</text>
+</svg>
+<figcaption><b>图 8</b>　不是"越新越好"，而是"你的数据能不能承受一次静默覆盖"。能承受就停在第三代，这是成本与风险的正常权衡。</figcaption>
+</figure>
+<h2><span class="n">L7</span>停顿到底有多长：11ms + 3.8ns × 存活对象数</h2>
+
+<p>上面所有讨论都建立在"停顿可以超过 TTL"这个前提上。这个前提不是玄学，可以算出来。</p>
+
+<p>实验设计：同一堆上限（<code>-Xmx4g</code>），只改<strong>存活对象个数</strong>，每次 <code>System.gc()</code> 后从 GC 日志读 <code>Pause Full</code> 那一行。</p>
+
+<pre data-lang="java"><code>static class Node { Object ref; long v; }      // 每个对象约 24B，且互相引用
+Object[] box = new Object[20_000_000];
+for (int i = 0; i &lt; n; i++) box[i] = new Node(box, i);   // 造 n 个存活对象
+System.gc();                                             // 读 GC 日志的 Pause Full</code></pre>
+
+<table>
+<tr><th>存活对象数</th><th>存活集大小</th><th>Pause Full</th></tr>
+<tr><td class="num">200 万</td><td class="num">124MB</td><td class="num">16.9ms</td></tr>
+<tr><td class="num">500 万</td><td class="num">193MB</td><td class="num">30.6ms</td></tr>
+<tr><td class="num">1000 万</td><td class="num">308MB</td><td class="num">50.6ms</td></tr>
+<tr><td class="num">2000 万</td><td class="num">537MB</td><td class="num">85.7ms</td></tr>
+</table>
+
+<p>线性拟合：<code>停顿 ≈ 10.96ms + 3.78ns × 对象数</code>，R² = 0.997。</p>
+
+<figure>
+<svg viewBox="0 0 900 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">停顿取决于对象个数，不是堆大小</text>
+
+  <text x="70" y="44" font-size="10.5" font-weight="700" fill="#3d454e">实测（4 个点，同堆上限 4G）</text>
+  <line x1="70" y1="300" x2="520" y2="300" stroke="#d4dae1"/>
+  <line x1="70" y1="60" x2="70" y2="300" stroke="#d4dae1"/>
+  <line x1="70" y1="240" x2="520" y2="240" stroke="#eef2f6"/>
+  <line x1="70" y1="180" x2="520" y2="180" stroke="#eef2f6"/>
+  <line x1="70" y1="120" x2="520" y2="120" stroke="#eef2f6"/>
+  <line x1="70" y1="60" x2="520" y2="60" stroke="#eef2f6"/>
+  <text x="62" y="304" font-size="9.5" fill="#6b7683" text-anchor="end">0</text>
+  <text x="62" y="244" font-size="9.5" fill="#6b7683" text-anchor="end">25</text>
+  <text x="62" y="184" font-size="9.5" fill="#6b7683" text-anchor="end">50</text>
+  <text x="62" y="124" font-size="9.5" fill="#6b7683" text-anchor="end">75</text>
+  <text x="62" y="64" font-size="9.5" fill="#6b7683" text-anchor="end">100</text>
+  <text x="30" y="180" font-size="9.5" fill="#6b7683">ms</text>
+
+  <text x="70" y="316" font-size="9.5" fill="#6b7683" text-anchor="middle">0</text>
+  <text x="182.5" y="316" font-size="9.5" fill="#6b7683" text-anchor="middle">5M</text>
+  <text x="295" y="316" font-size="9.5" fill="#6b7683" text-anchor="middle">10M</text>
+  <text x="407.5" y="316" font-size="9.5" fill="#6b7683" text-anchor="middle">15M</text>
+  <text x="520" y="316" font-size="9.5" fill="#6b7683" text-anchor="middle">20M</text>
+  <text x="295" y="334" font-size="10" fill="#6b7683" text-anchor="middle">存活对象数</text>
+
+  <line x1="70" y1="273.7" x2="520" y2="92.2" stroke="#1a5fb4" stroke-width="1.2" stroke-dasharray="5 3"/>
+  <circle cx="115" cy="259.4" r="4" fill="#1a5fb4"/>
+  <circle cx="182.5" cy="226.6" r="4" fill="#1a5fb4"/>
+  <circle cx="295" cy="178.6" r="4" fill="#1a5fb4"/>
+  <circle cx="520" cy="94.3" r="4" fill="#1a5fb4"/>
+  <text x="126" y="256" font-size="9.5" fill="#1a5fb4">16.9ms</text>
+  <text x="193" y="223" font-size="9.5" fill="#1a5fb4">30.6ms</text>
+  <text x="305" y="175" font-size="9.5" fill="#1a5fb4">50.6ms</text>
+  <text x="508" y="86" font-size="9.5" fill="#1a5fb4" text-anchor="end">85.7ms</text>
+  <text x="330" y="120" font-size="9.5" font-weight="700" fill="#1a5fb4">停顿 ≈ 11ms + 3.78ns × N</text>
+  <text x="330" y="136" font-size="9.5" fill="#6b7683">R² = 0.997</text>
+
+  <line x1="560" y1="60" x2="560" y2="320" stroke="#e4e8ed"/>
+  <text x="580" y="44" font-size="10.5" font-weight="700" fill="#3d454e">推算（把线性关系外推）</text>
+  <text x="580" y="104" font-size="10" fill="#3d454e">50M</text>
+  <text x="644" y="104" font-size="10" fill="#9a6400" text-anchor="end">200ms</text>
+  <rect x="650" y="92" width="18.9" height="20" rx="3" fill="#f0b429"/>
+
+  <text x="580" y="154" font-size="10" fill="#3d454e">100M</text>
+  <text x="644" y="154" font-size="10" fill="#c62828" text-anchor="end">389ms</text>
+  <rect x="650" y="142" width="36.8" height="20" rx="3" fill="#e07a5f"/>
+
+  <text x="580" y="204" font-size="10" fill="#3d454e">200M</text>
+  <text x="644" y="204" font-size="10" fill="#c62828" text-anchor="end">767ms</text>
+  <rect x="650" y="192" width="72.6" height="20" rx="3" fill="#c62828"/>
+
+  <text x="580" y="254" font-size="10" fill="#3d454e">500M</text>
+  <text x="644" y="254" font-size="10" fill="#c62828" text-anchor="end">1902ms</text>
+  <rect x="650" y="242" width="180" height="20" rx="3" fill="#8e1c1c"/>
+
+  <line x1="678.4" y1="76" x2="678.4" y2="278" stroke="#c62828" stroke-width="1.3" stroke-dasharray="5 3"/>
+  <text x="682" y="72" font-size="9.5" font-weight="700" fill="#c62828">TTL = 300ms 这条线</text>
+  <text x="580" y="300" font-size="9.5" fill="#6b7683">这条线右边：锁、心跳、健康检查全部失效</text>
+  <text x="580" y="318" font-size="9.5" fill="#6b7683">1 亿存活对象的服务，300ms 租期是必然失效</text>
+
+  <rect x="24" y="340" width="852" height="2" fill="#e4e8ed"/>
+</svg>
+<figcaption><b>图 9</b>　左图是四条实测点与拟合线，右图把它外推到生产规模。红色虚线是 300ms 租期——注意 1 亿对象已经越过它。</figcaption>
+</figure>
+
+<p>注意三件事。</p>
+
+<p><strong>第一，停顿取决于对象个数，不是堆大小。</strong>一个 8GB 堆里放 10 个 800MB 的 <code>byte[]</code>，Full GC 只要几毫秒（标记 10 个对象）；一个 2GB 堆里放 5000 万个 40B 的小对象，Full GC 要 200ms。<em>"堆大所以停顿长"是错的，"对象多所以停顿长"才对。</em>这条解释了一个常见困惑：为什么有些服务把堆从 8G 加到 16G，Full GC 反而没变慢。</p>
+
+<p><strong>第二，这个系数随 CPU 与对象图复杂度变化。</strong>引用密集（一个对象 10 个引用）会比单引用慢几倍，跨代引用多、卡表脏页多也会变慢。所以 3.78ns 只用于量级估算，不要当常数背。</p>
+
+<div class="box amber">
+<div class="h">一个我自己踩的坑：System.gc() 的墙钟 ≠ STW</div>
+<p>第一版实验我用 <code>System.gc()</code> 的返回耗时当停顿，结果只有 2.5~5ms 且几乎恒定——因为 G1 的 Full GC 是并发标记，<code>System.gc()</code> 在并发阶段就可能返回，真正的多次 STW 分散在日志里。<strong>要测停顿只能读 GC 日志的 <code>Pause</code> 行或 JFR 的 <code>jdk.GCPhasePause</code>，不能掐表。</strong></p>
+</div>
+
+<p>把这个数字代回租期公式，就得到一个可以直接写进设计文档的不等式：</p>
+
+<pre data-lang="text"><code>安全窗 = TTL − 业务最大耗时 − 最大 STW − 时钟漂移 − 网络抖动
+必须满足：安全窗 &gt; 0，且越大越好
+
+代入本期开头那次故障：300 − 120 − 430 − 5 − 3 = −258ms
+负 258ms 意味着：即使一切顺利，锁也一定会提前 258ms 失效</code></pre>
+
+<p>这就是为什么"锁该设多长"不是拍脑袋的问题。要么把 TTL 设到 <code>业务耗时 + 最大停顿 + 余量</code>（但崩溃后的死锁窗口变长），要么承认锁不可靠、上 fencing token。<strong>工程上通常两个都做：TTL 取 P99 业务耗时的 3 倍，同时资源侧校验令牌。</strong></p>
+
+<h2><span class="n">L8</span>Redlock 的争议：多数派加锁也救不了</h2>
+
+<p>Redis 作者 antirez 提出 Redlock，是为了绕开"单点 Redis 挂了锁就没了"。算法五步：</p>
+
+<ol>
+<li>取当前时间 <code>t1</code>；</li>
+<li>依次向 N 个<strong>独立</strong> Redis 节点 <code>SET NX PX ttl</code>，每个请求带很短的超时（远小于 TTL）；</li>
+<li>统计成功数，若 <code>&gt;= N/2+1</code> 且 <code>elapsed = now − t1 &lt; ttl</code>，认为加锁成功；</li>
+<li>锁的<strong>有效时间</strong> = <code>ttl − elapsed − drift</code>，其中 <code>drift ≈ 0.01 × ttl + 2ms</code>（时钟漂移与网络延迟的合并补偿项）；</li>
+<li>失败则向所有节点发解锁。</li>
+</ol>
+
+<p>看起来很美。Martin Kleppmann 的反驳只有三句，但每句都致命：</p>
+
+<ol>
+<li><strong>它依赖时钟。</strong>有效期用的是各节点本地时钟，一旦某台机器的时钟跳变（NTP 校正、虚拟机暂停恢复），<code>ttl − elapsed</code> 就失去意义。</li>
+<li><strong>它没有解决进程暂停。</strong>客户端在拿到锁之后、写入之前被 STW 冻住，醒来时锁早已过期，而它并不知道——这正是 L6 的场景 1，Redlock 一步都没改善。</li>
+<li><strong>它缺少 fencing token。</strong>所以即使锁"技术上"还在有效期内，也无法阻止旧持有者的迟到写。</li>
+</ol>
+
+<p>antirez 的回应大意是"如果你要求这么强，那你需要的不是锁而是共识系统"。这句回应其实是对的——<strong>两个人争论的根本不是同一个东西</strong>：一个在说"低概率互斥"，一个在说"绝对互斥"。</p>
+
+<p>站在面试角度，这段争议的正确用法不是站队，而是把"锁能提供什么"说清楚：</p>
+
+<table>
+<tr><th>实现</th><th>互斥强度</th><th>分区时</th><th>需资源侧配合</th><th>典型用途</th></tr>
+<tr><td>Redis 单机 <code>SET NX PX</code></td><td>单点内互斥；主从切换可能丢锁</td><td>主从异步复制，可能双持有</td><td>建议</td><td>防重复提交、任务去重</td></tr>
+<tr><td>Redlock（N 独立节点）</td><td>概率互斥，依赖时钟</td><td>少数派侧不可加锁</td><td>建议</td><td>同上，容忍极低概率双写</td></tr>
+<tr><td>etcd / ZK（Raft / ZAB）</td><td>线性一致的 CAS，锁本身可靠</td><td>少数派不可加锁</td><td>建议</td><td>选主、配置变更、关键临界区</td></tr>
+<tr><td>数据库唯一索引 / 条件更新</td><td><strong>资源侧强一致</strong></td><td>由数据库保证</td><td>不需要（本身就是资源）</td><td>幂等、扣减、状态流转</td></tr>
+</table>
+
+<p>最后一行才是终局：<strong>当你能把互斥条件写进资源侧的 SQL 里时，分布式锁就变成了一个纯粹的性能优化，而不是正确性依赖。</strong>这也是第 18 期"幂等"和第 29 期"锁"的交汇点。</p>
+
+<p>一个常被追问的细节：Redlock 为什么要"独立节点"？因为如果 5 个 Redis 是主从复制的，主挂掉切从，从可能还没同步到那把锁，锁直接消失。<em>"多数派"只有在节点故障独立时才有意义</em>——这和 Raft 要求"多数派"是完全不同的假设：Raft 的多数派靠日志复制保证，Redlock 的多数派只是"多数台机器上各有一把钥匙"，没有复制、没有日志、没有一致性。</p>
+<h2><span class="n">L9</span>分布式事务：其实是在选一致性等级</h2>
+
+<h3>2PC 不是共识，这是最多人搞错的一点</h3>
+
+<p>两阶段提交：协调者发 <code>prepare</code> → 参与者写 undo/redo 日志并锁住资源、回复 yes/no → 协调者收集完毕发 <code>commit/abort</code>。</p>
+
+<p>它和 Raft 的区别，一句话：<strong>2PC 解决的是"原子提交"，不是"一致性"。</strong></p>
+
+<ul>
+<li>2PC 的协调者是<strong>单点</strong>，协调者崩溃后参与者只能干等（阻塞），或者在超时后自行决定（可能双提交）。</li>
+<li>2PC 没有"多数派"概念，所有参与者都必须同意，任何一台挂了就卡住。</li>
+<li>2PC 不解决"协调者自己也挂了，且它恢复后忘了自己决定过什么"——所以工程上必须把协调者的决策落盘，这就是 Seata 的 <code>undo_log</code> + TC 高可用。</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">2PC 的阻塞窗口：协调者一崩，参与者既不能提交也不能回滚</text>
+
+  <line x1="120" y1="52" x2="860" y2="52" stroke="#e4e8ed"/>
+  <text x="194" y="44" font-size="9.5" fill="#6b7683" text-anchor="middle">prepare</text>
+  <text x="340" y="44" font-size="9.5" fill="#6b7683" text-anchor="middle">全部 yes</text>
+  <text x="416" y="44" font-size="9.5" font-weight="700" fill="#c62828" text-anchor="middle">协调者崩溃</text>
+
+  <text x="24" y="80" font-size="10.5" font-weight="700" fill="#1a5fb4">协调者</text>
+  <rect x="120" y="66" width="296" height="20" rx="3" fill="#1a5fb4"/>
+  <text x="268" y="80" font-size="9.5" fill="#ffffff" text-anchor="middle">发起 prepare，收集投票</text>
+  <text x="430" y="80" font-size="16" font-weight="700" fill="#c62828">✗</text>
+
+  <text x="24" y="126" font-size="10.5" font-weight="700" fill="#9a6400">参与者 A</text>
+  <rect x="120" y="112" width="220" height="20" rx="3" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="230" y="126" font-size="9.5" fill="#9a6400" text-anchor="middle">写 undo/redo，锁住行</text>
+  <rect x="340" y="112" width="520" height="20" rx="3" fill="#fdeceb" stroke="#c62828"/>
+  <text x="600" y="126" font-size="9.5" fill="#c62828" text-anchor="middle">阻塞：等 commit / abort，锁一直不放</text>
+
+  <text x="24" y="172" font-size="10.5" font-weight="700" fill="#9a6400">参与者 B</text>
+  <rect x="120" y="158" width="220" height="20" rx="3" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="230" y="172" font-size="9.5" fill="#9a6400" text-anchor="middle">写 undo/redo，锁住行</text>
+  <rect x="340" y="158" width="520" height="20" rx="3" fill="#fdeceb" stroke="#c62828"/>
+  <text x="600" y="172" font-size="9.5" fill="#c62828" text-anchor="middle">同样阻塞，连接与行锁都被占住</text>
+
+  <line x1="416" y1="58" x2="416" y2="186" stroke="#c62828" stroke-width="1.2" stroke-dasharray="5 3"/>
+
+  <rect x="24" y="200" width="852" height="42" rx="6" fill="#fdf4e3" stroke="#efd9ab"/>
+  <text x="38" y="218" font-size="10.5" font-weight="700" fill="#9a6400">两难：参与者等下去 → 行锁与连接池被占满（第 09 期讲过的雪崩起点）；</text>
+  <text x="38" y="234" font-size="10.5" fill="#3d454e">参与者超时后自己决定 → 可能 A 提交、B 回滚，出现"部分提交"，这正是 2PC 不能保证的东西。</text>
+
+  <rect x="24" y="254" width="852" height="36" rx="6" fill="#e9f5ec" stroke="#c2e2cc"/>
+  <text x="38" y="277" font-size="10.5" font-weight="700" fill="#1e7d3c">所以生产上的 2PC 必须给协调者做高可用；而"协调者高可用"本身又需要共识（Raft）——绕一圈还是回到本期的主题。</text>
+</svg>
+<figcaption><b>图 10</b>　2PC 的失败不是"数据错"，而是"资源被锁死"。它的代价是可用性与连接数，不是一致性。</figcaption>
+</figure>
+
+<p>面试里的高分答法：<em>"2PC 是原子提交协议，不是共识协议；它的正确性依赖协调者不挂，所以生产上必须给协调者做高可用，而高可用本身又需要共识——绕了一圈还是回到 Raft。"</em>这句话能把两个话题缝合起来，含金量很高。</p>
+
+<h3>七种方案的坐标</h3>
+
+<p>把常见方案按"一致性强度"与"业务侵入度"摆到一张图上，选型就变成了找位置：</p>
+
+<table>
+<tr><th>方案</th><th>一致性等级</th><th>隔离性</th><th>业务侵入</th><th>典型故障语义</th></tr>
+<tr><td>2PC / XA</td><td>强（原子提交）</td><td>全程锁资源</td><td>低（框架代理）</td><td>协调者挂 → 阻塞；启发式回滚</td></tr>
+<tr><td>3PC</td><td>强（减少阻塞）</td><td>预提交阶段仍锁</td><td>低</td><td>分区下仍可能不一致</td></tr>
+<tr><td>TCC</td><td>最终一致</td><td>业务自己控</td><td><strong>高</strong>（三接口）</td><td>空回滚、悬挂、幂等三件套</td></tr>
+<tr><td>Saga</td><td>最终一致</td><td>无锁，靠补偿</td><td>高（正向 + 补偿）</td><td>补偿失败需人工介入</td></tr>
+<tr><td>本地消息表</td><td>最终一致</td><td>无锁</td><td>中</td><td>消息表与业务同库，靠轮询</td></tr>
+<tr><td>事务消息（RocketMQ）</td><td>最终一致</td><td>无锁</td><td>中</td><td>半消息回查</td></tr>
+<tr><td>Raft 复制组（etcd / TiKV）</td><td>线性一致</td><td>单组分片内强</td><td>低（换存储）</td><td>少数派不可用</td></tr>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">选型不是比方案，是给方案找位置</text>
+
+  <line x1="90" y1="290" x2="600" y2="290" stroke="#d4dae1"/>
+  <line x1="90" y1="56" x2="90" y2="290" stroke="#d4dae1"/>
+  <line x1="345" y1="56" x2="345" y2="290" stroke="#e4e8ed" stroke-dasharray="4 4"/>
+  <line x1="90" y1="170" x2="600" y2="170" stroke="#e4e8ed" stroke-dasharray="4 4"/>
+
+  <text x="90" y="306" font-size="10" fill="#6b7683">低 ← 业务侵入度 → 高</text>
+  <text x="600" y="306" font-size="10" fill="#6b7683" text-anchor="end">改造成本往上走</text>
+  <text x="78" y="66" font-size="10" fill="#6b7683" text-anchor="end">线性</text>
+  <text x="78" y="284" font-size="10" fill="#6b7683" text-anchor="end">最终</text>
+  <text x="30" y="170" font-size="10" fill="#6b7683">一致性</text>
+  <text x="30" y="184" font-size="10" fill="#6b7683">强度</text>
+
+  <text x="100" y="80" font-size="9.5" fill="#b8c6d6">强一致 + 低侵入（理想区，几乎不存在）</text>
+  <text x="355" y="80" font-size="9.5" fill="#b8c6d6">强一致 + 高侵入（很少值得）</text>
+  <text x="100" y="190" font-size="9.5" fill="#b8c6d6">甜点区：低侵入 + 最终一致</text>
+  <text x="355" y="190" font-size="9.5" fill="#b8c6d6">复杂区：高侵入 + 最终一致</text>
+
+  <circle cx="170" cy="96" r="6" fill="#1a5fb4"/>
+  <text x="182" y="100" font-size="10" font-weight="700" fill="#1a5fb4">Raft 复制组</text>
+  <text x="182" y="114" font-size="9" fill="#6b7683">线性一致，换存储</text>
+
+  <circle cx="215" cy="126" r="6" fill="#1a5fb4"/>
+  <text x="227" y="130" font-size="10" font-weight="700" fill="#1a5fb4">2PC / XA</text>
+  <text x="227" y="144" font-size="9" fill="#6b7683">原子提交，阻塞</text>
+
+  <circle cx="262" cy="152" r="6" fill="#9a6400"/>
+  <text x="274" y="156" font-size="10" font-weight="700" fill="#9a6400">3PC</text>
+  <text x="274" y="170" font-size="9" fill="#6b7683">减少阻塞，不解决分区</text>
+
+  <circle cx="390" cy="238" r="6" fill="#1e7d3c"/>
+  <text x="402" y="242" font-size="10" font-weight="700" fill="#1e7d3c">本地消息表</text>
+  <text x="402" y="256" font-size="9" fill="#6b7683">最便宜，扫表投递</text>
+
+  <circle cx="452" cy="218" r="6" fill="#1e7d3c"/>
+  <text x="464" y="222" font-size="10" font-weight="700" fill="#1e7d3c">事务消息</text>
+  <text x="464" y="236" font-size="9" fill="#6b7683">半消息回查</text>
+
+  <circle cx="500" cy="262" r="6" fill="#6a3fa0"/>
+  <text x="512" y="266" font-size="10" font-weight="700" fill="#6a3fa0">TCC</text>
+  <text x="512" y="280" font-size="9" fill="#6b7683">三接口，防悬挂</text>
+
+  <circle cx="520" cy="192" r="6" fill="#6a3fa0"/>
+  <text x="532" y="196" font-size="10" font-weight="700" fill="#6a3fa0">Saga</text>
+  <text x="532" y="210" font-size="9" fill="#6b7683">补偿链 + 人工台</text>
+
+  <rect x="620" y="56" width="256" height="234" rx="7" fill="#f7f9fb" stroke="#d4dae1"/>
+  <text x="634" y="76" font-size="11" font-weight="700" fill="#1a1d21">判断顺序（从上往下）</text>
+  <text x="634" y="98" font-size="10" fill="#3d454e">① 能放进一个库一个事务？</text>
+  <text x="644" y="112" font-size="9.5" fill="#1e7d3c">能 → 别做分布式事务</text>
+  <text x="634" y="134" font-size="10" fill="#3d454e">② 能接受毫秒级延迟？</text>
+  <text x="644" y="148" font-size="9.5" fill="#1e7d3c">能 → 本地消息表 / 事务消息</text>
+  <text x="634" y="170" font-size="10" fill="#3d454e">③ 有"预留-确认-取消"语义？</text>
+  <text x="644" y="184" font-size="9.5" fill="#9a6400">有 → TCC，先设计空回滚</text>
+  <text x="634" y="206" font-size="10" fill="#3d454e">④ 长流程、跨外部系统？</text>
+  <text x="644" y="220" font-size="9.5" fill="#9a6400">是 → Saga + 人工补偿台</text>
+  <text x="634" y="242" font-size="10" fill="#3d454e">⑤ 要求线性一致？</text>
+  <text x="644" y="256" font-size="9.5" fill="#1a5fb4">是 → 别用事务方案，用 Raft</text>
+  <text x="634" y="276" font-size="9" fill="#6b7683">顺序本身比答案更有区分度</text>
+
+  <text x="24" y="336" font-size="10" fill="#6b7683">注：纵轴"一致性强度"不是越上越好——越上意味着越多等待与越少可用性。绝大多数业务真正需要的是"可对账的最终一致"，而不是线性一致。</text>
+</svg>
+<figcaption><b>图 11</b>　把七个方案放到一张坐标系上，选型就从"背书"变成"定位"。注意右上角几乎空白：强一致 + 低侵入是不存在的。</figcaption>
+</figure>
+
+<p>一个实用的判断顺序（也是图右侧那五步）：</p>
+
+<ol>
+<li>能放进<strong>一个库一个事务</strong>吗？能就别折腾分布式事务（这是最容易被忽略的正确答案）。</li>
+<li>必须跨库但能接受毫秒级延迟？选<strong>本地消息表</strong>或<strong>事务消息</strong>，成本最低。</li>
+<li>有明确的"预留-确认-取消"业务语义（库存、金额）？选 <strong>TCC</strong>，但要提前设计好空回滚与悬挂。</li>
+<li>长流程、跨多个外部系统、无法长时间持锁？选 <strong>Saga</strong>，并准备人工补偿台。</li>
+<li>要求线性一致（配置、元数据、分布式锁、选主）？别用事务方案，直接用 <strong>Raft 复制组</strong>。</li>
+</ol>
+
+<p>第 5 条最容易被追问："为什么不用 TCC 做配置中心？"答案：TCC 是最终一致，配置读到旧值会导致错误决策；配置中心要的是线性一致读，只有共识协议能给。</p>
+
+<h2><span class="n">L10</span>时间与顺序：没有全局时钟，"先后"就是幻觉</h2>
+
+<p>前面所有的坑（租约、过期、last-write-wins）最终都指向同一件事：<strong>分布式系统里没有"现在"</strong>。两台机器的 <code>System.currentTimeMillis()</code> 可能差几十毫秒，还可能突然跳变。</p>
+
+<table>
+<tr><th>时钟</th><th>本质</th><th>能回答什么问题</th><th>成本</th></tr>
+<tr><td>物理时钟（NTP）</td><td>尽力对齐真实时间</td><td>"大约什么时候"</td><td>漂移 10~100ppm，可能跳变</td></tr>
+<tr><td>Lamport 逻辑时钟</td><td>单调整数，随消息传递推进</td><td>"A 是否在 B 之前"（有因果关系时）</td><td>无法比较并发事件</td></tr>
+<tr><td>向量时钟</td><td>每个节点一维</td><td>"并发还是有序"</td><td>元数据 O(N)，随节点数膨胀</td></tr>
+<tr><td>HLC 混合逻辑时钟</td><td>物理时间 + 逻辑计数</td><td>近似全序，且贴近真实时间</td><td>需要节点数受控</td></tr>
+<tr><td>TrueTime（Spanner）</td><td>GPS + 原子钟，给出误差区间</td><td>"确定已经过去"</td><td>专用硬件，ε≈7ms</td></tr>
+<tr><td>TSO 中心发号器</td><td>单点分配时间戳</td><td>全局全序</td><td>中心化，一次 RTT</td></tr>
+</table>
+
+<p>Spanner 的做法最值得讲，因为它把"不确定性"变成了"等待"：</p>
+
+<figure>
+<svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,PingFang SC,Microsoft YaHei,sans-serif">
+  <text x="24" y="20" font-size="12.5" font-weight="700" fill="#1a1d21">Spanner 的 commit-wait：用 14ms 的等待，换一个确定的全局顺序</text>
+
+  <line x1="120" y1="180" x2="860" y2="180" stroke="#d4dae1"/>
+  <text x="120" y="198" font-size="9.5" fill="#6b7683" text-anchor="middle">t=0</text>
+  <text x="290" y="198" font-size="9.5" fill="#6b7683" text-anchor="middle">10ms</text>
+  <text x="465" y="198" font-size="9.5" fill="#6b7683" text-anchor="middle">20ms</text>
+  <text x="637" y="198" font-size="9.5" fill="#6b7683" text-anchor="middle">30ms</text>
+  <text x="810" y="198" font-size="9.5" fill="#6b7683" text-anchor="middle">40ms</text>
+
+  <rect x="171" y="70" width="242" height="98" rx="4" fill="#fdeceb" stroke="#f3c9c6" stroke-dasharray="4 3"/>
+  <text x="292" y="62" font-size="9.5" fill="#c62828" text-anchor="middle">不确定性区间 ±ε（ε≈7ms）</text>
+  <line x1="292" y1="60" x2="292" y2="180" stroke="#c62828" stroke-width="1.3"/>
+  <text x="298" y="120" font-size="9.5" font-weight="700" fill="#c62828">commit 时间戳</text>
+  <text x="298" y="134" font-size="9" fill="#6b7683">t = 10ms</text>
+
+  <rect x="171" y="152" width="242" height="12" rx="3" fill="#f0b429"/>
+  <text x="171" y="148" font-size="9" fill="#9a6400">真实时间可能落在这一段里的任何位置</text>
+
+  <rect x="171" y="206" width="369" height="22" rx="4" fill="#e8f0fb" stroke="#bcd4f2"/>
+  <text x="355" y="221" font-size="9.5" fill="#1a5fb4" text-anchor="middle">commit-wait：等到 now &gt; t + 2ε（约 24ms）才返回</text>
+
+  <line x1="534" y1="70" x2="534" y2="232" stroke="#1e7d3c" stroke-width="1.3" stroke-dasharray="5 3"/>
+  <text x="540" y="96" font-size="9.5" font-weight="700" fill="#1e7d3c">此后任何读</text>
+  <text x="540" y="110" font-size="9.5" fill="#1e7d3c">一定看得到这次写</text>
+  <text x="540" y="130" font-size="9" fill="#6b7683">外部一致性成立</text>
+
+  <text x="24" y="248" font-size="10" fill="#6b7683">代价：每次写固定多等约 14ms。对比第 12 期那次 430ms 的 Full GC —— JVM 一次停顿就把 Spanner 的努力全部作废，所以这类系统的客户端对 GC 极度敏感。</text>
+</svg>
+<figcaption><b>图 12</b>　commit-wait 的本质是"把时钟的不确定性，换成确定的等待时间"。这是分布式系统里最优雅的一笔交易。</figcaption>
+</figure>
+
+<p>这就是"外部一致性"的价格：<strong>14ms 换一个确定的全局顺序</strong>。对比第 12 期讲过的 GC 停顿 430ms——分布式系统为了消除几毫秒的不确定性愿意付出十几毫秒固定延迟，而 JVM 一次 Full GC 就把它全部作废。</p>
+
+<p>工程上更常见的替代是 TSO（TiDB、OceanBase 都用）：一个中心化发号器分配单调时间戳，用 Raft 保证它高可用。代价是每次事务至少一次跨机房 RTT，而且 TSO 是新的单点（虽然是有共识兜底的逻辑单点）。</p>
+
+<p>MySQL 主从则是反面教材：binlog 异步复制 + 客户端重试，会出现"先发起的写后到、后发起的写先到"，最终值取决于到达顺序而不是业务顺序。标准解法有两个：<strong>给写操作带上版本号，让数据库用 <code>WHERE version &lt; ?</code> 拒绝旧写</strong>（和 L6 的 fencing 是同一个东西），或者<strong>把同一实体的写路由到同一分片/同一连接</strong>（顺序由单点保证）。</p>
+<h2><span class="n">L11</span>面试怎么答：四档对照</h2>
+
+<p>以"Redis 分布式锁怎么实现"为例，同一道题的四档答案，分水岭非常清楚：</p>
+
+<table>
+<tr><th style="width:80px">档位</th><th>答案</th><th style="width:150px">差在哪</th></tr>
+<tr><td><strong>不及格</strong></td><td><code>SETNX</code> 加锁，<code>DEL</code> 解锁。</td><td>不知道崩溃后死锁</td></tr>
+<tr><td><strong>及格</strong></td><td><code>SET key uuid NX PX 30000</code> 加锁，解锁用 Lua 比对 uuid 再删，防止误删别人的锁。</td><td>知道租期与误删</td></tr>
+<tr><td><strong>良好</strong></td><td>在及格基础上加看门狗续约（Redisson 的 <code>RLock</code>），并解释为什么需要重入计数、续约失败要放弃。</td><td>知道业务慢的场景</td></tr>
+<tr><td><strong>优秀</strong></td><td>先说故障模型（GC 停顿 / 时钟漂移 / 分区），指出租约锁必然存在"锁已易主但持有者不知"的窗口，给出 <code>安全窗 = TTL − 业务耗时 − STW − 漂移</code>；说明看门狗只覆盖"业务慢"不覆盖"进程停"；最后给 fencing token + 资源侧条件更新（<code>WHERE fence &lt; ?</code>），并说明这把锁因此退化为性能优化。</td><td>知道它在什么条件下<strong>不成立</strong></td></tr>
+</table>
+
+<p>前三档在答"怎么用"，第四档在答"什么情况下它不成立"。这个差别，比多背两个 API 值钱得多。</p>
+
+<p>以"Raft 怎么选主"为例，同样四档：不及格是"超时没心跳就竞选，票多当 leader"；及格补上 term 递增、随机超时、多数派当选；良好补上"候选人日志不能落后"这条投票约束并解释多数派交集；优秀则要说清"随机区间宽度必须大于拉票往返"（可给实测曲线：1ms 宽 0%、5ms 宽 61%、10ms 宽 92.5%），以及"安全性不依赖时钟、活性依赖时钟"。</p>
+
+<h2><span class="n">L12</span>十条最容易记反的</h2>
+
+<table>
+<tr><th style="width:34px">#</th><th style="width:230px">常见说法</th><th>正确的是</th></tr>
+<tr><td class="num">1</td><td>CAP 三选二</td><td>C 与 A 只在分区发生的那一刻冲突；平时可以同时成立。真实选择是"分区时把痛苦留给谁"。</td></tr>
+<tr><td class="num">2</td><td>多数派有了就能提交</td><td>旧任期的日志即使被多数派复制也不能直接提交（Figure 8），必须靠当前任期日志间接提交。</td></tr>
+<tr><td class="num">3</td><td>锁过期就是锁失效</td><td>过期是设计；失效是"持有者不知道已经过期"，那才是 bug。</td></tr>
+<tr><td class="num">4</td><td>加看门狗就安全了</td><td>STW 会停掉所有 Java 线程，包括续约线程；看门狗只覆盖"业务耗时 &gt; TTL"。</td></tr>
+<tr><td class="num">5</td><td>Redlock 的 drift 是网络延迟补偿</td><td>它是"时钟漂移 + 网络延迟"的合并补偿项（<code>1% × TTL + 2ms</code>），前提仍是时钟大致可靠。</td></tr>
+<tr><td class="num">6</td><td>lease 的 TTL 就是设定的值</td><td>实际 TTL <strong>≥</strong> 请求值，由集群决定。别拿 lease 做精确计时。</td></tr>
+<tr><td class="num">7</td><td>watch 断了就重新 watch</td><td>必须按 <code>lastRev+1</code> 续订；报 Compacted 时只能全量重建。</td></tr>
+<tr><td class="num">8</td><td>拿到 token 就算 fencing</td><td>令牌必须在<strong>资源侧</strong>校验（SQL 条件更新），客户端自检或只写日志等于没做。</td></tr>
+<tr><td class="num">9</td><td>2PC 是共识协议</td><td>2PC 是原子提交，没有多数派，协调者是单点。</td></tr>
+<tr><td class="num">10</td><td>心跳超时设短能更快发现故障</td><td>只会制造更多误判选主；etcd 默认 100ms/1000ms 的 10:1 是经验比例。</td></tr>
+</table>
+
+<h2><span class="n">L13</span>二十四个数字速查</h2>
+
+<table>
+<tr><th style="width:230px">数字</th><th>含义</th></tr>
+<tr><td><code>3 或 5</code></td><td>生产 Raft 集群节点数；4 台容错等同 3 台，纯浪费</td></tr>
+<tr><td><code>(N-1)/2</code></td><td>容忍故障数：3→1，5→2，7→3</td></tr>
+<tr><td><code>100ms / 1000ms</code></td><td>etcd 默认心跳 / 选举超时，比例 10:1</td></tr>
+<tr><td><code>0%</code></td><td>固定选举超时下的首轮成功率（实测）</td></tr>
+<tr><td><code>0% / 1.3%</code></td><td>随机区间宽 1ms / 2ms 时的首轮成功率（实测）</td></tr>
+<tr><td><code>61.3% / 92.5% / 99.6%</code></td><td>宽 5 / 10 / 20ms 时的首轮成功率（实测）</td></tr>
+<tr><td><code>2.4~2.8ms</code></td><td>5 节点一轮选举耗时（实测）</td></tr>
+<tr><td><code>3ms</code></td><td>拉票往返量级；随机区间必须明显大于它</td></tr>
+<tr><td><code>10.96ms + 3.78ns×N</code></td><td>Full GC 停顿拟合式（R²=0.997，本机实测）</td></tr>
+<tr><td><code>389ms / 1.9s</code></td><td>1 亿 / 5 亿存活对象时的推算停顿</td></tr>
+<tr><td><code>430ms</code></td><td>本期故障里的那次 Full GC</td></tr>
+<tr><td><code>−258ms</code></td><td>300 − 120 − 430 − 5 − 3，安全窗为负</td></tr>
+<tr><td><code>300ms</code></td><td>租约 TTL（本例）；工程取 P99 业务耗时的 3 倍</td></tr>
+<tr><td><code>7 次</code></td><td>停顿恢复后连续失败的续约次数（实测）</td></tr>
+<tr><td><code>1% × TTL + 2ms</code></td><td>Redlock 的 drift 补偿项</td></tr>
+<tr><td><code>N/2+1</code></td><td>Redlock 与 Raft 都要求多数派</td></tr>
+<tr><td><code>2ε ≈ 14ms</code></td><td>Spanner commit-wait 的固定写延迟（ε≈7ms）</td></tr>
+<tr><td><code>1 轮 RTT</code></td><td>线性一致读的最低成本（ReadIndex）</td></tr>
+<tr><td><code>0 行</code></td><td>条件更新失败的唯一可靠信号</td></tr>
+<tr><td><code>2 轮 RTT + 2 次 fsync</code></td><td>一次 XA 事务的固定开销</td></tr>
+<tr><td><code>3 倍</code></td><td>TTL 相对 P99 业务耗时的经验倍数</td></tr>
+<tr><td><code>两个多数派之和 &gt; N</code></td><td>成员变更时"新旧多数派必然相交"的数学条件</td></tr>
+<tr><td><code>600ms</code></td><td>etcd 默认 lock 租约（60s）量级下的续约周期参考，实际按 TTL/3 设</td></tr>
+<tr><td><code>1 个</code></td><td>每次允许变更的成员数（单步变更）</td></tr>
+</table>
+
+<h2><span class="n">L14</span>十四问答</h2>
+
+<div class="qa"><div class="q">Raft 和 Paxos 到底差在哪？面试该怎么选一边？</div>
+<div class="a">Paxos 是"单次决议"的算法族（Basic Paxos 决定一个值），Multi-Paxos 才处理连续日志，但它对"leader 选举、日志压缩、成员变更"留白很多。Raft 把这些工程细节<strong>写进协议本身</strong>：强 leader、日志连续、任期单调、成员变更与快照都有明确规定。所以 Raft 更好实现、更好调试，代价是写路径必须经过 leader。标准答法：<strong>"Raft 是 Multi-Paxos 的一个特化，牺牲部分理论灵活性，换实现可理解性。"</strong></div></div>
+
+<div class="qa"><div class="q">为什么 Raft 要求日志连续，不能有空洞？</div>
+<div class="a">因为"提交"的定义依赖前缀。<code>commitIndex</code> 是一个位置，隐含"它之前全部已提交"。允许空洞就必须为每个位置单独记提交状态，日志压缩与快照也无从下手。日志连续是 Raft 用"简单"换"效率与可实现性"的核心设计。</div></div>
+
+<div class="qa"><div class="q">选举超时设成 50ms 会怎样？</div>
+<div class="a">三个后果：① 网络稍微抖一下（P99 延迟 &gt; 50ms）就触发选主，集群反复抖动，可用性反而下降；② 每次选主都有一段不可写期，抖动会放大成业务错误率；③ 时钟精度不够的机器（虚拟机）可能频繁误判。经验值：选举超时 ≥ 10 倍心跳间隔，且 ≥ 10 倍 P99 网络 RTT。</div></div>
+
+<div class="qa"><div class="q">脑裂到底会不会发生？</div>
+<div class="a"><strong>Raft / ZAB 不会产生两个能同时提交的 leader</strong>，因为提交需要多数派，两个多数派必然相交，交集节点会拒绝任期较小的 leader。但"两个 leader 同时存在"是可能的：被分区隔离的老 leader 在自己那一侧仍是 leader 状态，只是<strong>提交不了任何东西</strong>。所以准确说法是"不会双主提交"，而不是"不会出现两个 leader 状态"。这也是为什么被隔离的 leader 必须停读。</div></div>
+
+<div class="qa"><div class="q">为什么 etcd 建议集群规模是奇数？偶数为啥不行？</div>
+<div class="a">偶数不违反正确性，只是浪费。4 台容忍 1 台（多数派 3），5 台容忍 2 台（多数派 3），所以 4 台的容错与 3 台相同，却多一台成本。另外 4 台挂 2 台时剩 2 台达不到多数派 3，整个集群不可写，行为更尴尬。</div></div>
+
+<div class="qa"><div class="q">Redis 主从 + Sentinel 的锁，为什么主挂之后可能双持有？</div>
+<div class="a">Redis 复制是<strong>异步</strong>的。客户端在主节点 <code>SET NX</code> 成功，主节点在把这条命令同步给从节点之前挂了；Sentinel 提升从节点为新主，新主上没有这把锁，另一个客户端立刻加锁成功。此时旧客户端还认为自己持有锁。这不是 Redis 有 bug，是异步复制的必然结果——<strong>任何异步复制的存储，都不能作为"绝对互斥"的锁</strong>。</div></div>
+
+<div class="qa"><div class="q">那用 etcd 做锁就绝对安全了吗？</div>
+<div class="a">锁本身安全（线性一致 CAS + lease），但<strong>"持有者是否还活着"仍然无法保证</strong>。etcd 只能保证"这个 key 在租约内属于你"，不能保证"你还在跑"。所以 etcd 锁同样需要 fencing token。区别在于：etcd 把"锁的元数据"做到了强一致，Redis 连元数据都可能是错的。<strong>强一致的锁服务 + 资源侧令牌 = 完整方案；只有前者 = 仍然有窗口。</strong></div></div>
+
+<div class="qa"><div class="q">TCC 的空回滚和悬挂是什么？怎么防？</div>
+<div class="a">空回滚：<code>Try</code> 因网络超时没到，<code>Cancel</code> 先到了，此时没有可回滚的资源。悬挂：<code>Cancel</code> 先执行完，迟到的 <code>Try</code> 又到达并占用资源，导致资源永久被占。防法统一：<strong>用一张事务控制表记录状态</strong>，<code>Cancel</code> 时若查不到 <code>Try</code> 记录，插入一条 CANCELLED 占位；<code>Try</code> 时若发现已有 CANCELLED 记录，直接拒绝。本质是"用唯一键 + 状态机把乱序变成幂等"（第 18 期讲过同一套东西）。</div></div>
+
+<div class="qa"><div class="q">Saga 的补偿一定能成功吗？</div>
+<div class="a">不能，而且这是 Saga 最诚实的缺陷。补偿本身也可能失败（下游挂了、账户已注销、库存已被别的订单消耗）。所以工业级 Saga 必须有三件套：<strong>补偿重试 + 死信队列 + 人工介入台</strong>。只答"失败就补偿"，说明没做过生产；补一句"补偿失败要能人工冲正，并有对账任务兜底"才算完整。</div></div>
+
+<div class="qa"><div class="q">本地消息表和事务消息的区别？</div>
+<div class="a">本地消息表把"业务写"和"消息写"放进<strong>同一个本地事务</strong>，靠定时任务扫表投递，不依赖 MQ 特性；事务消息（RocketMQ）把"半消息"存在 broker，靠<strong>回查</strong>确认本地事务是否成功。前者通用（任何 MQ 都行），后者少一次扫表但有 MQ 绑定。共同点：都只保证"至少一次"，消费端必须幂等。</div></div>
+
+<div class="qa"><div class="q">为什么说"能放进一个库就别做分布式事务"？</div>
+<div class="a">因为分布式事务的所有方案都在用"复杂度"换"原子性"，而单库事务的原子性是免费送的。真正需要拆分的场景是"数据量 / 团队边界"逼出来的，不是技术炫技。面试里能主动说这句，说明有成本意识——这比背七种方案更能加分。</div></div>
+
+<div class="qa"><div class="q">ReadIndex 和 Lease Read 怎么选？</div>
+<div class="a">ReadIndex 每次读多一轮心跳 RTT，但<strong>不依赖时钟</strong>；Lease Read 省掉这轮 RTT，靠"leader 租约未过期"推断自己仍是 leader，<strong>依赖时钟</strong>。选择标准：跨机房、时钟不可信、读极高且不能容忍陈旧读 → ReadIndex；同机房、NTP 严格同步、读 QPS 极高 → Lease Read。</div></div>
+
+<div class="qa"><div class="q">分布式锁的 TTL 到底设多长？</div>
+<div class="a">用不等式而不是经验值：<code>TTL &gt; P99 业务耗时 + 最大 STW + 时钟漂移 + 网络抖动</code>，同时 TTL 越小越好（崩溃后死锁窗口越短）。两者冲突时，<strong>缩短 TTL + 加 fencing token</strong> 比"把 TTL 设得很长"更安全——TTL 长只降低"锁提前释放"的概率，却把"进程挂掉后资源被锁死"的时间拉长，后者是确定性伤害。</div></div>
+
+<div class="qa"><div class="q">如果面试官问"你怎么证明你的方案是对的"，怎么答？</div>
+<div class="a">不要说"我们线上跑了很久没出问题"——那是归纳，不是证明。正确答法是给<strong>不变量</strong>：① 任意时刻最多一个持有者能写入（由资源侧 <code>fence</code> 单调性保证）；② 任意已提交日志一定出现在未来所有 leader 中（由多数派交集保证）；③ 任意重复请求的结果与一次相同（由幂等键唯一约束保证）。然后说明每个不变量由哪一行代码/哪一个约束保证，最后说明失效时的表现（拒绝写 / 抛异常 / 走人工）。<strong>能说出不变量和它的守卫，比说出十个组件名更有说服力。</strong></div></div>
+
+<h2><span class="n">L15</span>三道模拟面试题</h2>
+
+<div class="mt">
+<div class="qh"><span>题 1</span>订单服务用 Redis 锁扣库存，大促期间出现超卖。你怎么排查和修？</div>
+<div class="lv l1"><span class="lb">不及格</span>"加长 TTL，加看门狗，把锁的粒度改细。"——三个动作，没有一个针对根因，而且看门狗恰好救不了这个场景。</div>
+<div class="lv l2"><span class="lb">及格</span>"查 GC 日志确认有长停顿；把 TTL 从 300ms 调到 30s；加 <code>tryLock</code> 重试；解锁用 Lua 比对 value。"——方向对，但把"调大 TTL"当成了修复，等于把窗口从 93ms 拉长到不确定。</div>
+<div class="lv l3"><span class="lb">良好</span>定位到 <code>Pause Full 430ms</code> 与 TTL 300ms 的关系，算出安全窗为负；把 TTL 调到 P99 业务耗时的 3 倍并加看门狗；补上"续约失败即抛异常回滚"；给出监控项（续约失败次数、锁等待时长 P99、GC 停顿 P99）。</div>
+<div class="lv l4"><span class="lb">优秀</span>指出<strong>根因不是 TTL 太短，而是正确性依赖了锁</strong>。方案分三层：<strong>① 短期止血</strong>——TTL 上调 + 看门狗 + 续约失败熔断；<strong>② 中期</strong>——库存扣减改成 <code>UPDATE stock SET qty = qty - 1 WHERE sku_id = ? AND qty &gt;= 1</code>，用行锁 + 条件更新做最终正确性，Redis 锁退化为"减少数据库压力"的优化；<strong>③ 长期</strong>——热点 SKU 改 Redis Lua 原子扣减 + 异步落库 + 对账补偿，锁彻底退出关键路径。最后补一句"超卖的判定要用对账任务而不是靠锁，因为锁只能降低概率"。</div>
+</div>
+
+<div class="mt">
+<div class="qh"><span>题 2</span>设计一个配置中心，要求"变更后所有节点 1 秒内看到，且不能读到旧值"。</div>
+<div class="lv l1"><span class="lb">不及格</span>"用 Redis 存配置，客户端定时拉取，加个版本号。"——定时拉取和"1 秒内"冲突，而且 Redis 主从可能读到旧值。</div>
+<div class="lv l2"><span class="lb">及格</span>"etcd 存配置 + watch 推送 + 本地缓存兜底；断线重连用 revision 续订。"——方向对，但没说清 list 与 watch 的顺序，断线久了会丢事件。</div>
+<div class="lv l3"><span class="lb">良好</span>说清 list-and-watch 的顺序（先全量拿 rev，再从 rev+1 watch），断线用 <code>lastRev+1</code> 续订，遇到 Compacted 就全量重建；本地缓存带 revision，读到比本地旧的响应直接丢弃；给出"1 秒内"的分解（watch 推送 ~10ms、客户端应用 ~1ms、兜底轮询 500ms）。</div>
+<div class="lv l4"><span class="lb">优秀</span>进一步区分<strong>两种读</strong>：① 配置读取可以容忍极短时间旧值（最终一致），用 watch + 本地缓存即可；② 但"变更生效"必须是线性的，否则两个节点会用不同配置做决策。解法是给每份配置带 <code>revision</code>，业务侧在使用配置时校验 <code>revision &gt;= 已知最小版本</code>，不满足就回源读一次（ReadIndex 语义）。再补：配置中心自身用 3 或 5 节点 Raft；compaction 窗口要覆盖"最长断线时间"，否则每次长断线都要全量重建、放大读压力；最后给灰度发布与回滚（配置也要有版本与回滚，不能只有"最新版"）。</div>
+</div>
+
+<div class="mt">
+<div class="qh"><span>题 3</span>跨三个服务下单（订单、库存、账户），要求"最终一致 + 可对账 + 可人工干预"。设计一套方案并说明每一步的失败处理。</div>
+<div class="lv l1"><span class="lb">不及格</span>"上 Seata AT 一把梭。"——没有讨论隔离级别、没有对账、没有人工干预，等于把不确定性藏起来。</div>
+<div class="lv l2"><span class="lb">及格</span>"TCC 三接口 + 补偿重试 + 日志。"——方向对，但没答"补偿失败怎么办"，而这才是本题的核心。</div>
+<div class="lv l3"><span class="lb">良好</span>Saga 编排（订单创建 → 库存预占 → 账户扣款），每步有补偿；补偿失败进死信队列；每个服务写本地事件表；有对账任务按天核对三方流水。</div>
+<div class="lv l4"><span class="lb">优秀</span>先给<strong>不变量</strong>——"任一订单在三方的状态组合必须属于 6 个合法组合之一"，并把它做成状态机（第 18 期的 0 行语义）。然后按"谁承担不确定性"分层：<strong>①</strong> 订单侧用本地消息表保证"订单创建"这个事实一定被下游看到（至少一次）；<strong>②</strong> 库存与账户用 TCC，<code>Try</code> 预占 + <code>Confirm/Cancel</code>，控制表防空回滚与悬挂；<strong>③</strong> 全链路用 <code>orderId</code> 作幂等键，所有写都是条件更新（0 行即已处理）；<strong>④</strong> 对账任务每天跑一次三方流水比对，差异进"待人工"队列，并给运营一个冲正入口；<strong>⑤</strong> 监控三个指标：Saga 完成率、补偿成功率、对账差异笔数。最后说明<strong>取舍</strong>：极端情况下（补偿连续失败）会停留在"中间态"，业务上必须允许"中间态可查询、可人工推进"，而不是假装它能自动 100% 收敛。</div>
+</div>
+
+<h2><span class="n">L16</span>二十九期地图</h2>
+
+<table>
+<tr><th style="width:110px">板块</th><th style="width:150px">期号</th><th>一句话抓手</th></tr>
+<tr><td>集合与并发基础</td><td class="num">01 / 14 / 03 / 20</td><td>树化泊松账；1.5 倍扩容台阶；锁升级与 AQS；ctl 位运算</td></tr>
+<tr><td>JVM</td><td class="num">02 / 12 / 21 / 22</td><td>三色标记；Eden=速率×间隔；支配树与引用链；内联阈值 35/325</td></tr>
+<tr><td>语言底层</td><td class="num">13 / 23 / 26</td><td>双亲委派四次打破；擦除与桥方法；agent 改字节码</td></tr>
+<tr><td>框架</td><td class="num">04 / 15 / 24</td><td>refresh 十二步；自动配置六阶段；MyBatis 九站链</td></tr>
+<tr><td>存储</td><td class="num">05 / 16 / 25</td><td>B+ 树三层与 MVCC；分片键四炸点；倒排三层与段不可变</td></tr>
+<tr><td>中间件</td><td class="num">06 / 07 / 17 / 19</td><td>单线程为什么快；零拷贝与 ISR；缓存一致性算账；epoll 与 Pipeline</td></tr>
+<tr><td>分布式</td><td class="num">08 / 10 / 18 / <strong>29</strong></td><td>注册发现三级缓存；秒杀四道闸门；幂等键由意图决定；<strong>本篇：锁的两次失效</strong></td></tr>
+<tr><td>工程</td><td class="num">09 / 11 / 27 / 28</td><td>三分钟分诊；策略替 if-else；类身份=loader+类名；信号的成本</td></tr>
+</table>
+
+<p>29 期下来，一条主线已经很清楚：<strong>面试的区分度不在"知道多少名词"，而在"能不能把一个定性判断换算成一个数，并且说清它在什么条件下不成立"。</strong></p>
+
+<p>这一期最典型的三处：</p>
+
+<ul>
+<li>"随机超时能防分裂投票" → 宽度 1ms 时成功率 <strong>0%</strong>，5ms 时 61%，10ms 时 92.5%。<em>随机不是护身符，宽度必须大于拉票往返。</em></li>
+<li>"加看门狗就安全了" → STW 450ms + TTL 300ms，续约连续 7 次失败，锁早就易主。<em>看门狗只覆盖"业务慢"，不覆盖"进程停"。</em></li>
+<li>"几百毫秒的停顿很少见" → 停顿 = 11ms + 3.8ns × 对象数，1 亿存活对象就是 389ms。<em>这不是偶发，是算术。</em></li>
+</ul>
+
+<div class="next">
+<strong>下一期预告</strong>：第 30 期讲<strong>超时、重试与容量</strong>——不是重复第 08 期的限流熔断，而是回答一个具体问题："为什么加了超时和重试，故障反而扩散得更快？"核心是重试放大、超时预算（timeout budget）、重试风暴的量化，以及"无界队列 + 超时 = 内存炸弹"这条链路。会把 08 期的熔断、20 期的线程池、29 期的租约串起来。
+</div>
+
+<div class="foot">
+<p>本期实验代码：<code>LockExp.java</code>（租约锁三场景 + fencing 对照）、<code>PauseExp2.java</code>（停顿与存活对象数）、<code>exp_election.py</code>（5 节点选举模拟 20 万次）。全部在本机 JDK 21.0.7 / Python 3.13 实跑，文中标注"实测"的数字均为真跑结果；标注"经验值 / 默认值"的已注明来源（etcd 官方文档、Raft 论文、Redlock 规范）。选举模拟中的网络延迟与处理耗时是设定参数，不代表任何特定生产环境；STW 系数随 CPU 与对象图复杂度变化，只用于量级估算。</p>
+</div>
+
+</div>
+<script>
+(function () {
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  var KW = 'abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|true|false|null|var|record|String|Integer|Map|List|Object|System|Timer|Duration|NONE|SELECT|FROM|WHERE|GROUP|BY|ORDER|LIMIT|sum|rate|by|le|histogram_quantile';
+  var RE = new RegExp('(\\/\\/[^\\n]*)|("(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\')|(\\b(?:' + KW + ')\\b)|(\\b\\d+(?:\\.\\d+)?\\b)', 'g');
+  document.querySelectorAll('pre code').forEach(function (el) {
+    var t = el.textContent, out = '', last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(t)) !== null) {
+      out += esc(t.slice(last, m.index));
+      var cls = m[1] ? 'c' : (m[2] ? 's' : (m[3] ? 'k' : 'n'));
+      out += '<span class="' + cls + '">' + esc(m[0]) + '</span>';
+      last = m.index + m[0].length;
+      if (m[0].length === 0) RE.lastIndex++;
+    }
+    out += esc(t.slice(last));
+    el.innerHTML = out;
+  });
+})();
+</script>
+</body>
+</html>

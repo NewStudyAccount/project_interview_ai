@@ -1,0 +1,24 @@
+<script>
+(function () {
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  var KW = 'abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|true|false|null|var|record|String|Integer|Map|List|Object|System|Thread|Math|Duration|TimeUnit|Callable|Future|CompletableFuture|ThreadPoolExecutor|ArrayBlockingQueue|Random|SELECT|FROM|WHERE|LIMIT|BY|sum|rate';
+  var RE = new RegExp('(\\/\\/[^\\n]*)|("(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\')|(\\b(?:' + KW + ')\\b)|(\\b\\d+(?:\\.\\d+)?\\b)', 'g');
+  document.querySelectorAll('pre code').forEach(function (el) {
+    var t = el.textContent, out = '', last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(t)) !== null) {
+      out += esc(t.slice(last, m.index));
+      var cls = m[1] ? 'c' : (m[2] ? 's' : (m[3] ? 'k' : 'n'));
+      out += '<span class="' + cls + '">' + esc(m[0]) + '</span>';
+      last = m.index + m[0].length;
+      if (m[0].length === 0) RE.lastIndex++;
+    }
+    out += esc(t.slice(last));
+    el.innerHTML = out;
+  });
+})();
+</script>
+</body>
+</html>
